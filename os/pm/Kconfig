@@ -42,6 +42,17 @@ config PM_METRICS_DURATION
 
 endif
 
+config HAVE_IDLE_PM
+	bool
+	default n
+
+config IDLE_PM
+	bool "TIZENRT IDLE PM framework"
+	default n
+	depends on HAVE_IDLE_PM
+	---help---
+		Used to enable TizenRT IDLE PM framework
+
 config PM_SLICEMS
 	int "PM time slice (msec)"
 	default 100

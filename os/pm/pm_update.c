@@ -55,6 +55,7 @@
  ****************************************************************************/
 
 #include <tinyara/config.h>
+#include <debug.h>
 #include <stdint.h>
 #include <assert.h>
 #include <tinyara/pm/pm.h>
@@ -283,7 +284,13 @@ void pm_worker(FAR void *arg)
 	 * surprised to be executing!).
 	 */
 
+#ifdef CONFIG_IDLE_PM
+	struct pm_idle_state_info *pdat = get_pm_idle_data();
+
+	if (pdom->state < sleep_states_count) {
+#else
 	if (pdom->state < PM_SLEEP) {
+#endif
 		unsigned int nextstate;
 
 		/* Get the next state and the table index for the next state (which will
@@ -311,7 +318,11 @@ void pm_worker(FAR void *arg)
 			 * for a state transition?
 			 */
 
+#ifdef CONFIG_IDLE_PM
+			if (++pdom->thrcnt >= (pdat + index)->sleep_threshold){
+#else
 			if (++pdom->thrcnt >= g_pmcount[index]) {
+#endif
 				/* Yes, recommend the new state and set up for the next
 				 * transition.
 				 */
