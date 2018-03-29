@@ -217,6 +217,7 @@ void up_initialize(void);
 void board_initialize(void);
 #endif
 
+#ifndef CONFIG_IDLE_PM
 /****************************************************************************
  * Name: up_idle
  *
@@ -232,6 +233,7 @@ void board_initialize(void);
  ****************************************************************************/
 
 void up_idle(void);
+#endif
 
 /****************************************************************************
  * Name: up_initial_state

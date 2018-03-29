@@ -55,6 +55,7 @@
  ****************************************************************************/
 
 #include <tinyara/config.h>
+#include <debug.h>
 #include <stdint.h>
 #include <assert.h>
 #include <tinyara/pm/pm.h>
@@ -110,6 +111,38 @@ static const int16_t g_pmcoeffs[CONFIG_PM_MEMORY - 1] = {
 };
 #endif
 
+#ifdef CONFIG_IDLE_PM
+/* Threshold time slice count to enter the next low power consdumption
+ * state. Indexing is next state 0:IDLE, 1: STANDBY, 2: SLEEP.
+ */
+
+static const uint16_t pm_sleepstate_count[CONFIG_ARCH_HAVE_IDLE_PM_NSTATE] = {
+	CONFIG_PM_STATE1_ENTER_COUNT,
+	(CONFIG_PM_STATE1_ENTER_COUNT * 2),
+	(CONFIG_PM_STATE1_ENTER_COUNT * 3)
+};
+
+/* Threshold activity values to enter into the next lower power consumption
+ * state. Indexing is next state 0:IDLE, 1:STANDBY, 2:SLEEP.
+ */
+
+static const uint16_t pm_sleepstate_enter_threshold[CONFIG_ARCH_HAVE_IDLE_PM_NSTATE] = {
+	CONFIG_PM_STATE1_ENTER_THRESH,
+	CONFIG_PM_STATE1_ENTER_THRESH,
+	CONFIG_PM_STATE1_ENTER_THRESH,
+};
+
+/* Threshold activity values to enter into the next lower power consumption
+ * state. Indexing is next state 0:IDLE, 1:STANDBY, 2:SLEEP.
+ */
+
+static const uint16_t pm_sleepstate_exit_threshold[CONFIG_ARCH_HAVE_IDLE_PM_NSTATE] = {
+	CONFIG_PM_STATE1_EXIT_THRESH,
+	CONFIG_PM_STATE1_EXIT_THRESH,
+	CONFIG_PM_STATE1_EXIT_THRESH,
+};
+#else
+
 /* Threshold activity values to enter into the next lower power consumption
  * state. Indexing is next state 0:IDLE, 1:STANDBY, 2:SLEEP.
  */
@@ -139,6 +172,7 @@ static const uint16_t g_pmcount[3] = {
 	CONFIG_PM_STANDBYENTER_COUNT,
 	CONFIG_PM_SLEEPENTER_COUNT
 };
+#endif
 
 /****************************************************************************
  * Public Data
@@ -268,7 +302,11 @@ void pm_worker(FAR void *arg)
 		 * exceeded?
 		 */
 
+#ifdef CONFIG_IDLE_PM
+		if (Y > pm_sleepstate_exit_threshold[index]) {
+#else
 		if (Y > g_pmexitthresh[index]) {
+#endif
 			/* Yes... reset the count and recommend the normal state. */
 
 			pdom->thrcnt      = 0;
@@ -283,7 +321,11 @@ void pm_worker(FAR void *arg)
 	 * surprised to be executing!).
 	 */
 
+#ifdef CONFIG_IDLE_PM
+	if (pdom->state < CONFIG_ARCH_HAVE_IDLE_PM_NSTATE) {
+#else
 	if (pdom->state < PM_SLEEP) {
+#endif
 		unsigned int nextstate;
 
 		/* Get the next state and the table index for the next state (which will
@@ -297,7 +339,11 @@ void pm_worker(FAR void *arg)
 		 * been exceeded?
 		 */
 
+#ifdef CONFIG_IDLE_PM
+		if (Y > pm_sleepstate_enter_threshold[index]) {
+#else
 		if (Y > g_pmenterthresh[index]) {
+#endif
 			/* No... reset the count and recommend the current state */
 
 			pdom->thrcnt      = 0;
@@ -311,7 +357,11 @@ void pm_worker(FAR void *arg)
 			 * for a state transition?
 			 */
 
+#ifdef CONFIG_IDLE_PM
+			if (++pdom->thrcnt >= pm_sleepstate_count[index]) {
+#else
 			if (++pdom->thrcnt >= g_pmcount[index]) {
+#endif
 				/* Yes, recommend the new state and set up for the next
 				 * transition.
 				 */

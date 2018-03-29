@@ -42,6 +42,68 @@ config PM_METRICS_DURATION
 
 endif
 
+comment "IDLE PM Options"
+
+config IDLE_PM
+	bool "TIZENRT IDLE PM framework"
+	default n
+	depends on ARCH_HAVE_IDLE_PM
+	---help---
+		Used to enable TizenRT IDLE PM framework
+
+config ARCH_HAVE_IDLE_PM_NSTATE
+	int
+	default 3
+	depends on ARCH_HAVE_IDLE_PM
+	---help---
+		Number of sleep states provided by the SoC Power module
+
+config PM_STATE1_ENTER_THRESH
+	int "PM STATE1 enter threshold"
+	default 1
+	depends on ARCH_HAVE_IDLE_PM
+	---help---
+		State changes then occur when the weight activity account crosses
+		threshold values for certain periods of time (time slice count).
+
+			CONFIG_PM_xxx_ENTER_THRESH is the threshold value for entering state xxx.
+			CONFIG_PM_xxx_ENTER_COUNT is the count for entering state xxx.
+
+		Resuming to normal state, on the other hand, is usually immediate and
+		controlled by wakeup conditions established by the platform.  The PM
+
+		Default: <=1: Essentially no activity
+
+config PM_STATE1_EXIT_THRESH
+	int "PM STATE1 enter threshold"
+	default 2
+	depends on ARCH_HAVE_IDLE_PM
+	---help---
+		State changes then occur when the weight activity account crosses
+		threshold values for certain periods of time (time slice count).
+
+			CONFIG_PM_xxx_ENTER_THRESH is the threshold value for entering state xxx.
+			CONFIG_PM_xxx_ENTER_COUNT is the count for entering state xxx.
+
+		Resuming to normal state, on the other hand, is usually immediate and
+		controlled by wakeup conditions established by the platform.  The PM
+
+config PM_STATE1_ENTER_COUNT
+	int "PM STATE1 enter count"
+	default 10
+	depends on ARCH_HAVE_IDLE_PM
+	---help---
+		State changes then occur when the weight activity account crosses
+		threshold values for certain periods of time (time slice count).
+
+			CONFIG_PM_xxxENTER_THRESH is the threshold value for entering state xxx.
+			CONFIG_PM_xxxENTER_COUNT is the count for entering state xxx.
+
+		Resuming to normal state, on the other hand, is usually immediate and
+		controlled by wakeup conditions established by the platform.  The PM
+
+		Default: Thirty IDLE slices to enter IDLE mode from normal
+
 config PM_SLICEMS
 	int "PM time slice (msec)"
 	default 100

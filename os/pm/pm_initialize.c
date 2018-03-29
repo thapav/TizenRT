@@ -132,6 +132,7 @@ void pm_initialize(void)
 
 		sq_addlast((&initnode->entry), &g_pmglobals.domain[domain_indx].history);
 #endif
+
 	}
 	pmtest_init();
 }

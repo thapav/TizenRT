@@ -32,6 +32,10 @@ config ARCH_CHIP
 	default "s5j"       if ARCH_CHIP_S5J
 	default "tiva"      if ARCH_CHIP_LM
 
+config ARCH_HAVE_IDLE_PM
+	bool
+	default n
+
 comment "ARM Options"
 
 config ARCH_CORTEXM3
