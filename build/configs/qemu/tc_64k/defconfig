@@ -59,6 +59,7 @@ CONFIG_ARCH="arm"
 CONFIG_ARCH_CHIP_LM=y
 # CONFIG_ARCH_CHIP_S5J is not set
 CONFIG_ARCH_CHIP="tiva"
+#CONFIG_ARCH_HAVE_PM is not set
 
 #
 # ARM Options

@@ -55,6 +55,7 @@
  ****************************************************************************/
 #include <tinyara/config.h>
 
+#include <errno.h>
 #include <stdbool.h>
 
 #include "up_arch.h"
@@ -71,8 +72,20 @@
  * Description:
  *   Enter STOP mode.
  *
+ * Returned Value.
+ *   On success, this function will not return (STANDBY mode can only be
+ *   terminated with a reset event).  Otherwise, STANDBY mode did not occur
+ *   and a negated errno value is returned to indicate the cause of the
+ *   failure.
+ *
  ****************************************************************************/
-void s5j_pmstop(void)
+int s5j_pmstop(void)
 {
-	s5j_clk_pll_select_mux(false);
+	errno = OK;
+	/* FIXME: implement me */
+	asm("wfi");
+
+	/* won't get here */
+
+	return errno;
 }

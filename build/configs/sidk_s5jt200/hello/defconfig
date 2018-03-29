@@ -60,6 +60,7 @@ CONFIG_ARCH="arm"
 # CONFIG_ARCH_CHIP_LM is not set
 CONFIG_ARCH_CHIP_S5J=y
 CONFIG_ARCH_CHIP="s5j"
+# CONFIG_ARCH_HAVE_PM is not set
 
 #
 # ARM Options
@@ -159,6 +160,9 @@ CONFIG_S5J_PWR=y
 # CONFIG_S5J_PWR_DSTOP is not set
 # CONFIG_S5J_PWR_SLEEP is not set
 # CONFIG_S5J_SENSOR_PPD42NS is not set
+# S5J PM Options
+
+# CONFIG_S5J_PM is not set
 
 #
 # Architecture Options
