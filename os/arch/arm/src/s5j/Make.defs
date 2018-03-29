@@ -84,7 +84,7 @@ endif
 
 # Common C source files
 
-CMN_CSRCS  = up_initialize.c up_interruptcontext.c up_exit.c
+CMN_CSRCS  = up_initialize.c up_interruptcontext.c up_exit.c up_idle.c
 CMN_CSRCS += up_createstack.c up_releasestack.c up_usestack.c up_vfork.c
 CMN_CSRCS += up_puts.c up_mdelay.c up_stackframe.c up_udelay.c
 CMN_CSRCS += up_modifyreg8.c up_modifyreg16.c up_modifyreg32.c up_allocateheap.c

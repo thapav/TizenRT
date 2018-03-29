@@ -64,6 +64,7 @@ endchoice
 config ARCH_BOARD_ARTIK05X_FAMILY
     bool
     default n
+    select ARCH_HAVE_PM
 
 config ARCH_BOARD
 	string
