@@ -99,7 +99,11 @@
  *
  ****************************************************************************/
 
+#ifdef CONFIG_IDLE_PM
+int pm_checkstate(int domain)
+#else
 enum pm_state_e pm_checkstate(int domain)
+#endif
 {
 	FAR struct pm_domain_s *pdom;
 	systime_t now;

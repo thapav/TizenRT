@@ -248,6 +248,15 @@
  * Public Types
  ****************************************************************************/
 
+#ifdef CONFIG_IDLE_PM
+
+/* Defines the normal state for PM framework */
+#define PM_NORMAL 0
+
+/* Defines the base tick count value for default ENTER_COUNT values if SOC doesn't provide it*/
+#define CONFIG_PM_ENTER_COUNT	10
+
+#else
 /* This enumeration provides all power management states.  Receipt of the
  * state indication is the state transition event.
  */
@@ -285,6 +294,7 @@ enum pm_state_e {
 								 * PM_SLEEP may be following by PM_NORMAL
 								 */
 };
+#endif
 
 /* This structure contain pointers callback functions in the driver.  These
  * callback functions can be used to provide power management information
@@ -325,8 +335,11 @@ struct pm_callback_s {
 	 *
 	 **************************************************************************/
 
+#ifdef  CONFIG_IDLE_PM
+	int (*prepare)(FAR struct pm_callback_s *cb, int domain, int pmstate);
+#else
 	int (*prepare)(FAR struct pm_callback_s *cb, int domain, enum pm_state_e pmstate);
-
+#endif
 	/**************************************************************************
 	 * Name: notify
 	 *
@@ -350,8 +363,41 @@ struct pm_callback_s {
 	 *
 	 **************************************************************************/
 
+#ifdef  CONFIG_IDLE_PM
+	void (*notify)(FAR struct pm_callback_s *cb, int domain, int pmstate);
+#else
 	void (*notify)(FAR struct pm_callback_s *cb, int domain, enum pm_state_e pmstate);
+#endif
 };
+
+#ifdef  CONFIG_IDLE_PM
+
+/* This structure provides the tick count threshold to enter all the  power
+ * management states that can be supported by the SOC & pointers to the
+ * functions supported by the SOC for changing to those states. These return
+ * OK on successful execution and -1 on any error encountered.
+ */
+
+/* Number of sleep states supported by SOC */
+
+int sleep_states_count;
+
+struct pm_idle_state_info {
+
+	/* Function pointers to state change function calls */
+
+	void (*state_fptr)(void);
+
+	/* Value of sleep state enter count supported by SOC */
+
+	int sleep_state_enter_count;
+
+};
+
+extern struct pm_idle_state_info pm_idle_table[];
+
+extern int get_pm_idle_table_size(void);
+#endif
 
 /****************************************************************************
  * Public Data
@@ -388,6 +434,49 @@ extern "C" {
  ****************************************************************************/
 
 void pm_initialize(void);
+
+#ifdef CONFIG_IDLE_PM
+
+/****************************************************************************
+ * Name: pm_initialize_idle_data
+ *
+ * Description:
+ *   This function is called by the power module to map CPU Idle power states
+ *   for any SOC & their transition timings from one state to another to
+ *   the TizenRT power management framework.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned value:
+ *   Number of CPU idle power states on success,
+ *   otherwise a negater errno value is returned.
+ *
+ ****************************************************************************/
+
+void pm_initialize_idle_data(struct pm_idle_state_info);
+
+/****************************************************************************
+ * Name: up_idle_pm
+ *
+ * Description:
+ *   up_idle() is the logic that will be executed when their is no other
+ *   ready-to-run task.  This is processor idle time and will continue until
+ *   some interrupt occurs to cause a context switch from the idle task.
+ *
+ *   Processing in this state may be processor-specific. e.g., this is where
+ *   power management operations might be performed.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned value:
+ *   None
+ *
+ ****************************************************************************/
+
+void up_idle_pm(void);
+#endif
 
 /****************************************************************************
  * Name: pm_register
@@ -466,9 +555,11 @@ void pm_activity(int domain, int priority);
  *   The recommended power management state.
  *
  ****************************************************************************/
-
+#ifndef CONFIG_IDLE_PM
 enum pm_state_e pm_checkstate(int domain);
-
+#else
+int pm_checkstate(int domain);
+#endif
 /****************************************************************************
  * Name: pm_changestate
  *
@@ -497,7 +588,11 @@ enum pm_state_e pm_checkstate(int domain);
  *
  ****************************************************************************/
 
+#ifndef CONFIG_IDLE_PM
 int pm_changestate(int domain, enum pm_state_e newstate);
+#else
+int pm_changestate(int domain, int newstate);
+#endif
 
 #undef EXTERN
 #ifdef __cplusplus

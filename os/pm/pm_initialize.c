@@ -132,6 +132,19 @@ void pm_initialize(void)
 
 		sq_addlast((&initnode->entry), &g_pmglobals.domain[domain_indx].history);
 #endif
+
+#ifdef CONFIG_IDLE_PM
+		struct pm_idle_state_info p_soc;
+
+		/* Procure the number of idle sleep states from SOC */
+
+		sleep_states_count = get_pm_idle_table_size();
+
+		/* Map the SOC states to the power framework threshold values*/
+
+		pm_initialize_idle_data(p_soc);
+
+#endif
 	}
 	pmtest_init();
 }

@@ -123,6 +123,12 @@ config PM_COEF5
 
 		Ignored if CONFIG_PM_MEMORY <= 5
 
+config IDLE_PM
+	bool "TIZENRT IDLE PM framework"
+	default n
+	---help---
+		Used to enable TizenRT IDLE PM framework
+
 config PM_IDLEENTER_THRESH
 	int "PM IDLE enter threshold"
 	default 1
