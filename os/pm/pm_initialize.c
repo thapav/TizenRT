@@ -132,6 +132,10 @@ void pm_initialize(void)
 
 		sq_addlast((&initnode->entry), &g_pmglobals.domain[domain_indx].history);
 #endif
+
+		/* Initialize the sleep states' tick count threshold values */
+		pm_initialize_idle_data();
+
 	}
 	pmtest_init();
 }
