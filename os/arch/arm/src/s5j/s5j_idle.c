@@ -83,8 +83,13 @@
 #ifdef CONFIG_PM
 static void up_idlepm(void)
 {
+#ifdef CONFIG_IDLE_PM
+	static int oldstate = PM_NORMAL;
+	int newstate;
+#else
 	static enum pm_state_e oldstate = PM_NORMAL;
 	enum pm_state_e newstate;
+#endif
 	irqstate_t flags;
 	int ret;
 
@@ -105,6 +110,7 @@ static void up_idlepm(void)
 			oldstate = newstate;
 		}
 
+#ifndef CONFIG_IDLE_PM
 		/* MCU-specific power management logic */
 		switch (newstate) {
 		case PM_NORMAL:
@@ -125,6 +131,7 @@ static void up_idlepm(void)
 		default:
 			break;
 		}
+#endif
 
 		irqrestore(flags);
 	}

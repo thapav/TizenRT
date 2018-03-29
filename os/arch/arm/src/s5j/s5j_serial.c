@@ -727,6 +727,12 @@ static bool up_txempty(struct uart_dev_s *dev)
  *   consumption state when it returned OK to the prepare() call.
  *
  ****************************************************************************/
+#ifdef CONFIG_IDLE_PM
+static void up_pm_notify(struct pm_callback_s *cb, int domain,
+				int pmstate)
+{
+}
+#else
 static void up_pm_notify(struct pm_callback_s *cb, int domain,
 				enum pm_state_e pmstate)
 {
@@ -752,6 +758,7 @@ static void up_pm_notify(struct pm_callback_s *cb, int domain,
 		break;
 	}
 }
+#endif
 
 /****************************************************************************
  * Name: up_pm_prepare
@@ -785,8 +792,13 @@ static void up_pm_notify(struct pm_callback_s *cb, int domain,
  *              consumption modes!
  *
  ****************************************************************************/
+#ifdef CONFIG_IDLE_PM
+static int up_pm_prepare(struct pm_callback_s *cb, int domain,
+		int pmstate)
+#else
 static int up_pm_prepare(struct pm_callback_s *cb, int domain,
 		enum pm_state_e pmstate)
+#endif
 {
 	/* Logic to prepare for a reduced power state goes here. */
 	return OK;
