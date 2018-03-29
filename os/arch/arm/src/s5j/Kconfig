@@ -358,3 +358,10 @@ config S5J_SENSOR_PPD42NS
 	default n
 
 endmenu
+
+config S5J_IDLE_PM
+	bool "S5J IDLE PM"
+	default n
+	select HAVE_IDLE_PM
+	---help---
+		Enable s5j idle pm support.
