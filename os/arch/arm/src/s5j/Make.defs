@@ -113,7 +113,9 @@ ifneq ($(CONFIG_SCHED_TICKLESS),y)
 CHIP_CSRCS += s5j_timerisr.c
 endif
 
+ifneq ($(CONFIG_IDLE_PM),y)
 CHIP_CSRCS += s5j_idle.c
+endif
 CHIP_CSRCS += s5j_boot.c s5j_irq.c
 CHIP_CSRCS += s5j_serial.c
 CHIP_CSRCS += s5j_mac.c
@@ -166,6 +168,9 @@ endif
 ifeq ($(CONFIG_PM),y)
 CHIP_CSRCS += s5j_pminitialize.c
 CHIP_CSRCS += s5j_pmnormal.c s5j_pmstandby.c s5j_pmstop.c
+ifeq ($(CONFIG_IDLE_PM),y)
+CHIP_CSRCS += s5j_pm_idle_table.c
+endif
 endif
 
 ifeq ($(CONFIG_S5J_PWM),y)

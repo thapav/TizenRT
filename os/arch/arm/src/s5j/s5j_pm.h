@@ -79,6 +79,7 @@ extern "C" {
  * Public Function Prototypes
  ****************************************************************************/
 
+#ifndef CONFIG_IDLE_PM
 /****************************************************************************
  * Name: s5j_pmnormal
  *
@@ -124,6 +125,38 @@ void s5j_pmstandby(void);
  *
  ****************************************************************************/
 void s5j_pmsleep(bool sleeponexit);
+
+#else
+/****************************************************************************
+ * Name: s5j_idle_pmnormal
+ *
+ * Description:
+ *   Enter NORMAL mode.
+ *
+ ****************************************************************************/
+static void s5j_idle_pmnormal(void);
+
+/****************************************************************************
+ * Name: s5j_idle_pmstop
+ *
+ * Description:
+ *   Enter STOP mode.
+ *
+ ****************************************************************************/
+static void s5j_idle_pmstop(void);
+
+/****************************************************************************
+ * Name: s5j_idle_pmstandby
+ *
+ * Description:
+ *   Enter STANDBY mode.
+ *
+ * Input Parameters:
+ *   None
+ *
+ ****************************************************************************/
+static void s5j_idle_pmstandby(void);
+#endif
 
 #undef EXTERN
 #ifdef __cplusplus
