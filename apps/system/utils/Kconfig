@@ -12,7 +12,7 @@ config KERNEL_CMDS
 config FS_CMDS
 	bool "FS shell commands"
 	default y
-	depends on TASH
+	depends on TASH && (NFILE_DESCRIPTORS != 0)
 	---help---
 		Disable File System command in TASH.
 		Command including ls, cd, cat, mount, and so on.
@@ -81,7 +81,29 @@ config ENABLE_HEAPINFO
 	---help---
 		Show information about memory status per thread
 
-if !DISABLE_SIGNALS
+if ENABLE_HEAPINFO
+config HEAPINFO_GROUP
+	bool "Enable User defined Group Memory Usage"
+	default n
+
+if HEAPINFO_GROUP
+config HEAPINFO_PER_GROUP
+	string "Thread Name List for measuring Alloc Size"
+	default ""
+	---help---
+		Task/Thread name is separated with ',' and Group is separated with '/'.
+		For example, "abc,def/ghi,jklmn/opqr".
+endif
+endif
+
+config ENABLE_IRQINFO
+	bool "irqinfo"
+	default n
+	depends on TASH && !BUILD_PROTECTED && !BUILD_KERNEL
+	select DEBUG_IRQ_INFO if DEBUG
+	---help---
+		List the registered interrupts, it's occurrence counts and corresponding isr.
+
 config ENABLE_KILL
 	bool "kill"
 	default y
@@ -95,7 +117,6 @@ config ENABLE_KILLALL
 	depends on !BUILD_PROTECTED
 	---help---
 		Send a signal to all processes running any of the specified commands
-endif #!DISABLE_SIGNALS
 
 config ENABLE_PS
 	bool "ps"
@@ -107,12 +128,13 @@ config ENABLE_PS
 config ENABLE_STACKMONITOR
 	bool "Stack monitor"
 	default n
+	depends on !BUILD_PROTECTED && !BUILD_KERNEL
 	select STACK_COLORATION
 	---help---
 		The stack monitor is a daemon that will periodically assess
 		stack usage by all tasks and threads in the system.  This
 		feature depends on internal OS features and, hence, is
-		not available if the kernel build is selected.
+		not available if the kernel build or protected build is selected.
 
 if ENABLE_STACKMONITOR
 config STACKMONITOR_PRIORITY
@@ -130,9 +152,15 @@ config STACKMONITOR_INTERVAL
 
 endif #ENABLE_STACKMONITOR
 
+config ENABLE_STACKOPT
+	bool "Stack opt"
+	default y
+	depends on ENABLE_STACKMONITOR && TASH_COMMAND_INTERFACE
+	---help---
+		Measure optimal stack size of APP
+
 config ENABLE_UPTIME
 	bool "uptime"
 	default y
 	---help---
 		print how long the system has been running
-

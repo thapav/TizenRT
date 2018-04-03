@@ -24,7 +24,7 @@
  */
 
 /**
- * @file iotbus_pwm.h
+ * @file iotbus/iotbus_pwm.h
  * @brief Iotbus APIs for PWM
  */
 
@@ -37,9 +37,9 @@
 struct _iotbus_pwm_s;
 
 /**
- * @brief Pointer definition to the internal struct _iotbus_pwm_s
+ * @brief Pointer definition to the internal struct _iotbus_pwm_wrapper_s
  */
-typedef struct _iotbus_pwm_s *iotbus_pwm_context_h;
+typedef struct _iotbus_pwm_wrapper_s *iotbus_pwm_context_h;
 
 /**
  * @brief Enumeration of PWM state
@@ -49,90 +49,105 @@ typedef struct _iotbus_pwm_s *iotbus_pwm_context_h;
  * IOTBUS_PWM_ENABLE\n
  */
 typedef enum {
-	IOTBUS_PWM_DISABLE = 0, IOTBUS_PWM_ENABLE,
+	IOTBUS_PWM_DISABLE = 0,
+	IOTBUS_PWM_ENABLE,
 } iotbus_pwm_state_e;
+
+/**
+ *@brief Type of pwm duty cycle
+ *@details Duty cycle is measured in terms of percentage
+ *so uint8_t is enough to hold percentage values.
+ */
+typedef uint8_t percent_t;
 
 /*
  * Public Function
  */
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /**
  * @brief closes the pwm_context.
  *
+ * @details @b #include <iotbus/iotbus_pwm.h>
  * @param[in] device N/A
  * @param[in] channel pwm channel number
  * @return On success, handle of pwm_context is returned. On failure, NULL is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 iotbus_pwm_context_h iotbus_pwm_open(int device, int channel);
 
 /**
  * @brief closes the pwm_context.
  *
+ * @details @b #include <iotbus/iotbus_pwm.h>
  * @param[in] pwm handle of pwm_context
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_pwm_close(iotbus_pwm_context_h pwm);
 
 /**
  * @brief sets the pwm duty cycle.
  *
+ * @details @b #include <iotbus/iotbus_pwm.h>
  * @param[in] pwm handle of pwm_context
  * @param[in] duty_cycle pwm duty cycle
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
-int iotbus_pwm_set_duty_cycle(iotbus_pwm_context_h pwm, uint32_t duty_cycle);
+int iotbus_pwm_set_duty_cycle(iotbus_pwm_context_h pwm, percent_t duty_cycle);
 
 /**
  * @brief sets the pwm period.
  *
+ * @details @b #include <iotbus/iotbus_pwm.h>
  * @param[in] pwm handle of pwm_context
  * @param[in] period pwm duty period
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_pwm_set_period(iotbus_pwm_context_h pwm, uint32_t period);
 
 /**
  * @brief sets the pwm state.
  *
+ * @details @b #include <iotbus/iotbus_pwm.h>
  * @param[in] pwm handle of pwm_context
  * @param[in] enable pwm enable/disabled state value
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_pwm_set_enabled(iotbus_pwm_context_h pwm, iotbus_pwm_state_e enable);
 
 /**
  * @brief checks if pwm state is enabled.
  *
+ * @details @b #include <iotbus/iotbus_pwm.h>
  * @param[in] pwm handle of pwm_context
  * @return On success, current pwm state value is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_pwm_is_enabled(iotbus_pwm_context_h pwm);
 
 /**
  * @brief gets the pwm duty cycle.
  *
+ * @details @b #include <iotbus/iotbus_pwm.h>
  * @param[in] pwm handle of pwm_context
  * @return On success, current pwm duty cycle is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_pwm_get_duty_cycle(iotbus_pwm_context_h pwm);
 
 /**
  * @brief gets the pwm period.
  *
+ * @details @b #include <iotbus/iotbus_pwm.h>
  * @param[in] pwm handle of pwm_context
  * @return On success, current pwm period is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_pwm_get_period(iotbus_pwm_context_h pwm);
 

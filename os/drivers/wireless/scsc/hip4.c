@@ -1,8 +1,20 @@
-/******************************************************************************
+/*****************************************************************************
  *
- * Copyright (c) 2014 - 2016 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright 2017 Samsung Electronics All Rights Reserved.
  *
- *****************************************************************************/
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific
+ * language governing permissions and limitations under the License.
+ *
+ ****************************************************************************/
 
 #include <scsc/scsc_mx.h>
 #include <scsc/scsc_mifram.h>
@@ -120,9 +132,8 @@ static struct mbulk *hip4_mbuf_to_mbulk(struct hip4_priv *hip, struct max_buff *
 	u8 pool_id = ctrl_packet ? MBULK_CLASS_FROM_HOST_CTL : MBULK_CLASS_FROM_HOST_DAT;
 	u8 headroom = 0, tailroom = 0;
 	enum mbulk_class clas = ctrl_packet ? MBULK_CLASS_FROM_HOST_CTL : MBULK_CLASS_FROM_HOST_DAT;
-	struct slsi_mbuf_cb *cb = slsi_mbuf_cb_get(mbuf);
 
-	payload = mbuf->len - cb->sig_length;
+	payload = mbuf->data_len - mbuf->fapi.sig_length;
 
 	/* Get headroom/tailroom */
 	headroom = hip->unidat_req_headroom;
@@ -131,7 +142,7 @@ static struct mbulk *hip4_mbuf_to_mbulk(struct hip4_priv *hip, struct max_buff *
 	/* Allocate mbulk */
 	if (payload) {
 		/* If signal include payload, add headroom and tailroom */
-		m = mbulk_with_signal_alloc_by_pool(pool_id, cb->colour, clas, cb->sig_length + 4, payload + headroom + tailroom);
+		m = mbulk_with_signal_alloc_by_pool(pool_id, mbuf->colour, clas, mbuf->fapi.sig_length + 4, payload + headroom + tailroom);
 		if (!m) {
 			return NULL;
 		}
@@ -140,7 +151,7 @@ static struct mbulk *hip4_mbuf_to_mbulk(struct hip4_priv *hip, struct max_buff *
 		}
 	} else {
 		/* If it is only a signal do not add headroom */
-		m = mbulk_with_signal_alloc_by_pool(pool_id, cb->colour, clas, cb->sig_length + 4, 0);
+		m = mbulk_with_signal_alloc_by_pool(pool_id, mbuf->colour, clas, mbuf->fapi.sig_length + 4, 0);
 		if (!m) {
 			return NULL;
 		}
@@ -155,7 +166,7 @@ static struct mbulk *hip4_mbuf_to_mbulk(struct hip4_priv *hip, struct max_buff *
 
 	/* Copy signal */
 	/* 4Bytes offset is required for FW fapi header */
-	memcpy(sig + 4, mbuf->data, cb->sig_length);
+	memcpy(sig + 4, slsi_mbuf_get_data(mbuf), mbuf->fapi.sig_length);
 
 	/* Copy payload */
 	/* If the signal has payload memcpy the data */
@@ -167,7 +178,7 @@ static struct mbulk *hip4_mbuf_to_mbulk(struct hip4_priv *hip, struct max_buff *
 			return NULL;
 		}
 		/* Copy payload skipping the signal data */
-		memcpy(b_data, mbuf->data + cb->sig_length, payload);
+		memcpy(b_data, slsi_mbuf_get_data(mbuf) + mbuf->fapi.sig_length, payload);
 		mbulk_append_tail(m, payload);
 	}
 	m->flag |= MBULK_F_OBOUND;
@@ -178,7 +189,6 @@ static struct mbulk *hip4_mbuf_to_mbulk(struct hip4_priv *hip, struct max_buff *
 /* Transform mbulk to mbuf (fapi_signal + payload) */
 static struct max_buff *hip4_mbulk_to_mbuf(struct scsc_service *service, struct mbulk *m, scsc_mifram_ref *to_free, bool cfm)
 {
-	struct slsi_mbuf_cb *cb;
 	struct mbulk *next_mbulk[MBULK_MAX_CHAIN];
 	struct max_buff *mbuf = NULL;
 	scsc_mifram_ref ref;
@@ -241,21 +251,20 @@ cont:
 		return NULL;
 	}
 
-	mbuf = alloc_mbuf(bytes_to_alloc);
+	mbuf = mbuf_alloc(bytes_to_alloc);
 	if (!mbuf) {
 		return NULL;
 	}
 
-	cb = slsi_mbuf_cb_init(mbuf);
-	cb->sig_length = m->sig_bufsz - 4;
+	mbuf->fapi.sig_length = m->sig_bufsz - 4;
 	/* fapi_data_append adds to the data_length */
-	cb->data_length = cb->sig_length;
+	mbuf->fapi.data_length = mbuf->fapi.sig_length;
 
 	/* Remove 4Bytes offset coming from FW */
 	p += 4;
 
 	/* Don't need to copy the 4Bytes header coming from the FW */
-	memcpy(mbuf_put(mbuf, cb->sig_length), p, cb->sig_length);
+	memcpy(mbuf_put(mbuf, mbuf->fapi.sig_length), p, mbuf->fapi.sig_length);
 
 	if (m->len) {
 		fapi_append_data(mbuf, mbulk_dat_r(m), m->len);
@@ -820,7 +829,7 @@ int scsc_wifi_transmit_frame(struct slsi_hip4 *hip, bool ctrl_packet, struct max
 
 	service = sdev->service;
 
-	fapi_header = (struct fapi_signal_header *)mbuf->data;
+	fapi_header = (struct fapi_signal_header *)slsi_mbuf_get_data(mbuf);
 
 	m = hip4_mbuf_to_mbulk(hip->hip_priv, mbuf, ctrl_packet);
 	if (m == NULL) {

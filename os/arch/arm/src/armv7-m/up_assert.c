@@ -81,6 +81,9 @@
 #include <tinyara/arch.h>
 
 #include <arch/board/board.h>
+#ifdef CONFIG_BOARD_ASSERT_AUTORESET
+#include <sys/boardctl.h>
+#endif
 
 #include "up_arch.h"
 #include "sched/sched.h"
@@ -94,19 +97,6 @@
 
 #ifndef CONFIG_USBDEV_TRACE
 #undef CONFIG_ARCH_USBDUMP
-#endif
-
-/* The following is just intended to keep some ugliness out of the mainline
- * code.  We are going to print the task name if:
- *
- *  CONFIG_TASK_NAME_SIZE > 0 &&    <-- The task has a name
- *  (defined(CONFIG_DEBUG)    ||    <-- And the debug is enabled (lldbg used)
- *   defined(CONFIG_ARCH_STACKDUMP) <-- Or lowsyslog() is used
- */
-
-#undef CONFIG_PRINT_TASKNAME
-#if CONFIG_TASK_NAME_SIZE > 0 && (defined(CONFIG_DEBUG) || defined(CONFIG_ARCH_STACKDUMP))
-#define CONFIG_PRINT_TASKNAME 1
 #endif
 
 /****************************************************************************
@@ -190,6 +180,47 @@ static inline void up_registerdump(void)
 #else
 #define up_registerdump()
 #endif
+
+/****************************************************************************
+ * Name: up_taskdump
+ ****************************************************************************/
+
+#ifdef CONFIG_STACK_COLORATION
+static void up_taskdump(FAR struct tcb_s *tcb, FAR void *arg)
+{
+	/* Dump interesting properties of this task */
+
+#if CONFIG_TASK_NAME_SIZE > 0
+	lldbg("%s: PID=%d Stack Used=%lu of %lu\n",
+			tcb->name, tcb->pid, (unsigned long)up_check_tcbstack(tcb),
+			(unsigned long)tcb->adj_stack_size);
+#else
+	lldbg("PID: %d Stack Used=%lu of %lu\n",
+			tcb->pid, (unsigned long)up_check_tcbstack(tcb),
+			(unsigned long)tcb->adj_stack_size);
+#endif
+}
+#endif
+
+/****************************************************************************
+ * Name: up_showtasks
+ ****************************************************************************/
+
+#ifdef CONFIG_STACK_COLORATION
+static inline void up_showtasks(void)
+{
+	lldbg("*******************************************\n");
+	lldbg("List of all tasks in the system:\n");
+	lldbg("*******************************************\n");
+
+	/* Dump interesting properties of each task in the crash environment */
+
+	sched_foreach(up_taskdump, NULL);
+}
+#else
+#define up_showtasks()
+#endif
+
 
 /****************************************************************************
  * Name: assert_tracecallback
@@ -318,7 +349,17 @@ static void up_dumpstate(void)
 	/* Then dump the registers (if available) */
 
 	up_registerdump();
+
+	/* Dump the state of all tasks (if available) */
+
+	up_showtasks();
+
+	/* Dump MPU regions info */
+
+#ifdef CONFIG_ARMV7M_MPU
 	mpu_show_regioninfo();
+#endif
+
 #ifdef CONFIG_ARCH_USBDUMP
 	/* Dump USB trace data */
 
@@ -381,18 +422,17 @@ void dump_all_stack(void)
 
 void up_assert(const uint8_t *filename, int lineno)
 {
-#ifdef CONFIG_PRINT_TASKNAME
-	struct tcb_s *rtcb = this_task();
-#endif
-
 	board_led_on(LED_ASSERTION);
 
-#ifdef CONFIG_PRINT_TASKNAME
-	lldbg("Assertion failed at file:%s line: %d task: %s\n", filename, lineno, rtcb->name);
+#if CONFIG_TASK_NAME_SIZE > 0
+	lldbg("Assertion failed at file:%s line: %d task: %s\n", filename, lineno, this_task()->name);
 #else
 	lldbg("Assertion failed at file:%s line: %d\n", filename, lineno);
 #endif
 
 	up_dumpstate();
+#ifdef CONFIG_BOARD_ASSERT_AUTORESET
+	(void)boardctl(BOARDIOC_RESET, 0);
+#endif
 	_up_assert(EXIT_FAILURE);
 }

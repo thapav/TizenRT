@@ -24,21 +24,22 @@
  */
 
 /**
- * @file iotbus_i2c.h
+ * @file iotbus/iotbus_i2c.h
  * @brief Iotbus APIs for I2C
  */
-
-#include <stdint.h>
 
 #ifndef IOTBUS_I2C_H_
 #define IOTBUS_I2C_H_
 
+#include <stdint.h>
+#include <sys/types.h>
+
 struct _iotbus_i2c_s;
 
 /**
- * @brief Pointer definition to the internal struct _iotbus_i2c_s
+ * @brief Pointer definition to the internal struct _iotbus_i2c_wrapper_s
  */
-typedef struct _iotbus_i2c_s *iotbus_i2c_context_h;
+typedef struct _iotbus_i2c_wrapper_s *iotbus_i2c_context_h;
 
 /**
  * @brief Enumeration of I2C frequency mode
@@ -49,73 +50,78 @@ typedef struct _iotbus_i2c_s *iotbus_i2c_context_h;
  * IOTBUS_I2C_HIGH = 2, < up to 3.4Mhz\n
  */
 typedef enum {
-	IOTBUS_I2C_STD = 0, /**< up to 100Khz */
+	IOTBUS_I2C_STD  = 0, /**< up to 100Khz */
 	IOTBUS_I2C_FAST = 1, /**< up to 400Khz */
-	IOTBUS_I2C_HIGH = 2 /**< up to 3.4Mhz */
+	IOTBUS_I2C_HIGH = 2  /**< up to 3.4Mhz */
 } iotbus_i2c_mode_e;
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /**
  * @brief initializes i2c_context.
  *
+ * @details @b #include <iotbus/iotbus_i2c.h>
  * @param[in] bus i2c bus number
  * @return On success, handle of i2c_context is returned. On failure, NULL is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 iotbus_i2c_context_h iotbus_i2c_init(int bus);
 
 /**
  * @brief closes i2c_context.
  *
+ * @details @b #include <iotbus/iotbus_i2c.h>
  * @param[in] hnd handle of i2c_context
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_i2c_stop(iotbus_i2c_context_h hnd);
 
 /**
  * @brief sets the i2c frequency.
  *
+ * @details @b #include <iotbus/iotbus_i2c.h>
  * @param[in] hnd handle of i2c_context
  * @param[in] mode i2c frequency mode
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_i2c_set_frequency(iotbus_i2c_context_h hnd, iotbus_i2c_mode_e mode);
 
 /**
  * @brief sets the i2c slave address.
  *
+ * @details @b #include <iotbus/iotbus_i2c.h>
  * @param[in] hnd handle of i2c_context
  * @param[in] address i2c address
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_i2c_set_address(iotbus_i2c_context_h hnd, uint8_t address);
 
 /**
  * @brief reads from i2c device.
  *
+ * @details @b #include <iotbus/iotbus_i2c.h>
  * @param[in] hnd handle of i2c_context
  * @param[in] data the pointer of data buffer
  * @param[in] length size to read
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_i2c_read(iotbus_i2c_context_h hnd, uint8_t *data, size_t length);
 
 /**
  * @brief writes to i2c device.
  *
+ * @details @b #include <iotbus/iotbus_i2c.h>
  * @param[in] hnd handle of i2c_context
  * @param[in] data the pointer of data buffer
  * @param[in] length size to write
  * @return On success, size is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_i2c_write(iotbus_i2c_context_h hnd, const uint8_t *data, size_t length);
 

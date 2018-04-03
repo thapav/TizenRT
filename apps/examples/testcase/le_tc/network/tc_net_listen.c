@@ -27,7 +27,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 //#include <arch/board/board.h>
-#include <apps/netutils/netlib.h>
+#include <netutils/netlib.h>
 
 #include <sys/socket.h>
 
@@ -81,11 +81,9 @@ static void tc_net_listen_fd_n(void)
 
 	bind(fd, (struct sockaddr *)&sa, sizeof(sa));
 	int ret = (listen(-1, 10));
-
+	close(fd);
 	TC_ASSERT_NEQ("listen", ret, 0);
 	TC_SUCCESS_RESULT();
-	close(fd);
-
 }
 
 /**
@@ -137,11 +135,9 @@ static void tc_net_listen_fd_backlog_n(void)
 
 	bind(SocketFD, (struct sockaddr *)&sa, sizeof(sa));
 	int ret = (listen(-1, -1));
-
+	close(SocketFD);
 	TC_ASSERT_NEQ("listen", ret, 0);
 	TC_SUCCESS_RESULT();
-
-	close(SocketFD);
 }
 
 /****************************************************************************

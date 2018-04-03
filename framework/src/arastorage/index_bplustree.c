@@ -55,6 +55,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <time.h>
+#include <sys/types.h>
 
 #include "result.h"
 #include "db_options.h"
@@ -74,7 +75,7 @@
 #define NODE_DEPTH      2
 #define LEAF_NODES      pow(BRANCH_FACTOR, NODE_DEPTH)
 #define EMPTY_NODE(node)        (node)->val[BRANCH_FACTOR-1] == 0
-#define KEY_MAX 32768
+#define KEY_MAX INT_MAX
 #define ROW_XOR 0xf6U
 #define NODE_STATE_VALID 1
 #define NODE_STATE_LOCK 2
@@ -128,13 +129,13 @@
  * Private Types
  ****************************************************************************/
 struct key_value_pair_s {
-	uint16_t key;
+	int key;
 	uint16_t value;
 };
 typedef struct key_value_pair_s pair_t;
 
 struct tree_node_s {
-	uint16_t val[BRANCH_FACTOR];
+	int val[BRANCH_FACTOR];
 	uint16_t id[BRANCH_FACTOR];
 	uint16_t is_leaf;
 };
@@ -281,8 +282,10 @@ static db_result_t release(index_t *);
 static db_result_t insert(index_t *, attribute_value_t *, tuple_id_t);
 static db_result_t delete(index_t *, attribute_value_t *);
 static tuple_id_t get_next(index_iterator_t *, uint8_t);
-static db_result_t vacuum(tree_t *, relation_t *);
 
+#ifdef DB_WIP
+static db_result_t vacuum(tree_t *, relation_t *);
+#endif
 /****************************************************************************
 * Private Functions
 ****************************************************************************/
@@ -521,6 +524,7 @@ static db_result_t destroy(index_t *index)
 		return DB_STORAGE_ERROR;
 	}
 	if (DB_ERROR(storage_read_from(fd, bucket_file, sizeof(tree_t), sizeof(bucket_file)))) {
+		storage_close(fd);
 		return DB_STORAGE_ERROR;
 	}
 	storage_close(fd);
@@ -548,18 +552,21 @@ static db_result_t load(index_t *index)
 	DB_LOG_D("load index : descriptor file name : %s\n", index->descriptor_file);
 	fd = storage_open(index->descriptor_file, O_RDWR);
 	if (fd < 0) {
-		DB_LOG_E("Failed opening index descriptor file\n");
-		goto storage_error;
+		DB_LOG_E("Failed opening index descriptor file :%s Error Code %d", index->descriptor_file);
+		free(tree);
+		return DB_STORAGE_ERROR;
 	}
 	if (DB_ERROR(storage_read_from(fd, bucket_file, sizeof(tree_t), sizeof(bucket_file)))) {
 		DB_LOG_E("Failed reading bucket file\n");
 		storage_close(fd);
-		goto storage_error;
+		free(tree);
+		return DB_STORAGE_ERROR;
 	}
 	if (DB_ERROR(storage_read_from(fd, tree, 0, sizeof(tree_t)))) {
 		DB_LOG_E("Failed  reading tree structure from descriptor file\n");
 		storage_close(fd);
-		goto storage_error;
+		free(tree);
+		return DB_STORAGE_ERROR;
 	}
 	storage_close(fd);
 
@@ -639,17 +646,6 @@ static db_result_t load(index_t *index)
 	DB_LOG_D("DB: Loaded btree index from file %s and bucket file %s\n", index->descriptor_file, bucket_file);
 
 	return DB_OK;
-
-storage_error:
-	DB_LOG_E("DB: Storage error while loading index\n");
-	free(tree->node_cache->in_cache.head);
-	free(tree->node_cache->in_cache.tail);
-	free(tree->buck_cache->in_cache.head);
-	free(tree->buck_cache->in_cache.tail);
-	free(tree->buck_cache);
-	free(tree->node_cache);
-	free(tree);
-	return DB_STORAGE_ERROR;
 
 }
 
@@ -811,8 +807,8 @@ static tuple_id_t get_next(index_iterator_t *iterator, uint8_t matched_condition
 	};
 	int i;
 	static struct iteration_cache cache;
-	uint16_t key_max;
-	uint16_t key_min;
+	int key_max;
+	int key_min;
 	tree_t *tree;
 	key_min = *(int *)&iterator->min_value;
 	key_max = *(int *)&iterator->max_value;
@@ -879,9 +875,11 @@ static tuple_id_t get_next(index_iterator_t *iterator, uint8_t matched_condition
 	if (matched_condition == FALSE) {
 		modify_cache(tree, cache.bucket_id, BUCKET, INVALIDATE);
 		cache_write_bucket(tree, cache.bucket_id, cache.bucket);
-		if ((double)(tree->deleted) / tree->inserted >= VACUUM_THRESHOLD) {
+#ifdef DB_WIP
+		if ((int)((double)(tree->deleted) * 100 / tree->inserted) >= VACUUM_THRESHOLD) {
 			vacuum(tree, iterator->index->rel);
 		}
+#endif
 	} else {
 		modify_cache(tree, cache.bucket_id, BUCKET, UNLOCK);
 	}
@@ -929,6 +927,9 @@ static tuple_id_t get_next(index_iterator_t *iterator, uint8_t matched_condition
 	return get_next(iterator, matched_condition);
 }
 
+
+
+#ifdef DB_WIP
 /****************************************************************************
  * Name: vacuum
  *
@@ -1010,6 +1011,7 @@ static db_result_t vacuum(tree_t *tree, relation_t *rel)
 	storage_remove(old_rel.tuple_filename);
 	return DB_OK;
 }
+#endif
 
 /****************************************************************************
  * Name: modify_cache
@@ -1085,7 +1087,7 @@ static cache_result_t cache_write_node(tree_t *tree, int id, tree_node_t *node)
 	} else {
 		qnode_t *iter_node;
 		iter_node = tree->node_cache->in_cache.head->next;
-		while ((iter_node->node_state | NODE_STATE_LOCK) && iter_node != tree->node_cache->in_cache.tail) {
+		while ((iter_node->node_state & NODE_STATE_LOCK) && iter_node != tree->node_cache->in_cache.tail) {
 			iter_node = iter_node->next;
 		}
 		if (iter_node == tree->node_cache->in_cache.tail) {
@@ -1387,6 +1389,7 @@ static pair_t *tree_find(tree_t *tree, int key)
 		 */
 		node = tree_read(tree, id);
 		if (node == NULL) {
+			free(path);
 			return NULL;
 		}
 		index = id;
@@ -1410,6 +1413,7 @@ static pair_t *tree_find(tree_t *tree, int key)
 			if (tree->lock_buckets[node->id[index]]) {
 				pthread_mutex_unlock(&(tree->bucket_lock));
 				modify_cache(tree, id, NODE, UNLOCK);
+				free(path);
 				return NULL;
 			} else {
 				tree->lock_buckets[node->id[index]] = 1;
@@ -1434,9 +1438,12 @@ static pair_t *tree_find(tree_t *tree, int key)
 			modify_cache(tree, index, NODE, UNLOCK);
 		}
 	}
+	free(path);
 	return NULL;
 }
 
+
+#if (DEBUG & DEBUG_VERBOSE) || (DEBUG & DEBUG_ENABLE)
 /****************************************************************************
  * Name: tree_print
  *
@@ -1477,6 +1484,7 @@ void tree_print(tree_t *tree, int id)
 	modify_cache(tree, id, NODE, UNLOCK);
 	DB_LOG_D("Node End\n");
 }
+#endif
 
 /****************************************************************************
  * Name: bucket_read

@@ -22,7 +22,7 @@
 #ifndef __EXAMPLES_TESTCASE_KERNEL_TC_INTERNAL_H
 #define __EXAMPLES_TESTCASE_KERNEL_TC_INTERNAL_H
 
-#define RETURN_ERR return
+#include "tc_common.h"
 
 #ifdef CONFIG_CPP_HAVE_VARARGS
 
@@ -54,11 +54,6 @@
 
 #endif /* CONFIG_CPP_HAVE_VARARGS */
 
-#include "tc_common.h"
-
-extern int total_pass;
-extern int total_fail;
-
 /**********************************************************
 * TC Function Declarations
 **********************************************************/
@@ -66,9 +61,11 @@ int clock_main(void);
 int environ_main(void);
 int errno_main(void);
 int group_main(void);
+int libc_fixedmath_main(void);
 int libc_libgen_main(void);
 int libc_math_main(void);
 int libc_misc_main(void);
+int libc_mqueue_main(void);
 int libc_pthread_main(void);
 int libc_queue_main(void);
 int libc_sched_main(void);
@@ -93,5 +90,15 @@ int timer_main(void);
 int umm_heap_main(void);
 int tash_heapinfo_main(void);
 int tash_stackmonitor_main(void);
+int wqueue_main(void);
+int itc_environ_main(void);
+int itc_libc_pthread_main(void);
+int itc_libc_semaphore_main(void);
+int itc_semaphore_main(void);
+int itc_sched_main(void);
+int itc_timer_main(void);
+int itc_libc_spawn_main(void);
+int itc_pthread_main(void);
+
 
 #endif /* __EXAMPLES_TESTCASE_KERNEL_TC_INTERNAL_H */

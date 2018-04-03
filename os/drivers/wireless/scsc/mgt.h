@@ -1,8 +1,20 @@
-/******************************************************************************
+/*****************************************************************************
  *
- * Copyright (c) 2012 - 2016 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright 2017 Samsung Electronics All Rights Reserved.
  *
- *****************************************************************************/
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific
+ * language governing permissions and limitations under the License.
+ *
+ ****************************************************************************/
 
 #ifndef __SLSI_MGT_H__
 #define __SLSI_MGT_H__
@@ -223,7 +235,7 @@ static inline struct slsi_peer *slsi_get_peer_from_qs(struct slsi_dev *sdev, str
 
 static inline bool slsi_is_proxy_arp_supported_on_ap(struct max_buff *assoc_resp_ie)
 {
-	const u8 *ie = slsi_80211_find_ie(SLSI_WLAN_EID_EXT_CAPABILITY, assoc_resp_ie->data, assoc_resp_ie->len);
+	const u8 *ie = slsi_80211_find_ie(SLSI_WLAN_EID_EXT_CAPABILITY, slsi_mbuf_get_data(assoc_resp_ie), assoc_resp_ie->data_len);
 
 	if ((ie) && (ie[1] > 1)) {
 		return ie[3] & 0x10;    /*0: eid, 1: len; 3: proxy arp is 12th bit */

@@ -329,7 +329,7 @@ static void tc_signal_sigsuspend(void)
 	/* Save the current sigprocmask */
 
 	ret_chk = sigprocmask(SIG_SETMASK, &newmask, &saved);
-	TC_ASSERT_EQ_CLEANUP("sigprocmask", ret_chk, OK, errno, {
+	TC_ASSERT_EQ_CLEANUP("sigprocmask", ret_chk, OK, {
 		tckndbg("ERROR sigprocmask failed: %d\n", get_errno()); goto errout;
 	}
 						);
@@ -341,21 +341,18 @@ static void tc_signal_sigsuspend(void)
 	/* Wait for a signal */
 
 	ret_chk = sigsuspend(&newmask);
-	TC_ASSERT_EQ_CLEANUP("sigsuspend", ret_chk, ERROR, get_errno(), {
+	TC_ASSERT_EQ_CLEANUP("sigsuspend", ret_chk, ERROR, {
 		tckndbg("ERROR sigsuspend failed: %d\n", get_errno()); goto errout_with_mask;
 	}
 						);
 
 	clock_gettime(clock_id, &st_final_timespec);
-	TC_ASSERT_GEQ_CLEANUP("clock_gettime", st_final_timespec.tv_sec - st_init_timespec.tv_sec, SEC_5, "Difference less than 5", {
-		goto errout_with_mask;
-	}
-						 );
+	TC_ASSERT_GEQ_CLEANUP("clock_gettime", st_final_timespec.tv_sec - st_init_timespec.tv_sec, SEC_5, goto errout_with_mask);
 
 	/* Restore sigprocmask */
 
 	ret_chk = sigprocmask(SIG_SETMASK, &saved, NULL);
-	TC_ASSERT_EQ_CLEANUP("sigprocmask", ret_chk, OK, errno, {
+	TC_ASSERT_EQ_CLEANUP("sigprocmask", ret_chk, OK, {
 		tckndbg("ERROR sognprocmask failed: %d\n", get_errno()); goto errout;
 	}
 						);
@@ -370,7 +367,7 @@ errout_with_mask:
 	sigprocmask(SIG_SETMASK, &saved, NULL);
 errout:
 
-	RETURN_ERR;
+	return;
 }
 
 /**
@@ -404,8 +401,7 @@ static void tc_signal_sig_pending_procmask_emptyset_addset(void)
 	memset(&st_act, 0, sizeof(st_act));
 	st_act.sa_handler = sigquit_handler;
 
-	TC_ASSERT("sigaction", !(sigaction(SIGQUIT, &st_act, &st_oact)));
-
+	TC_ASSERT_EQ("sigaction", sigaction(SIGQUIT, &st_act, &st_oact), OK);
 	sigemptyset(&st_newmask);
 	sigaddset(&st_newmask, SIGQUIT);
 
@@ -431,9 +427,9 @@ static void tc_signal_sig_pending_procmask_emptyset_addset(void)
 
 	nanosleep(&st_timespec, NULL);
 
-	TC_ASSERT("nanosleep", g_sig_handle);
+	TC_ASSERT_EQ("nanosleep", g_sig_handle, true);
 
-	TC_ASSERT("sigaction", !sigaction(SIGQUIT, &st_oact, NULL));
+	TC_ASSERT_EQ("sigaction", sigaction(SIGQUIT, &st_oact, NULL), OK);
 
 	TC_SUCCESS_RESULT();
 }
@@ -468,7 +464,7 @@ static void tc_signal_sigqueue(void)
 
 	sleep(SEC_1);
 
-	TC_ASSERT("sigqueue", g_sig_handle);
+	TC_ASSERT_EQ("sigqueue", g_sig_handle, true);
 
 	TC_ASSERT_NEQ("sigaction", sigaction(SIGINT, &st_oact, NULL), ERROR);
 

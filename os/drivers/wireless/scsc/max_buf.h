@@ -1,8 +1,20 @@
-/******************************************************************************
+/*****************************************************************************
  *
- * Copyright (c) 2012 - 2016 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright 2017 Samsung Electronics All Rights Reserved.
  *
- *****************************************************************************/
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific
+ * language governing permissions and limitations under the License.
+ *
+ ****************************************************************************/
 
 #ifndef SLSI_MAX_BUF_H__
 #define SLSI_MAX_BUF_H__
@@ -11,11 +23,10 @@
 #include "utils_scsc.h"
 #include "utils_misc.h"
 
-struct slsi_mbuf_cb {
+struct slsi_mbuf_fapi {
 	u32 sig_length;
 	u32 data_length;
 	u32 frame_format;
-	u32 colour;
 };
 
 struct max_buff_head {
@@ -23,11 +34,9 @@ struct max_buff_head {
 	struct max_buff *next;
 	struct max_buff *prev;
 
-	__u32 qlen;
+	unsigned int    queue_len;
 	pthread_mutex_t lock;
 };
-
-struct max_buff;
 
 /* Maximum number of packets to store in RX data mbuf queue */
 #define SCSC_MAX_RX_MBUF_QUEUE_LEN (32)
@@ -41,295 +50,102 @@ struct max_buff;
 #define SLSI_HIP_WORK_QID   LPWORK
 
 /**
- *	struct max_buff - socket buffer
- *	@next: Next maxwell buffer in list
- *	@prev: Previous maxwell buffer in list
- *	@cb: Control buffer. FAPI signal details are placed in this
- *	@len: Length of actual data
- *	@data_len: Data length
- *	@queue_mapping: Queue mapping for multiqueue devices
- *	@priority: Packet queueing priority
- *	@protocol: Packet protocol from driver
- *	@mac_header: Link layer header
- *	@tail: Tail pointer of data
- *	@end: End pointer of max_buff
- *	@head: Head of max_buff buffer
- *	@data: Data head pointer
+ * struct max_buff
+ * next: Next max_buff in the list
+ * prev: Previous max_buff in the list
+ * buffer: buffer pointer of max_buff
+ * buffer_len: Total size of the buffer
+ * data_offset: Points to the starting of actual data in the buffer
+ * data_len: Length of actual data in the buffer
+ * fapi: Data related to FAPI
+ * colour: HIP4 data
+ * ac_queue: Queue number for the max_buff
+ * mac_header: Starting offset of the MAC header
+ * user_priority: TID priority of max_buff
  */
-
 struct max_buff {
-	struct max_buff *next;
-	struct max_buff *prev;
-	struct slsi_mbuf_cb cb;
-	unsigned int len, data_len;
-	__u16 queue_mapping;
-	__u16 priority;
-	__be16 protocol;
-	__u16 mac_header;
-	unsigned char *head;
-	unsigned char *data;
-	unsigned char *tail;
-	unsigned char *end;
+	struct max_buff       *next;
+	struct max_buff       *prev;
+
+	u8                    *buffer;
+	u32                   buffer_len;
+	u32                   data_offset;
+	u32                   data_len;
+
+	struct slsi_mbuf_fapi fapi;
+	u32                   colour;
+	u16                   ac_queue;
+	u16                   mac_header;
+	u16                   user_priority;
 };
 
 struct slsi_mbuf_work {
-	struct slsi_dev *sdev;
-	struct netif *dev;			/* This can be NULL */
-	struct work_s work;
+	struct slsi_dev      *sdev;
+	struct netif         *dev; /* This can be NULL */
+	struct work_s        work;
 	struct max_buff_head queue;
-	void *sync_ptr;
+	void                 *sync_ptr;
 };
 
 struct max_buff *mbuf_copy(const struct max_buff *mbuf);
 unsigned char *mbuf_put(struct max_buff *mbuf, unsigned int len);
 unsigned char *mbuf_push(struct max_buff *mbuf, unsigned int len);
 unsigned char *mbuf_pull(struct max_buff *mbuf, unsigned int len);
-static inline unsigned int mbuf_headroom(const struct max_buff *mbuf);
-struct max_buff *__alloc_mbuf(unsigned int size);
+struct max_buff *mbuf_alloc(unsigned int size);
 struct max_buff *mbuf_dequeue(struct max_buff_head *list);
-void mbuf_queue_head(struct max_buff_head *list, struct max_buff *newsk);
+void mbuf_queue_head(struct max_buff_head *list, struct max_buff *mbuf);
 void mbuf_queue_purge(struct max_buff_head *list);
-void kfree_mbuf(struct max_buff *mbuf);
-void mbuf_queue_tail(struct max_buff_head *list, struct max_buff *newsk);
+void mbuf_free(struct max_buff *mbuf);
+void mbuf_queue_tail(struct max_buff_head *list, struct max_buff *mbuf);
 void mbuf_reset(struct max_buff *mbuf);
 
-static inline struct slsi_mbuf_cb *slsi_mbuf_cb_get(struct max_buff *mbuf)
-{
-	return (struct slsi_mbuf_cb *)&mbuf->cb;
-}
-
-static inline struct slsi_mbuf_cb *slsi_mbuf_cb_init(struct max_buff *mbuf)
-{
-	memset(&mbuf->cb, 0, sizeof(struct slsi_mbuf_cb));
-	return slsi_mbuf_cb_get(mbuf);
-}
-
-/*
- *	Insert an max_buff on a list.
- *
- */
-static inline void __mbuf_insert(struct max_buff *newsk, struct max_buff *prev, struct max_buff *next, struct max_buff_head *list)
-{
-	newsk->next = next;
-	newsk->prev = prev;
-	next->prev = prev->next = newsk;
-	list->qlen++;
-}
-
 /**
- *	mbuf_reserve - adjust headroom
- *	@mbuf: buffer to alter
- *	@len: bytes to move
- *
- *	Increase the headroom of an empty &max_buff by reducing the tail
- *	room. This is only allowed for an empty buffer.
+ * Increase the headroom of an empty max_buff by moving the data_offset.
+ * This is only allowed for an empty buffer.
  */
-static inline void mbuf_reserve(struct max_buff *mbuf, int len)
+static inline void mbuf_reserve_headroom(struct max_buff *mbuf, int len)
 {
-	mbuf->data += len;
-	mbuf->tail += len;
+	mbuf->data_offset += len;
 }
 
-static inline struct max_buff *alloc_mbuf(unsigned int size)
-{
-	return __alloc_mbuf(size);
-}
-
-static inline unsigned char *__mbuf_pull(struct max_buff *mbuf, unsigned int len)
-{
-	mbuf->len -= len;
-	WARN_ON(mbuf->len < mbuf->data_len);
-	return mbuf->data += len;
-}
-
-static inline unsigned char *mbuf_pull_inline(struct max_buff *mbuf, unsigned int len)
-{
-	return (len > mbuf->len) ? NULL : __mbuf_pull(mbuf, len);
-}
-
-/**
- *	__mbuf_queue_head_init - initialize  max_buff_head
- *	@list: queue to initialize
- *
- *	This initializes only the list and queue length aspects of
- *	an max_buff_head object. It can also be used for on-stack max_buff_head
- *	objects where the spinlock is known to not be used.
- */
-static inline void __mbuf_queue_head_init(struct max_buff_head *list)
-{
-	list->prev = list->next = (struct max_buff *)list;
-	list->qlen = 0;
-}
-
-/*
- * This function initializes qhead and related locks
- */
+/* This function initializes max_buff_head and the list lock */
 static inline void mbuf_queue_head_init(struct max_buff_head *list)
 {
 	SLSI_MUTEX_INIT(list->lock);
-	__mbuf_queue_head_init(list);
+	list->prev = list->next = (struct max_buff *)list;
+	list->queue_len = 0;
 }
 
-/**
- *	mbuf_headroom - bytes at buffer head
- *	@mbuf: buffer to check
- *
- *	Return the number of bytes of free space at the head of an &max_buff.
- */
+/* This function returns the number of bytes of free space at the head of an max_buff */
 static inline unsigned int mbuf_headroom(const struct max_buff *mbuf)
 {
-	return mbuf->data - mbuf->head;
+	return mbuf->data_offset;
 }
 
-static inline bool mbuf_is_nonlinear(const struct max_buff *mbuf)
-{
-	return mbuf->data_len;
-}
-
-/**
- *	mbuf_tailroom - bytes at buffer end
- *	@mbuf: buffer to check
- *
- *	Return the number of bytes of free space at the tail of an max_buff
- */
-static inline int mbuf_tailroom(const struct max_buff *mbuf)
-{
-	return mbuf_is_nonlinear(mbuf) ? 0 : mbuf->end - mbuf->tail;
-}
-
-/**
- *	mbuf_queue_len	- get queue length
- *	@list_: list to measure
- *
- *	Return the length of an &max_buff queue.
- */
-static inline __u32 mbuf_queue_len(const struct max_buff_head *list_)
-{
-	return list_->qlen;
-}
-
-static inline void mbuf_set_tail_pointer(struct max_buff *mbuf, unsigned int offset)
-{
-	mbuf->tail = mbuf->data + offset;
-}
-
-static inline unsigned int mbuf_end_offset(const struct max_buff *mbuf)
-{
-	return mbuf->end - mbuf->head;
-}
-
-/*
- * remove max_buff from list. _Must_ be called atomically, and with
- * the list known..
- */
-static inline void __mbuf_unlink(struct max_buff *mbuf, struct max_buff_head *list)
-{
-	struct max_buff *next, *prev;
-
-	list->qlen--;
-	next = mbuf->next;
-	prev = mbuf->prev;
-	mbuf->next = mbuf->prev = NULL;
-	next->prev = prev;
-	prev->next = next;
-}
-
-/**
- *	mbuf_peek - peek at the head of an &max_buff_head
- *	@list_: list to peek at
- *
- *	Peek an &max_buff. Unlike most other operations you _MUST_
- *	be careful with this one. A peek leaves the buffer on the
- *	list and someone else may run off with it. You must hold
- *	the appropriate locks or have a private queue to do this.
- *
- *	Returns %NULL for an empty list or a pointer to the head element.
- *	The reference count is not incremented and the reference is therefore
- *	volatile. Use with caution.
- */
-static inline struct max_buff *mbuf_peek(const struct max_buff_head *list_)
-{
-	struct max_buff *mbuf = list_->next;
-
-	if (mbuf == (struct max_buff *)list_) {
-		mbuf = NULL;
-	}
-	return mbuf;
-}
-
-/**
- *	mbuf_peek_tail - peek at the tail of an &max_buff_head
- *	@list_: list to peek at
- *
- *	Peek an &max_buff. Unlike most other operations you _MUST_
- *	be careful with this one. A peek leaves the buffer on the
- *	list and someone else may run off with it. You must hold
- *	the appropriate locks or have a private queue to do this.
- *
- *	Returns %NULL for an empty list or a pointer to the tail element.
- *	The reference count is not incremented and the reference is therefore
- *	volatile. Use with caution.
- */
-static inline struct max_buff *mbuf_peek_tail(const struct max_buff_head *list_)
-{
-	struct max_buff *mbuf = list_->prev;
-
-	if (mbuf == (struct max_buff *)list_) {
-		mbuf = NULL;
-	}
-	return mbuf;
-}
-
-static inline unsigned char *mbuf_mac_header(const struct max_buff *mbuf)
-{
-	return mbuf->head + mbuf->mac_header;
-}
 
 static inline struct ethhdr *eth_hdr(const struct max_buff *mbuf)
 {
-	return (struct ethhdr *)mbuf_mac_header(mbuf);
-}
-
-static inline void mbuf_reset_mac_header(struct max_buff *mbuf)
-{
-	mbuf->mac_header = mbuf->data - mbuf->head;
+	return (struct ethhdr *)(mbuf->buffer + mbuf->mac_header);
 }
 
 static inline void mbuf_set_mac_header(struct max_buff *mbuf, const int offset)
 {
-	mbuf_reset_mac_header(mbuf);
-	mbuf->mac_header += offset;
+	mbuf->mac_header = mbuf->data_offset + offset;
 }
 
-static inline struct max_buff *slsi_dev_alloc_mbuf_f(unsigned int length, const char *file, int line)
+static inline struct max_buff *slsi_mbuf_alloc(unsigned int size)
 {
-	struct max_buff *mbuf = __alloc_mbuf(SLSI_NETIF_MBUF_HEADROOM + SLSI_NETIF_MBUF_TAILROOM + length);
-
-	SLSI_UNUSED_PARAMETER(file);
-	SLSI_UNUSED_PARAMETER(line);
+	struct max_buff *mbuf = mbuf_alloc(SLSI_NETIF_MBUF_HEADROOM + SLSI_NETIF_MBUF_TAILROOM + size);
 
 	if (mbuf) {
-		mbuf_reserve(mbuf, SLSI_NETIF_MBUF_HEADROOM - SLSI_MBUF_GET_ALIGNMENT_OFFSET(mbuf));
+		mbuf_reserve_headroom(mbuf, SLSI_NETIF_MBUF_HEADROOM);
 	}
 	return mbuf;
 }
 
-static inline struct max_buff *slsi_alloc_mbuf_f(unsigned int size, const char *file, int line)
-{
-	struct max_buff *mbuf = alloc_mbuf(SLSI_NETIF_MBUF_HEADROOM + SLSI_NETIF_MBUF_TAILROOM + size);
-
-	SLSI_UNUSED_PARAMETER(file);
-	SLSI_UNUSED_PARAMETER(line);
-
-	if (mbuf) {
-		mbuf_reserve(mbuf, SLSI_NETIF_MBUF_HEADROOM - SLSI_MBUF_GET_ALIGNMENT_OFFSET(mbuf));
-	}
-	return mbuf;
-}
-
-#define slsi_alloc_mbuf(size_)              slsi_alloc_mbuf_f(size_, __FILE__, __LINE__)
+#define slsi_mbuf_get_data(mbuf_)           (&mbuf_->buffer[mbuf_->data_offset])
 #define slsi_mbuf_copy(mbuf_)               mbuf_copy(mbuf_)
-#define slsi_kfree_mbuf(mbuf_)              kfree_mbuf(mbuf_)
+#define slsi_kfree_mbuf(mbuf_)              mbuf_free(mbuf_)
 #define slsi_mbuf_queue_tail(list_, mbuf_)  mbuf_queue_tail(list_, mbuf_)
 #define slsi_mbuf_queue_head(list_, mbuf_)  mbuf_queue_head(list_, mbuf_)
 #define slsi_mbuf_dequeue(list_)            mbuf_dequeue(list_)
@@ -363,7 +179,7 @@ static inline void slsi_mbuf_work_enqueue_l(struct slsi_mbuf_work *work, struct 
 		return;
 	}
 
-	if (work->queue.qlen == 0) {
+	if (work->queue.queue_len == 0) {
 		mbuf_queue_tail(&work->queue, mbuf);
 		slsi_mbuf_schedule_work(work, func);
 	} else {

@@ -16,6 +16,7 @@
  *
  ****************************************************************************/
 /****************************************************************************
+ * include/tinyara/audio/i2s.h
  *
  *   Copyright(C) 2013 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -69,9 +70,10 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-/* Access macros ************************************************************/
 
 /****************************************************************************
+ * Access macros
+*****************************************************************************
  * Name: I2S_RXSAMPLERATE
  *
  * Description:
@@ -89,7 +91,7 @@
  *
  ****************************************************************************/
 
-#define I2S_RXSAMPLERATE(d, f) ((d)->ops->i2s_rxsamplerate(d, r))
+#define I2S_RXSAMPLERATE(d, f) ((d)->ops->i2s_rxsamplerate(d, f))
 
 /****************************************************************************
  * Name: I2S_RXDATAWIDTH
@@ -159,7 +161,7 @@
  *
  ****************************************************************************/
 
-#define I2S_TXSAMPLERATE(d, f) ((d)->ops->i2s_txsamplerate(d, r))
+#define I2S_TXSAMPLERATE(d, f) ((d)->ops->i2s_txsamplerate(d, f))
 
 /****************************************************************************
  * Name: I2S_TXDATAWIDTH
@@ -212,27 +214,71 @@
 #define I2S_SEND(d, b, c, a, t) ((d)->ops->i2s_send(d, b, c, a, t))
 
 /****************************************************************************
+ * Name: I2S_ERR_CB_REG
+ *
+ * Description:
+ *   Register error reporting callback function for I2S driver.
+ *
+ * Input Parameters:
+ *   dev      - Device-specific state data
+ *   cb       - A user provided callback function that will be called in
+ *              case of error.  The callback will be
+ *              performed in the context of the interrupt handler.
+ *   arg      - An opaque argument that will be provided to the callback
+ *              when the transfer completes.
+ *
+ * Returned Value:
+ *   OK on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+#define I2S_ERR_CB_REG(d, b, c) ((d)->ops->i2s_err_cb_register(d, b, c))
+
+/***********************************************************/
+#define I2S_STOP(d, t)		((d)->ops->i2s_stop(d, t))
+#define I2S_PAUSE(d, t)		((d)->ops->i2s_pause(d, t))
+#define I2S_RESUME(d, t)	((d)->ops->i2s_resume(d, t))
+/************************************************************/
+
+/****************************************************************************
  * Public Types
  ****************************************************************************/
-/* Transfer complete callbacks */
+/* Transfer complete and error callbacks */
+
+typedef enum {
+	I2S_RX = 1,
+	I2S_TX
+} i2s_ch_dir_t;
 
 struct i2s_dev_s;
 typedef CODE void (*i2s_callback_t)(FAR struct i2s_dev_s *dev, FAR struct ap_buffer_s *apb, FAR void *arg, int result);
+
+typedef CODE void (*i2s_err_cb_t)(FAR struct i2s_dev_s *dev, FAR void *arg, int flags);
+
 
 /* The I2S vtable */
 
 struct i2s_ops_s {
 	/* Receiver methods */
 
-	CODE uint32_t (*i2s_rxsamplerate)(FAR struct i2s_dev_s *dev, uint32_t rate);
-	CODE uint32_t (*i2s_rxdatawidth)(FAR struct i2s_dev_s *dev, int bits);
+	CODE uint32_t(*i2s_rxsamplerate)(FAR struct i2s_dev_s *dev, uint32_t rate);
+	CODE uint32_t(*i2s_rxdatawidth)(FAR struct i2s_dev_s *dev, int bits);
 	CODE int (*i2s_receive)(FAR struct i2s_dev_s *dev, FAR struct ap_buffer_s *apb, i2s_callback_t callback, FAR void *arg, uint32_t timeout);
 
 	/* Transmitter methods */
 
-	CODE uint32_t (*i2s_txsamplerate)(FAR struct i2s_dev_s *dev, uint32_t rate);
-	CODE uint32_t (*i2s_txdatawidth)(FAR struct i2s_dev_s *dev, int bits);
+	CODE uint32_t(*i2s_txsamplerate)(FAR struct i2s_dev_s *dev, uint32_t rate);
+	CODE uint32_t(*i2s_txdatawidth)(FAR struct i2s_dev_s *dev, int bits);
 	CODE int (*i2s_send)(FAR struct i2s_dev_s *dev, FAR struct ap_buffer_s *apb, i2s_callback_t callback, FAR void *arg, uint32_t timeout);
+
+	/* Errors handling methods */
+
+	CODE int (*i2s_err_cb_register)(FAR struct i2s_dev_s *dev, i2s_err_cb_t cb, FAR void *arg);
+
+	/* Generic methods */
+	CODE int (*i2s_stop)(FAR struct i2s_dev_s *dev, i2s_ch_dir_t dir);
+	CODE int (*i2s_pause)(FAR struct i2s_dev_s *dev, i2s_ch_dir_t dir);
+	CODE int (*i2s_resume)(FAR struct i2s_dev_s *dev, i2s_ch_dir_t dir);
 };
 
 /* I2S private data.  This structure only defines the initial fields of the
@@ -290,5 +336,5 @@ int i2schar_register(FAR struct i2s_dev_s *i2s, int minor);
 }
 #endif
 
-#endif	/* CONFIG_I2S */
-#endif	/* __INCLUDE_TINYARA_AUDIO_I2S_H */
+#endif							/* CONFIG_I2S */
+#endif							/* __INCLUDE_TINYARA_AUDIO_I2S_H */

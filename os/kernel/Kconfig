@@ -240,46 +240,6 @@ config INIT_ENTRYPOINT
 
 endchoice # Initialization task
 
-if INIT_FILEPATH
-
-config USER_INITPATH
-	string "Application initialization path"
-	default "/bin/init"
-	---help---
-		The name of the entry point for user applications.  For the example
-		applications this is of the form 'app_main' where 'app' is the application
-		name. If not defined, USER_ENTRYPOINT defaults to "main".
-
-config INIT_SYMTAB
-	string "Symbol table"
-	default "NULL"
-	depends on !BUILD_PROTECTED && !BUILD_KERNEL
-	---help---
-		The name of othe global array that holds the exported symbol table.
-		The special string "NULL" may be provided if there is no symbol
-		table.  Quotation marks will be stripped when config.h is generated.
-
-		NOTE: This setting cannot be used in protected or kernel builds.
-		Any kernel mode symbols tables would not be usable for resolving
-		symbols in user mode executables.
-
-config INIT_NEXPORTS
-	string "Symbol table size"
-	default "0"
-	depends on !BUILD_PROTECTED && !BUILD_KERNEL
-	---help---
-		The size of the symbol table.  NOTE that is is logically a numeric
-		value but is represent by a string.  That allows you to put
-		sizeof(something) or a macro or a global variable name for the
-		symbol table size.  Quotation marks will be stripped when config.h
-		is generated.
-
-		NOTE: This setting cannot be used in protected or kernel builds.
-		Any kernel mode symbols tables would not be usable for resolving
-		symbols in user mode executables.
-
-endif # INIT_FILEPATH
-
 config RR_INTERVAL
 	int "Round robin timeslice (MSEC)"
 	default 0
@@ -441,7 +401,7 @@ config PTHREAD_MUTEX_UNSAFE
 		software you may be porting or, perhaps, if you are trying to minimize
 		footprint.
 
-	config PTHREAD_MUTEX_BOTH
+config PTHREAD_MUTEX_BOTH
 	bool "Both robust and unsafe mutexes"
 	---help---
 		Support both forms of NORMAL mutexes.
@@ -453,12 +413,12 @@ choice
 	default PTHREAD_MUTEX_DEFAULT_ROBUST
 	depends on PTHREAD_MUTEX_BOTH
 
-	config PTHREAD_MUTEX_DEFAULT_ROBUST
+config PTHREAD_MUTEX_DEFAULT_ROBUST
 	bool "Robust default"
 	---help---
 		The default is robust NORMAL mutexes (non-standard)
 
-	config PTHREAD_MUTEX_DEFAULT_UNSAFE
+config PTHREAD_MUTEX_DEFAULT_UNSAFE
 	bool "Unsafe default"
 	---help---
 		The default is traditional unsafe NORMAL mutexes (standard)
@@ -471,6 +431,14 @@ config NPTHREAD_KEYS
 	---help---
 		The number of items of thread-
 		specific data that can be retained
+
+config NPTHREAD_DESTRUCTOR_ITERATIONS
+	int "Maximum number of calling pthread destructor"
+	default 4
+	depends on NPTHREAD_KEYS != 0
+	---help---
+		The number of destructor of thread-
+		specific data that can be called
 
 config PTHREAD_CLEANUP
 	bool "pthread cleanup stack"
@@ -568,18 +536,6 @@ config SCHED_CPULOAD_TIMECONSTANT
 		units of seconds.
 
 endif # SCHED_CPULOAD
-
-config SCHED_INSTRUMENTATION
-	bool "System performance monitor hooks"
-	default n
-	---help---
-		Enables instrumentation in scheduler to monitor system performance.
-		If enabled, then the board-specific logic must provide the following
-		functions (see include/sched.h):
-
-		void sched_note_start(FAR struct tcb_s *tcb);
-		void sched_note_stop(FAR struct tcb_s *tcb);
-		void sched_note_switch(FAR struct tcb_s *pFromTcb, FAR struct tcb_s *pToTcb);
 
 endmenu # Performance Monitoring
 
@@ -883,12 +839,11 @@ config MQ_MAXMSGSIZE
 endmenu # POSIX Message Queue Options
 
 menu "Work Queue Support"
+	depends on !DISABLE_SIGNALS
 
 config SCHED_WORKQUEUE
-#	bool "Enable worker thread"
 	bool
-	default y
-	depends on !DISABLE_SIGNALS
+	default n
 	---help---
 		Create dedicated "worker" threads to handle delayed or asynchronous
 		processing.
@@ -896,7 +851,7 @@ config SCHED_WORKQUEUE
 config SCHED_WORKQUEUE_SORTING
 	bool "Sort workers by delay"
 	default y
-	select SCHED_WORKQUEUE
+	depends on SCHED_WORKQUEUE
 	---help---
 		Sort workers by delay when worker is inserted
 
@@ -904,7 +859,6 @@ config SCHED_WORKQUEUE_SORTING
 config SCHED_HPWORK
 	bool "High priority (kernel) worker thread"
 	default y
-	depends on !DISABLE_SIGNALS
 	select SCHED_WORKQUEUE
 	---help---
 		Create a dedicated high-priority "worker" thread to handle delayed
@@ -964,7 +918,6 @@ endif # SCHED_HPWORK
 config SCHED_LPWORK
 	bool "Low priority (kernel) worker thread"
 	default y
-	depends on !DISABLE_SIGNALS
 	select SCHED_WORKQUEUE
 	---help---
 		If SCHED_LPWORK is defined then a lower-priority work queue will
@@ -1077,13 +1030,6 @@ config USERMAIN_STACKSIZE
 		The size of the stack to allocate for the user initialization thread
 		that is started as soon as the OS completes its initialization.
 
-config PREAPP_STACKSIZE
-	int "pre-app thread stack size"
-	default 2048
-	---help---
-		The size of the stack to allocate for the pre-application thread
-		that is started as soon as the OS completes its initialization.
-
 config MPU_STACKGAURD
 	bool "protect thread stack"
 	default n
@@ -1091,12 +1037,14 @@ config MPU_STACKGAURD
 config PTHREAD_STACK_MIN
 	int "Minimum pthread stack size"
 	default 256
+	depends on !DISABLE_PTHREAD
 	---help---
 		Minimum pthread stack size
 
 config PTHREAD_STACK_DEFAULT
 	int "Default pthread stack size"
 	default 2048
+	depends on !DISABLE_PTHREAD
 	---help---
 		Default pthread stack size
 endmenu # Stack size information

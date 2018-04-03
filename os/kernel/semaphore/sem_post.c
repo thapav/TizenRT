@@ -65,6 +65,10 @@
 #include "sched/sched.h"
 #include "semaphore/semaphore.h"
 
+#ifdef CONFIG_SEMAPHORE_HISTORY
+#include <tinyara/debug/sysdbg.h>
+#endif
+
 /****************************************************************************
  * Definitions
  ****************************************************************************/
@@ -119,12 +123,15 @@
 int sem_post(FAR sem_t *sem)
 {
 	FAR struct tcb_s *stcb = NULL;
+#ifdef CONFIG_SEMAPHORE_HISTORY
+	FAR struct tcb_s *rtcb = NULL;
+#endif
 	irqstate_t saved_state;
 	int ret = ERROR;
 
 	/* Make sure we were supplied with a valid semaphore. */
 
-	if (sem) {
+	if (sem && ((sem->flags & FLAGS_INITIALIZED) != 0)) {
 		/* The following operations must be performed with interrupts
 		 * disabled because sem_post() may be called from an interrupt
 		 * handler.
@@ -137,6 +144,10 @@ int sem_post(FAR sem_t *sem)
 		ASSERT(sem->semcount < SEM_VALUE_MAX);
 		sem_releaseholder(sem);
 		sem->semcount++;
+#ifdef CONFIG_SEMAPHORE_HISTORY
+		rtcb = this_task();
+		save_semaphore_history(sem, (void *)rtcb, SEM_RELEASE);
+#endif
 
 #ifdef CONFIG_PRIORITY_INHERITANCE
 		/* Don't let any unblocked tasks run until we complete any priority
@@ -169,6 +180,9 @@ int sem_post(FAR sem_t *sem)
 
 				stcb->waitsem = NULL;
 
+#ifdef CONFIG_SEMAPHORE_HISTORY
+				save_semaphore_history(sem, (void *)stcb, SEM_AQUIRE);
+#endif
 				/* Restart the waiting task. */
 
 				up_unblock_task(stcb);

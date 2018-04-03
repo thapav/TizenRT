@@ -57,6 +57,7 @@ include $(APPDIR)/Make.defs
 # kernel_sample built-in application info
 
 APPNAME = kernel_sample
+FUNCNAME = $(APPNAME)_main
 THREADEXEC = TASH_EXECMD_ASYNC
 
 # TinyAra OS Test
@@ -117,6 +118,13 @@ endif # CONFIG_PRIORITY_INHERITANCE
 endif # CONFIG_DISABLE_PTHREAD
 endif # CONFIG_DISABLE_SIGNALS
 
+ifeq ($(CONFIG_SCHED_WORKQUEUE),y)
+CSRCS += workqueue.c
+else
+ifeq ($(CONFIG_LIB_USRWORK),y)
+CSRCS += workqueue.c
+endif
+endif
 AOBJS = $(ASRCS:.S=$(OBJEXT))
 COBJS = $(CSRCS:.c=$(OBJEXT))
 MAINOBJ = $(MAINSRC:.c=$(OBJEXT))
@@ -180,10 +188,10 @@ install:
 endif
 
 ifeq ($(CONFIG_BUILTIN_APPS)$(CONFIG_EXAMPLES_KERNEL_SAMPLE),yy)
-$(BUILTIN_REGISTRY)$(DELIM)$(APPNAME)_main.bdat: $(DEPCONFIG) Makefile
-	$(Q) $(call REGISTER,$(APPNAME),$(APPNAME)_main,$(THREADEXEC),$(PRIORITY),$(STACKSIZE))
+$(BUILTIN_REGISTRY)$(DELIM)$(FUNCNAME).bdat: $(DEPCONFIG) Makefile
+	$(Q) $(call REGISTER,$(APPNAME),$(FUNCNAME),$(THREADEXEC),$(PRIORITY),$(STACKSIZE))
 
-context: $(BUILTIN_REGISTRY)$(DELIM)$(APPNAME)_main.bdat
+context: $(BUILTIN_REGISTRY)$(DELIM)$(FUNCNAME).bdat
 
 else
 context:

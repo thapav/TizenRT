@@ -66,6 +66,10 @@
 #include "sched/sched.h"
 #include "semaphore/semaphore.h"
 
+#ifdef CONFIG_SEMAPHORE_HISTORY
+#include <tinyara/debug/sysdbg.h>
+#endif
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -77,6 +81,9 @@
 /****************************************************************************
  * Global Variables
  ****************************************************************************/
+#ifdef CONFIG_DEBUG_DISPLAY_SYMBOL
+extern bool abort_mode;
+#endif
 
 /****************************************************************************
  * Private Variables
@@ -117,10 +124,16 @@ int sem_wait(FAR sem_t *sem)
 	FAR struct tcb_s *rtcb = this_task();
 	irqstate_t saved_state;
 	int ret = ERROR;
-
 	/* This API should not be called from interrupt handlers */
+#ifdef CONFIG_DEBUG_DISPLAY_SYMBOL
+	DEBUGASSERT((sem != NULL && up_interrupt_context() == false) || abort_mode);
 
+	if (abort_mode && up_interrupt_context() == true) {
+		return OK;
+	}
+#else
 	DEBUGASSERT(sem != NULL && up_interrupt_context() == false);
+#endif
 
 	/* The following operations must be performed with interrupts
 	 * disabled because sem_post() may be called from an interrupt
@@ -140,7 +153,7 @@ int sem_wait(FAR sem_t *sem)
 	}
 
 	/* Make sure we were supplied with a valid semaphore */
-	if (sem != NULL) {
+	if ((sem != NULL) && ((sem->flags & FLAGS_INITIALIZED) != 0)) {
 
 		/* Check if the lock is available */
 
@@ -150,7 +163,9 @@ int sem_wait(FAR sem_t *sem)
 			sem->semcount--;
 			sem_addholder(sem);
 			rtcb->waitsem = NULL;
-
+#ifdef CONFIG_SEMAPHORE_HISTORY
+			save_semaphore_history(sem, (void *)rtcb, SEM_AQUIRE);
+#endif
 			ret = OK;
 		}
 
@@ -172,6 +187,10 @@ int sem_wait(FAR sem_t *sem)
 			/* Save the waited on semaphore in the TCB */
 
 			rtcb->waitsem = sem;
+
+#ifdef CONFIG_SEMAPHORE_HISTORY
+			save_semaphore_history(sem, (void *)rtcb, SEM_WAITING);
+#endif
 
 			/* If priority inheritance is enabled, then check the priority of
 			 * the holder of the semaphore.

@@ -23,6 +23,9 @@
  * Included Files
  ****************************************************************************/
 
+#include <tinyara/config.h>
+#include <tinyara/fs/ramdisk.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -34,15 +37,16 @@
 #include <poll.h>
 #endif
 #include <errno.h>
-#include <semaphore.h>
 #include <sys/stat.h>
 #include <sys/sendfile.h>
 #include <sys/statfs.h>
 #include <sys/select.h>
+#include <sys/types.h>
 
+#include <tinyara/streams.h>
 #include <tinyara/fs/ioctl.h>
 #include <tinyara/fs/fs_utils.h>
-#include <apps/shell/tash.h>
+#include <tinyara/configdata.h>
 #include <time.h>
 #include "tc_common.h"
 #include "tc_internal.h"
@@ -50,6 +54,10 @@
 /****************************************************************************
  * Definitions
  ****************************************************************************/
+#define STDIO_BUFLEN		64
+#define VFS_CONTENTS_LEN	20
+#define SEEK_DEF		3
+#define SEEK_OFFSET		6
 
 #define MOUNT_DIR CONFIG_MOUNT_POINT
 
@@ -58,8 +66,8 @@
 #if defined(CONFIG_SIDK_S5JT200_AUTOMOUNT_USERFS)
 #define MOUNT_DEV_DIR CONFIG_SIDK_S5JT200_AUTOMOUNT_USERFS_DEVNAME
 
-#elif defined(CONFIG_ARTIK053_AUTOMOUNT_USERFS)
-#define MOUNT_DEV_DIR CONFIG_ARTIK053_AUTOMOUNT_USERFS_DEVNAME
+#elif defined(CONFIG_ARTIK05X_AUTOMOUNT_USERFS)
+#define MOUNT_DEV_DIR CONFIG_ARTIK05X_AUTOMOUNT_USERFS_DEVNAME
 
 #else
 #define MOUNT_DEV_DIR "/dev/smart1"
@@ -73,15 +81,31 @@
 
 #define VFS_FILE_PATH MOUNT_DIR"vfs"
 
+#define VFS_INVALID_FILE_PATH MOUNT_DIR"noexistfile"
+
 #define VFS_DUP_FILE_PATH MOUNT_DIR"dup"
 
 #define VFS_DUP2_FILE_PATH MOUNT_DIR"dup2"
 
 #define VFS_FOLDER_PATH MOUNT_DIR"folder"
 
+#define VFS_FILE1_PATH MOUNT_DIR"file1.txt"
+
+#define PROCFS_PATH "/proc"
+
+#define DEV_ZERO_PATH "/dev/zero"
+
+#define DEV_CONSOLE_PATH "/dev/console"
+
+#define DEV_NULL_PATH "/dev/null"
+
+#define DEV_NEW_NULL_PATH "/dev/NULL"
+
 #define VFS_LOOP_COUNT 5
 
 #define LONG_FILE_PATH MOUNT_DIR"long"
+
+#define STREAM_TEST_CONTENTS "THIS IS STREAM TEST"
 
 #define VFS_TEST_CONTENTS_1 "THIS IS VFS TEST 1"
 
@@ -91,18 +115,9 @@
 
 #define LONG_FILE_CONTENTS "Yesterday all my trouble seemed so far away. Now it looks as though they're here to stay. Oh, I believe in yesterday."
 
+#define DEV_RAMDISK_PATH "/dev/ram2"
+
 #define LONG_FILE_LOOP_COUNT 24
-
-/* Error message for CLEANUP MACRO */
-#define ERROR_MSG_BAD_FD "wrong fd value"
-
-#define ERROR_MSG_BAD_SIZE "wrong size"
-
-#define ERROR_MSG_DIFFRENT_CONTENTS "diffrent contents"
-
-#define ERROR_MSG_DIFFRENT_FLAG "diffrent flag"
-
-#define ERROR_MSG_OP_FAILED "operation failed"
 
 #if defined(CONFIG_PIPES) && (CONFIG_DEV_PIPE_SIZE > 11)
 #define FIFO_FILE_PATH "/dev/fifo_test"
@@ -110,15 +125,36 @@
 #define FIFO_DATA "FIFO DATA"
 #endif
 
+#define MTD_PROCFS_PATH "/proc/mtd"
+
 #ifndef STDIN_FILENO
-#  define STDIN_FILENO 0
+#define STDIN_FILENO 0
 #endif
 #ifndef STDOUT_FILENO
-#  define STDOUT_FILENO 1
+#define STDOUT_FILENO 1
 #endif
 #ifndef STDERR_FILENO
-#  define STDERR_FILENO 2
+#define STDERR_FILENO 2
 #endif
+
+#define INV_FD -3
+
+#define MTD_CONFIG_PATH "/dev/config"
+#define MTD_FTL_PATH "/dev/mtdblock1"
+#define BUF_SIZE 4096
+
+#define DEV_PATH "/dev"
+#define DEV_INVALID_DIR "/dev/invalid"
+#define DEV_EMPTY_FOLDER_PATH "/dev/folder"
+#define VFS_INVALID_PATH "/mnt/nofolder"
+#define INVALID_PATH "/empty"
+
+#define ROOT_PATH "/"
+
+#define NONEFS_TYPE     "None FS"
+#define SMARTFS_TYPE    "smartfs"
+#define PROCFS_TYPE     "procfs"
+#define ROMFS_TYPE      "romfs"
 
 /****************************************************************************
  * Global Variables
@@ -126,8 +162,6 @@
 #if defined(CONFIG_PIPES) && (CONFIG_DEV_PIPE_SIZE > 11)
 static int g_thread_result;
 #endif
-extern sem_t tc_sem;
-extern int working_tc;
 
 #if defined(CONFIG_PIPES) && (CONFIG_DEV_PIPE_SIZE > 11)
 /**
@@ -148,11 +182,22 @@ void mkfifo_test_listener(pthread_addr_t pvarg)
 		g_thread_result = false;
 		return;
 	}
+
+	ret = read(fd, buf, 0);
+	if (ret != 0) {
+		g_thread_result = false;
+		close(fd);
+		return;
+	}
+
 	count = 1;
 	size = strlen(FIFO_DATA) + 2;
-	while (count < 4) {
+	while (count < 6) {
 		ret = read(fd, buf, size);
-		if (ret <= 0) {
+		if (ret == 0) {
+			printf("Read data returned zero (EOF). Hence closing fifo\n");
+			break;
+		} else if (ret < 0) {
 			printf("Read data from fifo failed\n");
 			g_thread_result = false;
 			break;
@@ -197,32 +242,65 @@ static int make_long_file(void)
 	printf("finished!\n");
 	return ret;
 }
+#ifndef CONFIG_DISABLE_ENVIRON
+static int handler(FAR const char *mountpoint, FAR struct statfs *statbuf, FAR void *arg)
+{
+	char *fstype;
 
+	switch (statbuf->f_type) {
+	case SMARTFS_MAGIC:
+		fstype = SMARTFS_TYPE;
+		break;
+	case ROMFS_MAGIC:
+		fstype = ROMFS_TYPE;
+		break;
+	case PROCFS_MAGIC:
+		fstype = PROCFS_TYPE;
+		break;
+	default:
+		fstype = NONEFS_TYPE;
+		break;
+	}
+	return OK;
+
+}
+static int mount_show(foreach_mountpoint_t mount_handler, FAR void *arg)
+{
+	return foreach_mountpoint(mount_handler, arg);
+}
+#endif
 /**
-* @testcase         fs_vfs_fs_mount_tc
+* @testcase         tc_fs_vfs_mount
 * @brief            Mount file system
 * @scenario         Mount initialized file system
 * @apicovered       mount
 * @precondition     File system should be initialized. For smartfs, smart_initialize & mksmartfs should be excuted.
 * @postcondition    NA
 */
-static void fs_vfs_mount_tc(void)
+static void tc_fs_vfs_mount(void)
 {
 	int ret;
+
 	ret = mount(MOUNT_DEV_DIR, CONFIG_MOUNT_POINT, TARGET_FS_NAME, 0, NULL);
 	TC_ASSERT_EQ("mount", ret, OK);
+
+	/*For each mountpt operation*/
+
+#ifndef CONFIG_DISABLE_ENVIRON
+	ret = mount_show(handler, NULL);
+	TC_ASSERT_EQ("mount_show", ret, OK);
+#endif
 	TC_SUCCESS_RESULT();
 }
-
 /**
-* @testcase         fs_vfs_fs_umount_tc
+* @testcase         tc_fs_vfs_umount
 * @brief            Unmount file system
 * @scenario         Unmount mounted file system
 * @apicovered       umount
 * @precondition     File system should be mounted.
 * @postcondition    NA
 */
-static void fs_vfs_umount_tc(void)
+static void tc_fs_vfs_umount(void)
 {
 	int ret;
 	ret = umount(CONFIG_MOUNT_POINT);
@@ -231,56 +309,95 @@ static void fs_vfs_umount_tc(void)
 }
 
 /**
-* @testcase         fs_vfs_open_tc
+* @testcase         tc_fs_vfs_open
 * @brief            Open file to do file operation
 * @scenario         Open specific file
 * @apicovered       open
 * @precondition     NA
 * @postcondition    NA
 */
-static void fs_vfs_open_tc(void)
+static void tc_fs_vfs_open(void)
 {
 	int fd;
 	fd = open(VFS_FILE_PATH, O_WROK | O_CREAT);
 	TC_ASSERT_GEQ("open", fd, 0);
 	close(fd);
+
+	/* Nagative case with invalid argument, not existing pathname. It will return ERROR */
+	fd = open(VFS_INVALID_FILE_PATH, O_WROK);
+	TC_ASSERT_LT_CLEANUP("open", fd, 0, close(fd));
+
+	TC_SUCCESS_RESULT();
+}
+/**
+* @testcase         tc_fs_vfs_fdopen
+* @brief            Open file to do file operation using file descriptor
+* @scenario         Open specific file
+* @apicovered       fs_fdopen
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_fs_vfs_fdopen(void)
+{
+	int fd;
+	struct file_struct *fp ;
+	fd = open(VFS_FILE_PATH, O_WROK | O_CREAT);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	fp = fs_fdopen(fd, O_WROK, NULL);
+	TC_ASSERT_NEQ_CLEANUP("fs_fdopen", fp, NULL, close(fd));
+
+	fclose(fp);
+	close(fd);
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_write_tc
+* @testcase         tc_fs_vfs_write
 * @brief            Write data into specific file
 * @scenario         Open file and then write data, if writing finished, close file
 * @apicovered       open, write
 * @precondition     NA
 * @postcondition    NA
 */
-static void fs_vfs_write_tc(void)
+static void tc_fs_vfs_write(void)
 {
 	int fd, ret;
 	char *buf = VFS_TEST_CONTENTS_1;
-	int len;
+
 	fd = open(VFS_FILE_PATH, O_WRONLY | O_TRUNC);
 	TC_ASSERT_GEQ("open", fd, 0);
-	len = strlen(buf);
-	ret = write(fd, buf, len);
+	ret = write(fd, buf, strlen(buf));
 	close(fd);
-	TC_ASSERT_EQ("write", ret, len);
+	TC_ASSERT_EQ("write", ret, strlen(buf));
+
+	/* Nagative case with invalid argument, no write access. It will return ERROR */
+	fd = open(VFS_FILE_PATH, O_RDONLY);
+	TC_ASSERT_GEQ("open", fd, 0);
+	ret = write(fd, buf, sizeof(buf));
+	TC_ASSERT_LT_CLEANUP("write", ret, 0, close(fd));
+	close(fd);
+
+	/* Nagative case with invalid argument, fd. It will return ERROR */
+	ret = write(CONFIG_NFILE_DESCRIPTORS, buf, sizeof(buf));
+	TC_ASSERT_EQ("write", ret, ERROR);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_read_tc
+* @testcase         tc_fs_vfs_read
 * @brief            Read data from specific file
 * @scenario         Open file and then read data, if reading finished, close file
 * @apicovered       open, read
 * @precondition	    NA
 * @postcondition    NA
 */
-static void fs_vfs_read_tc(void)
+static void tc_fs_vfs_read(void)
 {
 	int fd, ret;
 	char buf[20];
+
 	fd = open(VFS_FILE_PATH, O_RDONLY);
 	TC_ASSERT_GEQ("open", fd, 0);
 	memset(buf, 0, sizeof(buf));
@@ -288,18 +405,31 @@ static void fs_vfs_read_tc(void)
 	close(fd);
 	TC_ASSERT_GEQ("read", ret, 0);
 	TC_ASSERT_EQ("read", strcmp(buf, VFS_TEST_CONTENTS_1), 0);
+
+	/* Nagative case with invalid argument, no read access. It will return ERROR */
+	fd = open(VFS_FILE_PATH, O_WRONLY);
+	TC_ASSERT_GEQ("open", fd, 0);
+	memset(buf, 0, sizeof(buf));
+	ret = read(fd, buf, sizeof(buf));
+	close(fd);
+	TC_ASSERT_LT("read", ret, 0);
+
+	/* Nagative case with invalid argument, fd. It will return ERROR */
+	ret = read(CONFIG_NFILE_DESCRIPTORS, buf, sizeof(buf));
+	TC_ASSERT_EQ("read", ret, ERROR);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_close_tc
+* @testcase         tc_fs_vfs_close
 * @brief            Close file
 * @scenario         Open and close
 * @apicovered       open, close
 * @precondition     NA
 * @postcondition    NA
 */
-static void fs_vfs_close_tc(void)
+static void tc_fs_vfs_close(void)
 {
 	int fd, ret;
 	fd = open(VFS_FILE_PATH, O_RDONLY);
@@ -310,7 +440,7 @@ static void fs_vfs_close_tc(void)
 }
 
 /**
-* @testcase         fs_vfs_dup_tc
+* @testcase         tc_fs_vfs_dup
 * @brief            Clone a file descriptor to an arbitray descriptor number
 * @scenario         Open and write data. and then Clone descriptor to fd2, write data with fd2.
 *                   After write, check it writes properly or not.
@@ -318,7 +448,7 @@ static void fs_vfs_close_tc(void)
 * @precondition	    NA
 * @postcondition    NA
 */
-static void fs_vfs_dup_tc(void)
+static void tc_fs_vfs_dup(void)
 {
 	char *filename = VFS_DUP_FILE_PATH;
 	char *str1 = VFS_TEST_CONTENTS_1;
@@ -333,14 +463,14 @@ static void fs_vfs_dup_tc(void)
 
 	len = strlen(str1);
 	ret = write(fd1, str1, len);
-	TC_ASSERT_EQ_CLEANUP("write", ret, len, ERROR_MSG_BAD_SIZE, close(fd1));
+	TC_ASSERT_EQ_CLEANUP("write", ret, len, close(fd1));
 
 	fd2 = dup(fd1);
-	TC_ASSERT_GEQ_CLEANUP("dup", fd2, 0, ERROR_MSG_OP_FAILED,  close(fd1));
+	close(fd1);
+	TC_ASSERT_GEQ("dup", fd2, 0);
 
 	len = strlen(str2);
 	ret = write(fd2, str2, strlen(str2));
-	close(fd1);
 	close(fd2);
 	TC_ASSERT_EQ("write", ret, len);
 
@@ -350,8 +480,8 @@ static void fs_vfs_dup_tc(void)
 	len = strlen(str1);
 	ret = read(fd1, buf, len);
 
-	TC_ASSERT_GT_CLEANUP("read", ret, 0, ERROR_MSG_BAD_SIZE, close(fd1));
-	TC_ASSERT_EQ_CLEANUP("read", strcmp(buf, VFS_TEST_CONTENTS_1), 0, ERROR_MSG_DIFFRENT_CONTENTS, close(fd1));
+	TC_ASSERT_GT_CLEANUP("read", ret, 0, close(fd1));
+	TC_ASSERT_EQ_CLEANUP("read", strcmp(buf, VFS_TEST_CONTENTS_1), 0, close(fd1));
 
 	memset(buf, 0, sizeof(buf));
 	len = strlen(str2);
@@ -360,11 +490,23 @@ static void fs_vfs_dup_tc(void)
 
 	TC_ASSERT_GT("read", ret, 0);
 	TC_ASSERT_EQ("read", strcmp(buf, VFS_TEST_CONTENTS_2), 0);
+
+	/* Nagative case with invalid argument, invalid fd. It will return ERROR */
+#if CONFIG_NFILE_DESCRIPTORS > 0
+	fd1 = dup(CONFIG_NFILE_DESCRIPTORS);
+	TC_ASSERT_LT_CLEANUP("dup", fd1, 0, close(fd1));
+#endif
+
+#if defined(CONFIG_NET) && CONFIG_NSOCKET_DESCRIPTORS > 0
+	fd1 = dup(CONFIG_NFILE_DESCRIPTORS + CONFIG_NSOCKET_DESCRIPTORS);
+	TC_ASSERT_LT_CLEANUP("dup", fd1, 0, close(fd1));
+#endif
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_dup2_tc
+* @testcase         tc_fs_vfs_dup2
 * @brief            Clone a file descriptor  to a specific descriptor number
 * @scenario         Open and write data. and then Clone fd1 to fd2, write data with fd1.
 *                   After write, check it writes properly or not by read data with fd2.
@@ -372,7 +514,7 @@ static void fs_vfs_dup_tc(void)
 * @precondition	    NA
 * @postcondition    NA
 */
-static void fs_vfs_dup2_tc(void)
+static void tc_fs_vfs_dup2(void)
 {
 	char *filename1 = VFS_DUP_FILE_PATH;
 	char *filename2 = VFS_DUP2_FILE_PATH;
@@ -392,34 +534,42 @@ static void fs_vfs_dup2_tc(void)
 
 	/* now fd1 points fd2 */
 	ret = dup2(fd2, fd1);
-	TC_ASSERT_GEQ_CLEANUP("dup2", ret, 0, ERROR_MSG_BAD_FD, close(fd2));
+	close(fd2);
+	TC_ASSERT_NEQ("dup2", ret, ERROR);
+	TC_ASSERT_GEQ("dup2", fd1, 0);
 
 	len = strlen(VFS_TEST_CONTENTS_3);
 	ret = write(fd1, str, len);
-	TC_ASSERT_EQ_CLEANUP("write", ret, len, ERROR_MSG_BAD_SIZE, close(fd2));
 	close(fd1);
-	close(fd2);
+	TC_ASSERT_EQ("write", ret, len);
 
 	fd2 = open(filename2, O_RDONLY);
 	TC_ASSERT_GEQ("open", fd2, 0);
 
 	ret = read(fd2, buf, len);
 	close(fd2);
-
 	TC_ASSERT_GT("read", ret, 0);
 	TC_ASSERT_EQ("read", strcmp(buf, VFS_TEST_CONTENTS_3), 0);
+
+	/* Nagative case with invalid argument, invalid fd. It will return ERROR */
+	fd1 = -1;
+	ret = dup2(CONFIG_NFILE_DESCRIPTORS + CONFIG_NSOCKET_DESCRIPTORS, fd1);
+	close(fd1);
+	TC_ASSERT_LT("dup2", fd1, 0);
+	TC_ASSERT_EQ("dup2", ret, ERROR);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_fsync_tc
+* @testcase         tc_fs_vfs_fsync
 * @brief            Synchronize the file state on disk to match internal, in-memory state.
 * @scenario         Open and write data. and then check fsync works properly.
 * @apicovered       open, write, fsync, read
 * @precondition     NA
 * @postcondition    NA
 */
-static void fs_vfs_fsync_tc(void)
+static void tc_fs_vfs_fsync(void)
 {
 	int ret, fd, len;
 	char *filename = VFS_FILE_PATH;
@@ -430,23 +580,36 @@ static void fs_vfs_fsync_tc(void)
 
 	len = strlen(str);
 	ret = write(fd, str, len);
-	TC_ASSERT_EQ_CLEANUP("write", ret, len, ERROR_MSG_BAD_SIZE, close(fd));
+	TC_ASSERT_EQ_CLEANUP("write", ret, len, close(fd));
 
 	ret = fsync(fd);
-	TC_ASSERT_GEQ_CLEANUP("fsync", ret, 0, ERROR_MSG_OP_FAILED, close(fd));
 	close(fd);
+	TC_ASSERT_GEQ("fsync", ret, 0);
+
+	/* Nagative case with invalid argument, no write access. It will return ERROR */
+	fd = open(filename, O_RDOK);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	ret = fsync(fd);
+	close(fd);
+	TC_ASSERT_EQ("fsync", ret, ERROR);
+
+	/* Nagative case with invalid argument, fd. It will return ERROR */
+	ret = fsync(CONFIG_NFILE_DESCRIPTORS);
+	TC_ASSERT_EQ("fsync", ret, ERROR);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_lseek_tc
+* @testcase         tc_fs_vfs_lseek
 * @brief            Move current file position to specific position
 * @scenario         Open file and move position, and then read data to check lseek works properly or not.
 * @apicovered       open, lseek, read
 * @precondition     Data(VFS_TEST_CONTENTS_2) should be written in file(VFS_FILE_PATH)
 * @postcondition    NA
 */
-static void fs_vfs_lseek_tc(void)
+static void tc_fs_vfs_lseek(void)
 {
 	int ret, fd;
 	char *filename = VFS_FILE_PATH;
@@ -456,7 +619,7 @@ static void fs_vfs_lseek_tc(void)
 	TC_ASSERT_GEQ("open", fd, 0);
 
 	ret = lseek(fd, 5, SEEK_SET);
-	TC_ASSERT_EQ_CLEANUP("lseek", ret, 5, ERROR_MSG_OP_FAILED, close(fd));
+	TC_ASSERT_EQ_CLEANUP("lseek", ret, 5, close(fd));
 
 	memset(buf, 0, sizeof(buf));
 	ret = read(fd, buf, sizeof(buf));
@@ -464,18 +627,52 @@ static void fs_vfs_lseek_tc(void)
 
 	TC_ASSERT_GT("read", ret, 0);
 	TC_ASSERT_EQ("read", strcmp(buf, "IS VFS TEST 2"), 0);
+
+	/* Nagative case with invalid argument, fd. It will return ERROR */
+	ret = lseek(CONFIG_NFILE_DESCRIPTORS, 5, SEEK_SET);
+	TC_ASSERT_EQ("lseek", ret, ERROR);
+
+	/* empty file seek*/
+	fd = open(VFS_FILE1_PATH, O_CREAT);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	ret = lseek(fd, 10, SEEK_SET);
+	TC_ASSERT_NEQ_CLEANUP("lseek", ret, 10, close(fd));
+#if defined(CONFIG_PIPES) && (CONFIG_DEV_PIPE_SIZE > 11)
+	ret = mkfifo(FIFO_FILE_PATH, 0666);
+	if (ret < 0) {
+		TC_ASSERT_EQ("mkfifo", ret, -EEXIST);
+	}
+	fd = open(FIFO_FILE_PATH, O_WRONLY);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	ret = lseek(fd, 10, SEEK_SET);
+	TC_ASSERT_EQ_CLEANUP("lseek", ret, 10, close(fd));
+
+	ret = lseek(fd, -10, SEEK_SET);
+	TC_ASSERT_NEQ_CLEANUP("lseek", ret, 10, close(fd));
+
+	ret = lseek(fd, 10, SEEK_CUR);
+	TC_ASSERT_GEQ_CLEANUP("lseek", ret, 0, close(fd));
+
+	ret = lseek(fd, 10, SEEK_END);
+	TC_ASSERT_NEQ_CLEANUP("lseek", ret, 10, close(fd));
+
+	close(fd);
+
+#endif
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_pwrite_tc
+* @testcase         tc_fs_vfs_pwrite
 * @brief            Write data at specific position of file
 * @scenario         Open and write data at specific position. And then check file written on disk.
 * @apicovered       open, pwrite, read
 * @precondition     Data(VFS_TEST_CONTENTS_2) should be written in file(VFS_FILE_PATH)
 * @postcondition    NA
 */
-static void fs_vfs_pwrite_tc(void)
+static void tc_fs_vfs_pwrite(void)
 {
 	int ret, fd;
 	char *filename = VFS_FILE_PATH;
@@ -487,18 +684,23 @@ static void fs_vfs_pwrite_tc(void)
 	ret = pwrite(fd, str, strlen(str), 10);
 	close(fd);
 	TC_ASSERT_NEQ("pwrite", ret, ERROR);
+
+	/* Nagative case with invalid argument, fd. It will return ERROR */
+	ret = pwrite(CONFIG_NFILE_DESCRIPTORS, str, strlen(str), 10);
+	TC_ASSERT_EQ("pwrite", ret, ERROR);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_pread_tc
+* @testcase         tc_fs_vfs_pread
 * @brief            Read data at specific position of file
 * @scenario         Open and read data from specific position.
 * @apicovered       open, pread
-* @precondition     fs_vfs_pwrite_tc should be passed
+* @precondition     tc_fs_vfs_pwrite should be passed
 * @postcondition    NA
 */
-static void fs_vfs_pread_tc(void)
+static void tc_fs_vfs_pread(void)
 {
 	int ret, fd;
 	char *filename = VFS_FILE_PATH;
@@ -513,18 +715,23 @@ static void fs_vfs_pread_tc(void)
 	close(fd);
 	TC_ASSERT_GT("pread", ret, 0);
 	TC_ASSERT_EQ("pread", strcmp(buf, str), 0);
+
+	/* Nagative case with invalid argument, fd. It will return ERROR */
+	ret = pread(CONFIG_NFILE_DESCRIPTORS, buf, 20, 10);
+	TC_ASSERT_EQ("pread", ret, ERROR);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_mkdir_tc
+* @testcase         tc_fs_vfs_mkdir
 * @brief            Create folders
 * @scenario         Create folder(VFS_FOLDER_PATH) and create 5 sub-folders
 * @apicovered       mkdir
 * @precondition     NA
 * @postcondition    NA
 */
-static void fs_vfs_mkdir_tc(void)
+static void tc_fs_vfs_mkdir(void)
 {
 	char filename[14];
 	int i;
@@ -542,136 +749,225 @@ static void fs_vfs_mkdir_tc(void)
 		ret = mkdir(filename, 0777);
 		TC_ASSERT_EQ("mkdir", ret, OK);
 	}
+	/*creating an empty folder */
+	ret = mkdir(DEV_EMPTY_FOLDER_PATH, 0777);
+	TC_ASSERT_EQ("mkdir", ret, OK);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_opendir_tc
+* @testcase         tc_fs_vfs_opendir
 * @brief            Open specific directory to use APIs defined in dirent.h
 * @scenario         Open specific directory
 * @apicovered       opendir
-* @precondition     fs_vfs_mkdir_tc should be passed
+* @precondition     tc_fs_vfs_mkdir should be passed
 * @postcondition    NA
 */
-static void fs_vfs_opendir_tc(void)
+static void tc_fs_vfs_opendir(void)
 {
-	DIR *dirp;
+	DIR *dir;
 
-	dirp = opendir(VFS_FOLDER_PATH);
-	TC_ASSERT("opendir", dirp);
+	dir = opendir(VFS_FOLDER_PATH);
+	TC_ASSERT_NEQ("opendir", dir, NULL);
+	closedir(dir);
+	/*Path doesnot exist */
+	dir = opendir(INVALID_PATH);
+	TC_ASSERT_EQ("opendir", dir, NULL);
+
+	dir = opendir(DEV_PATH);
+	TC_ASSERT_NEQ("opendir", dir, NULL);
+	closedir(dir);
+	/* Pseudo file system node covers error condition path is not a directory */
+	dir = opendir(DEV_INVALID_DIR);
+	TC_ASSERT_EQ("opendir", dir, NULL);
+
+	/* Opening an empty folder */
+	dir = opendir(DEV_EMPTY_FOLDER_PATH);
+	TC_ASSERT_NEQ("opendir", dir, NULL);
+	closedir(dir);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_readdir_tc
+* @testcase         tc_fs_vfs_readdir
 * @brief            Read contents in specific directory sequentially
 * @scenario         Read contents in specific folder(VFS_FOLDER_PATH)
 * @apicovered       opendir, readdir, closedir
-* @precondition     fs_vfs_mkdir_tc should be passed
+* @precondition     tc_fs_vfs_mkdir should be passed
 * @postcondition    NA
 */
-static void fs_vfs_readdir_tc(void)
+static void tc_fs_vfs_readdir(void)
 {
-	int ret, count;
-	DIR *dirp;
+	int ret;
+	int count;
+	DIR *dir;
 	struct dirent *dirent;
 
-	dirp = opendir(VFS_FOLDER_PATH);
-	TC_ASSERT("opendir", dirp);
+	dir = opendir(VFS_FOLDER_PATH);
+	TC_ASSERT_NEQ("opendir", dir, NULL);
 
 	count = 0;
 	while (1) {
-		dirent = readdir(dirp);
+		dirent = readdir(dir);
 		if (dirent == NULL) {
 			break;
 		}
 		count++;
 	}
-	ret = closedir(dirp);
+	ret = closedir(dir);
 	TC_ASSERT_EQ("closedir", ret, OK);
 	TC_ASSERT_EQ("readdir", count, VFS_LOOP_COUNT);
+
+	/*reading invalid directory */
+
+	dir = opendir(VFS_INVALID_PATH);
+	TC_ASSERT_EQ("opendir", dir, NULL);
+
+	do {
+		dirent = readdir(dir);
+	} while (dirent != NULL);
+
+	ret = closedir(dir);
+	TC_ASSERT_NEQ("closedir", ret, OK);
+
+	/*reading empty folder */
+
+	dir = opendir(DEV_EMPTY_FOLDER_PATH);
+	TC_ASSERT_NEQ("opendir", dir, NULL);
+
+	do {
+		dirent = readdir(dir);
+	} while (dirent != NULL);
+
+	ret = closedir(dir);
+	TC_ASSERT_EQ("closedir", ret, OK);
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_rewinddir_tc
+* @testcase         tc_fs_vfs_rewinddir
 * @brief            Reset current position of directory
 * @scenario         Read contents in specific folder(VFS_FOLDER_PATH), and it reachs end of contents, reset & read again
 * @apicovered       opendir, rewinddir, closedir
-* @precondition     fs_vfs_mkdir_tc should be passed
+* @precondition     tc_fs_vfs_mkdir should be passed
 * @postcondition    NA
 */
-static void fs_vfs_rewinddir_tc(void)
+static void tc_fs_vfs_rewinddir(void)
 {
-	int ret, count;
-	DIR *dirp;
+	int ret;
+	int count;
+	DIR *dir;
 	struct dirent *dirent;
 
-	dirp = opendir(VFS_FOLDER_PATH);
-	TC_ASSERT("opendir", dirp);
+	dir = opendir(VFS_FOLDER_PATH);
+	TC_ASSERT_NEQ("opendir", dir, NULL);
 
 	count = 0;
 	while (1) {
-		dirent = readdir(dirp);
+		dirent = readdir(dir);
 		if (dirent == NULL) {
 			if (count > VFS_LOOP_COUNT) {
 				break;
 			}
-			rewinddir(dirp);
+			rewinddir(dir);
 			continue;
 		}
 		count++;
 	}
-	ret = closedir(dirp);
+	ret = closedir(dir);
 	TC_ASSERT_EQ("closedir", ret, OK);
 	TC_ASSERT_EQ("rewinddir", count, VFS_LOOP_COUNT * 2);
+
+	/*For Pseudo dir operations */
+	dir = opendir(ROOT_PATH);
+	TC_ASSERT_NEQ("opendir", dir, NULL);
+
+	count = 0;
+	while ((dirent = readdir(dir)) != NULL) {
+		count++;
+	}
+	rewinddir(dir);
+
+	while ((dirent = readdir(dir)) != NULL) {
+		count--;
+	}
+
+	ret = closedir(dir);
+	TC_ASSERT_EQ("closedir", ret, OK);
+	TC_ASSERT_EQ("rewinddir", count, 0);
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_seekdir_tc
+* @testcase         tc_fs_vfs_seekdir
 * @brief            Move current position of directory to specific position
 * @scenario         Change position of directory and read contents
 * @apicovered       opendir, seekdir, readdir, closedir
-* @precondition     fs_vfs_mkdir_tc should be passed
+* @precondition     tc_fs_vfs_mkdir should be passed
 * @postcondition    NA
 */
-static void fs_vfs_seekdir_tc(void)
+static void tc_fs_vfs_seekdir(void)
 {
 	int ret;
-	DIR *dirp;
+	DIR *dir;
 	struct dirent *dirent;
 	off_t offset;
 	char filename[1];
 
-	dirp = opendir(VFS_FOLDER_PATH);
-	TC_ASSERT("opendir", dirp);
+	dir = opendir(VFS_FOLDER_PATH);
+	TC_ASSERT_NEQ("opendir", dir, NULL);
 
-	offset = 2;
-	seekdir(dirp, offset);
-	TC_ASSERT_CLEANUP("seekdir", dirp, ERROR_MSG_OP_FAILED, closedir(dirp));
-	dirent = readdir(dirp);
-	TC_ASSERT_CLEANUP("readdir", dirent, ERROR_MSG_OP_FAILED, closedir(dirp));
-	TC_ASSERT_EQ_CLEANUP("readdir", dirent->d_type, DTYPE_DIRECTORY, ERROR_MSG_OP_FAILED, closedir(dirp));
+	offset = SEEK_END;
+	seekdir(dir, offset);
+	TC_ASSERT_NEQ_CLEANUP("seekdir", dir, NULL, closedir(dir));
+	dirent = readdir(dir);
+	TC_ASSERT_NEQ_CLEANUP("readdir", dirent, NULL, closedir(dir));
+	TC_ASSERT_EQ_CLEANUP("readdir", dirent->d_type, DTYPE_DIRECTORY, closedir(dir));
 
-	ret = closedir(dirp);
+	ret = closedir(dir);
 	TC_ASSERT_EQ("closedir", ret, OK);
 
 	itoa((int)offset, filename, 10);
 	TC_ASSERT_EQ("readdir", strncmp(dirent->d_name, filename, 1), 0);
 
+	/* For Negative offset in seekmountdir operations */
+	dir = opendir(VFS_FOLDER_PATH);
+	TC_ASSERT_NEQ("opendir", dir, NULL);
+
+	offset = -2;
+	seekdir(dir, offset);
+	TC_ASSERT_NEQ_CLEANUP("seekdir", dir, NULL, closedir(dir));
+
+	ret = closedir(dir);
+	TC_ASSERT_EQ("closedir", ret, OK);
+	/* for pseudo dir operations */
+
+	dir = opendir(ROOT_PATH);
+	TC_ASSERT_NEQ("opendir", dir, NULL);
+
+	offset = SEEK_END;
+	seekdir(dir, offset);
+	TC_ASSERT_NEQ_CLEANUP("seekdir", dir, NULL, closedir(dir));
+	dirent = readdir(dir);
+	TC_ASSERT_NEQ_CLEANUP("readdir", dirent, NULL, closedir(dir));
+
+	ret = closedir(dir);
+	TC_ASSERT_EQ("closedir", ret, OK);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_libc_dirent_readdir_r_tc
+* @testcase         fs_libc_dirent_readdir_r
 * @brief            Get position of next contents in specific directory
 * @scenario         Get next contents's position until it reachs end of contents, and check count of contents
 * @apicovered       opendir, readdir_r, closedir
-* @precondition     fs_vfs_mkdir_tc should be passed
+* @precondition     tc_fs_vfs_mkdir should be passed
 * @postcondition    NA
 */
-static void fs_libc_dirent_readdir_r_tc(void)
+static void fs_libc_dirent_readdir_r(void)
 {
 	int ret, count;
 	DIR *dirp;
@@ -679,7 +975,7 @@ static void fs_libc_dirent_readdir_r_tc(void)
 	struct dirent *result;
 
 	dirp = opendir(VFS_FOLDER_PATH);
-	TC_ASSERT("opendir", dirp);
+	TC_ASSERT_NEQ("opendir", dirp, NULL);
 
 	count = 0;
 	while (1) {
@@ -696,63 +992,74 @@ static void fs_libc_dirent_readdir_r_tc(void)
 }
 
 /**
-* @testcase         fs_libc_dirent_telldir_tc
+* @testcase         fs_libc_dirent_telldir
 * @brief            Get position of current contents in specific directory
 * @scenario         Get specific position by seekdir and check telldir returns position properly
 * @apicovered       opendir, seekdir, telldir, closedir
-* @precondition     fs_vfs_mkdir_tc should be passed
+* @precondition     tc_fs_vfs_mkdir should be passed
 * @postcondition    NA
 */
-static void fs_libc_dirent_telldir_tc(void)
+static void fs_libc_dirent_telldir(void)
 {
 	DIR *dirp;
 	off_t offset, res;
 	int ret;
 
 	dirp = opendir(VFS_FOLDER_PATH);
-	TC_ASSERT("opendir", dirp);
+	TC_ASSERT_NEQ("opendir", dirp, NULL);
 
 	offset = 2;
 	seekdir(dirp, offset);
-	TC_ASSERT_CLEANUP("seekdir", dirp, ERROR_MSG_OP_FAILED, closedir(dirp));
+	TC_ASSERT_NEQ_CLEANUP("seekdir", dirp, NULL, closedir(dirp));
 	res = telldir(dirp);
-	TC_ASSERT_EQ_CLEANUP("telldir", res, offset, ERROR_MSG_OP_FAILED, closedir(dirp));
+	TC_ASSERT_EQ_CLEANUP("telldir", res, offset, closedir(dirp));
 	ret = closedir(dirp);
 	TC_ASSERT_EQ("closedir", ret, OK);
+
+	/* Nagative case with invalid argument, NULL stream. It will return (off_t)-1 */
+	res = telldir(NULL);
+	TC_ASSERT_EQ("telldir", res, (off_t)-1);
 
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_closedir_tc
+* @testcase         tc_fs_vfs_closedir
 * @brief            Close opened directory
 * @scenario         Open and close directory
 * @apicovered       opendir, closedir
 * @precondition     NA
 * @postcondition    NA
 */
-static void fs_vfs_closedir_tc(void)
+static void tc_fs_vfs_closedir(void)
 {
 	int ret;
 	DIR *dirp;
 
 	dirp = opendir(VFS_FOLDER_PATH);
-	TC_ASSERT("opendir", dirp);
+	TC_ASSERT_NEQ("opendir", dirp, NULL);
 
 	ret = closedir(dirp);
 	TC_ASSERT_EQ("closedir", ret, OK);
+
+	dirp = opendir("nodir");
+	TC_ASSERT_EQ_CLEANUP("opendir", dirp, NULL, closedir(dirp));
+
+	ret = closedir(NULL);
+	TC_ASSERT_EQ("closedir", ret, ERROR);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_rmdir_tc
+* @testcase         tc_fs_vfs_rmdir
 * @brief            Remove each of directory
 * @scenario         Remove all exist directory
 * @apicovered       rmdir
-* @precondition     fs_vfs_mkdir_tc should be passed
+* @precondition     tc_fs_vfs_mkdir should be passed
 * @postcondition    NA
 */
-static void fs_vfs_rmdir_tc(void)
+static void tc_fs_vfs_rmdir(void)
 {
 	char filename[14];
 	size_t len;
@@ -771,36 +1078,53 @@ static void fs_vfs_rmdir_tc(void)
 	/** now there is no entry, remove parent folder **/
 	ret = rmdir(VFS_FOLDER_PATH);
 	TC_ASSERT_EQ("rmdir", ret, OK);
+
+	/* Nagative case with invalid argument, NULL pathname. It will return ERROR */
+	ret = rmdir(NULL);
+	TC_ASSERT_EQ("rmdir", ret, ERROR);
+
+	/*Removes the empty directory created*/
+	ret = rmdir(DEV_EMPTY_FOLDER_PATH);
+	TC_ASSERT_EQ("rmdir", ret, OK);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_unlink_tc
+* @testcase         tc_fs_vfs_unlink
 * @brief            Unlink specific file
 * @scenario         Unlink specific file(VFS_DUP_FILE_PATH)
 * @apicovered       unlink
-* @precondition     fs_vfs_dup_tc should be passed
+* @precondition     tc_fs_vfs_dup should be passed
 * @postcondition    NA
 */
-static void fs_vfs_unlink_tc(void)
+static void tc_fs_vfs_unlink(void)
 {
 	char *filename = VFS_DUP_FILE_PATH;
 	int ret;
 
 	ret = unlink(filename);
 	TC_ASSERT_EQ("unlink", ret, OK);
+
+	/* Nagative case with invalid argument, NULL pathname. It will return ERROR */
+	ret = unlink(NULL);
+	TC_ASSERT_EQ("unlink", ret, ERROR);
+#if defined(CONFIG_PIPES) && (CONFIG_DEV_PIPE_SIZE > 11)
+	ret = unlink(FIFO_FILE_PATH);
+	TC_ASSERT_EQ("unlink", ret, OK);
+#endif
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_stat_tc
+* @testcase         tc_fs_vfs_stat
 * @brief            Get status of specific file
 * @scenario         Get status of specific file(VFS_FILE_PATH) by stat
 * @apicovered       stat
 * @precondition     File VFS_FILE_PATH should be existed
 * @postcondition    NA
 */
-static void fs_vfs_stat_tc(void)
+static void tc_fs_vfs_stat(void)
 {
 	char *filename = VFS_FILE_PATH;
 	struct stat st;
@@ -808,18 +1132,38 @@ static void fs_vfs_stat_tc(void)
 
 	ret = stat(filename, &st);
 	TC_ASSERT_EQ("stat", ret, OK);
+
+	/* stat root directory */
+	ret = stat("/", &st);
+	TC_ASSERT_EQ("stat", ret, OK);
+
+	/* Nagative case with invalid argument, NULL pathname. It will return ERROR */
+	ret = stat(NULL, &st);
+	TC_ASSERT_EQ("stat", ret, ERROR);
+
+	/* Nagative case with invalid argument, not existing pathname. It will return ERROR */
+	ret = stat(VFS_INVALID_FILE_PATH, &st);
+	TC_ASSERT_EQ("stat", ret, ERROR);
+
+	/*Negative testcase path is empty string */
+	ret = stat("", &st);
+	TC_ASSERT_EQ("stat", ret, ERROR);
+
+	ret = stat(PROCFS_PATH, &st);
+	TC_ASSERT_EQ("stat", ret, OK);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_statfs_tc
+* @testcase         tc_fs_vfs_statfs
 * @brief            Get status of mounted file system
 * @scenario         Get status of mounted file system by statfs and check type of file system
 * @apicovered       statfs
 * @precondition     File system should be mounted
 * @postcondition    NA
 */
-static void fs_vfs_statfs_tc(void)
+static void tc_fs_vfs_statfs(void)
 {
 	struct statfs fs;
 	int ret;
@@ -829,19 +1173,87 @@ static void fs_vfs_statfs_tc(void)
 #ifdef CONFIG_FS_SMARTFS
 	TC_ASSERT_EQ("statfs", fs.f_type, SMARTFS_MAGIC);
 #endif
+
+	/* Nagative case with invalid argument, NULL pathname. It will return ERROR */
+	ret = statfs(NULL, &fs);
+	TC_ASSERT_EQ("statfs", ret, ERROR);
+
+	/*root pseudo file system */
+	ret = statfs("/dev", &fs);
+	TC_ASSERT_EQ("statfs", ret, OK);
+
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_fs_vfs_fstat
+* @brief            Get status of specific file
+* @scenario         Get status of specific file(VFS_FILE_PATH) by stat
+* @apicovered       fstat
+* @precondition     File VFS_FILE_PATH should be existed
+* @postcondition    NA
+*/
+static void tc_fs_vfs_fstat(void)
+{
+	char *filename = VFS_FILE_PATH;
+	struct stat st;
+	int ret;
+	int fd;
+	fd = open(filename, O_RDWR);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	ret = fstat(fd, &st);
+	TC_ASSERT_EQ("fstat", ret, OK);
+
+	close(fd);
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_fs_vfs_fstatfs
+* @brief            Get status of mounted file system
+* @scenario         Get status of mounted file system by statfs and check type of file system
+* @apicovered       fstatfs
+* @precondition     File system should be mounted
+* @postcondition    NA
+*/
+static void tc_fs_vfs_fstatfs(void)
+{
+	struct statfs fs;
+	int ret;
+	int fd;
+
+	fd = open(VFS_FILE_PATH, 0666);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	ret = fstatfs(fd, &fs);
+	TC_ASSERT_EQ_CLEANUP("fstatfs", ret, OK, close(fd));
+#ifdef CONFIG_FS_SMARTFS
+	TC_ASSERT_EQ_CLEANUP("fstatfs", fs.f_type, SMARTFS_MAGIC, close(fd));
+#endif
+	close(fd);
+
+	fd = open(DEV_ZERO_PATH, O_RDWR);
+	TC_ASSERT_GEQ("open", fd, 0);
+	/*root pseudo file system */
+	ret = fstatfs(fd, &fs);
+	TC_ASSERT_EQ_CLEANUP("fstatfs", ret, OK, close(fd));
+	close(fd);
+
 	TC_SUCCESS_RESULT();
 }
 
 #if defined(CONFIG_PIPES) && (CONFIG_DEV_PIPE_SIZE > 11)
 /**
-* @testcase         fs_vfs_mkfifo_tc
+* @testcase         tc_fs_vfs_mkfifo
 * @brief            Get data thorugh the pipe which create by mkfifo
 * @scenario         Create fifo and check data between main task and its sub-thread
 * @apicovered       mkfifo, open, pthread_create, write, read
 * @precondition     CONFIG_PIPES should be enabled & CONFIG_DEV_PIPE_SIZE must greater than 11
 * @postcondition    NA
 */
-static void fs_vfs_mkfifo_tc(void)
+static void tc_fs_vfs_mkfifo(void)
 {
 	int fd, ret;
 	pthread_t tid;
@@ -851,13 +1263,20 @@ static void fs_vfs_mkfifo_tc(void)
 	g_thread_result = true;
 
 	ret = mkfifo(FIFO_FILE_PATH, 0666);
-	TC_ASSERT("mkfifo", (ret >= 0) || (ret == -EEXIST));
+	if (ret < 0) {
+		TC_ASSERT_EQ("mkfifo", ret, -EEXIST);
+	}
+
+	ret = pthread_create(&tid, NULL, (pthread_startroutine_t) mkfifo_test_listener, NULL);
+	TC_ASSERT_EQ("pthread_create", ret, 0);
+
+	sleep(2);
 
 	fd = open(FIFO_FILE_PATH, O_WRONLY);
 	TC_ASSERT_GEQ("open", fd, 0);
 
-	ret = pthread_create(&tid, NULL, (pthread_startroutine_t)mkfifo_test_listener, NULL);
-	TC_ASSERT_EQ_CLEANUP("pthread_create", ret, 0, ERROR_MSG_OP_FAILED, close(fd));
+	ret = write(fd, buf, 0);
+	TC_ASSERT_EQ_CLEANUP("write", ret, 0, goto errout);
 
 	size = strlen(FIFO_DATA) + 2;
 	count = 1;
@@ -867,13 +1286,43 @@ static void fs_vfs_mkfifo_tc(void)
 		}
 		snprintf(buf, size, "%s%d\0", FIFO_DATA, count);
 		ret = write(fd, buf, size);
-		TC_ASSERT_GT_CLEANUP("write", ret, 0, ERROR_MSG_BAD_SIZE, goto errout);
+		TC_ASSERT_GT_CLEANUP("write", ret, 0, goto errout);
 		count++;
 		sleep(5);
 	}
 	close(fd);
+	sleep(1);
 	pthread_kill(tid, SIGUSR1);
-	TC_ASSERT("mkfifo", g_thread_result);
+	TC_ASSERT_EQ("mkfifo", g_thread_result, true);
+
+	fd = open(FIFO_FILE_PATH, O_WRONLY | O_NONBLOCK);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	ret = ioctl(fd, PIPEIOC_POLICY, 0);
+	TC_ASSERT_GEQ_CLEANUP("ioctl", ret, 0, goto errout);
+
+	ret = ioctl(fd, PIPEIOC_POLICY, 1);
+	TC_ASSERT_GEQ_CLEANUP("ioctl", ret, 0, goto errout);
+
+	ret = ioctl(fd, -1, 0);
+	TC_ASSERT_LT_CLEANUP("ioctl", ret, 0, goto errout);
+
+	count = 0;
+	snprintf(buf, size, "%s%d\0", FIFO_DATA, count);
+	while (count <= CONFIG_DEV_PIPE_SIZE) {
+		ret = write(fd, buf, size);
+		TC_ASSERT_EQ_CLEANUP("write", (ret >= 0 || errno == EAGAIN), true, goto errout);
+		if (ret < 0) {
+			break;
+		}
+		count += size;
+	}
+
+	close(fd);
+
+	ret = unlink(FIFO_FILE_PATH);
+	TC_ASSERT_GEQ("unlink", ret, 0);
+
 	TC_SUCCESS_RESULT();
 errout:
 	pthread_kill(tid, SIGUSR1);
@@ -882,53 +1331,106 @@ errout:
 #endif
 
 /**
-* @testcase         fs_vfs_sendfile_tc
+* @testcase         tc_fs_vfs_sendfile
 * @brief            Send file data to specific descriptor from another descriptor
 * @scenario         Create new file and send data from exist file
 * @apicovered       open, stat, sendfile
 * @precondition     File VFS_FILE_PATH should be existed
 * @postcondition    NA
 */
-static void fs_vfs_sendfile_tc(void)
+static void tc_fs_vfs_sendfile(void)
 {
 	char *src_file = VFS_FILE_PATH;
-	char dest_file[12];
+	char dest_file[16];
 	struct stat st;
 	int fd1, fd2, ret;
 	off_t size;
+	off_t offset;
 
-	snprintf(dest_file, 12, "%s_dest", src_file);
+	snprintf(dest_file, sizeof(dest_file), "%s_dest", src_file);
 
 	fd1 = open(src_file, O_RDONLY);
 	TC_ASSERT_GEQ("open", fd1, 0);
 
 	ret = stat(src_file, &st);
-	TC_ASSERT_EQ_CLEANUP("stat", ret, OK, ERROR_MSG_OP_FAILED, close(fd1));
+	TC_ASSERT_EQ_CLEANUP("stat", ret, OK, close(fd1));
 
 	size = st.st_size;
+	/* case-1: offset = 0 */
 	fd2 = open(dest_file, O_WRONLY | O_CREAT);
-	TC_ASSERT_GEQ_CLEANUP("open", fd2, 0, ERROR_MSG_BAD_FD, close(fd1));
+	TC_ASSERT_GEQ_CLEANUP("open", fd2, 0, close(fd1));
 
 	ret = sendfile(fd2, fd1, 0, size);
-	close(fd1);
 	close(fd2);
-	TC_ASSERT_EQ("sendfile", ret, size);
+	TC_ASSERT_EQ_CLEANUP("sendfile", ret, size, close(fd1));
 
 	ret = stat(dest_file, &st);
+	TC_ASSERT_EQ_CLEANUP("stat", ret, OK, close(fd1));
+	TC_ASSERT_EQ_CLEANUP("stat", st.st_size, size, close(fd1));
+
+	/* case-2: offset = 1 */
+	fd2 = open(dest_file, O_WRONLY | O_CREAT);
+	TC_ASSERT_GEQ_CLEANUP("open", fd2, 0, close(fd1));
+
+	offset = 1;
+	ret = sendfile(fd2, fd1, &offset, size - 1);
+	close(fd2);
+	TC_ASSERT_EQ_CLEANUP("sendfile", ret, size - 1, close(fd1));
+
+	ret = stat(dest_file, &st);
+	TC_ASSERT_EQ_CLEANUP("stat", ret, OK, close(fd1));
+	TC_ASSERT_EQ_CLEANUP("stat", st.st_size, size - 1, close(fd1));
+
+	/* case-3: offset = 1, invalid input fd, returns ERROR */
+	fd2 = open(dest_file, O_WRONLY | O_CREAT);
+	TC_ASSERT_GEQ_CLEANUP("open", fd2, 0, close(fd1));
+
+	offset = 1;
+	ret = sendfile(fd2, INV_FD, &offset, size - 1);
+	close(fd2);
+	TC_ASSERT_EQ_CLEANUP("sendfile", ret, ERROR, close(fd1));
+
+	/* case-4: invalid input fd, returns ERROR */
+	fd2 = open(dest_file, O_WRONLY | O_CREAT);
+	TC_ASSERT_GEQ_CLEANUP("open", fd2, 0, close(fd1));
+
+	ret = sendfile(fd2, INV_FD, NULL, size);
+	close(fd2);
+	TC_ASSERT_EQ_CLEANUP("sendfile", ret, ERROR, close(fd1));
+
+	/* case-5: offset = 0, invalid output fd, returns ERROR */
+	offset = 0;
+	ret = sendfile(INV_FD, fd1, &offset, size);
+	TC_ASSERT_EQ_CLEANUP("sendfile", ret, ERROR, close(fd1));
+
+	/* case-6: current offset of input file is EOF, returns ERROR */
+	fd2 = open(dest_file, O_WRONLY | O_CREAT);
+	TC_ASSERT_GEQ_CLEANUP("open", fd2, 0, close(fd1));
+
+	ret = lseek(fd1, 0, SEEK_END);
+	TC_ASSERT_EQ_CLEANUP("lseek", ret, size, close(fd1); close(fd2));
+
+	ret = sendfile(fd2, fd1, NULL, size);
+	close(fd2);
+	TC_ASSERT_EQ_CLEANUP("sendfile", ret, 0, close(fd1));
+
+	ret = stat(dest_file, &st);
+	close(fd1);
 	TC_ASSERT_EQ("stat", ret, OK);
-	TC_ASSERT_EQ("stat", size, st.st_size);
+	TC_ASSERT_EQ("stat", st.st_size, 0);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_fcntl_tc
+* @testcase         tc_fs_vfs_fcntl
 * @brief            Access & control opened file with fcntl
 * @scenario         Open file with specific flag and get access mode with fcntl
 * @apicovered       open, fcntl
 * @precondition     File VFS_FILE_PATH should be existed
 * @postcondition    NA
 */
-static void fs_vfs_fcntl_tc(void)
+static void tc_fs_vfs_fcntl(void)
 {
 	int fd, mode;
 	char *filename = VFS_FILE_PATH;
@@ -938,58 +1440,52 @@ static void fs_vfs_fcntl_tc(void)
 	mode = fcntl(fd, F_GETFL, 0) & O_ACCMODE;
 	close(fd);
 	TC_ASSERT_EQ("fcntl", mode, O_WROK);
+
 	TC_SUCCESS_RESULT();
 }
 
 #ifndef CONFIG_DISABLE_POLL
 /**
-* @testcase         fs_vfs_poll_tc
+* @testcase         tc_fs_vfs_poll
 * @brief            Polling for I/O
-* @scenario         Check poll works properly or not(STDIN, STDOUT)
+* @scenario         Check poll works properly or not
 * @apicovered       poll
 * @precondition     CONFIG_DISABLE_POLL should be disabled
 * @postcondition    NA
 */
-static void fs_vfs_poll_tc(void)
+static void tc_fs_vfs_poll(void)
 {
-	struct pollfd fds[2];
+	struct pollfd pollfd;
 	int ret;
-	int timeout = 30;
-	printf("input text : ");
+	int fd;
+	char *filename = VFS_FILE_PATH;
 
-	fds[0].fd = STDIN_FILENO;
-	fds[0].events = POLLIN;
+	fd = open(filename, O_RDWR);
+	TC_ASSERT_GEQ("open", fd, 0);
 
-	fds[1].fd = STDOUT_FILENO;
-	fds[1].events = POLLOUT;
+	pollfd.fd = fd;
+	pollfd.events = POLLIN | POLLOUT;
 
-	fflush(stdout);
+	/* Poll regular file, it will always return positive value */
+	ret = poll(&pollfd, 1, -1);
 
-	ret = poll(fds, 2, timeout * 1000);
-	TC_ASSERT_GEQ("poll", ret, 0);
+	TC_ASSERT_GT_CLEANUP("poll", ret, 0, close(fd));
+	TC_ASSERT_CLEANUP("poll", pollfd.revents & POLLIN, close(fd));
+	TC_ASSERT_CLEANUP("poll", pollfd.revents & POLLOUT, close(fd));
 
-	if (fds[0].revents & POLLIN) {
-		ret = OK;
-		printf("stdin is readable.\n");
-	}
-
-	if (fds[1].revents & POLLOUT) {
-		ret = OK;
-		printf("stdout is writable.\n");
-	}
-	TC_ASSERT_EQ("poll", ret, OK);
+	close(fd);
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_select_tc
+* @testcase         tc_fs_vfs_select
 * @brief            To monitor multiple I/O
 * @scenario         Input text within 5 sec and check select works properly(check change of STDIN)
 * @apicovered       select
 * @precondition     CONFIG_DISABLE_POLL should be disabled
 * @postcondition    NA
 */
-static void fs_vfs_select_tc(void)
+static void tc_fs_vfs_select(void)
 {
 	struct timeval tv;
 	fd_set readfds;
@@ -1024,63 +1520,203 @@ static void fs_vfs_select_tc(void)
 		tv.tv_sec = 5;
 		tv.tv_usec = 0;
 	}
-	TC_ASSERT_NEQ_CLEANUP("select", errcnt, VFS_LOOP_COUNT, ERROR_MSG_OP_FAILED, FD_CLR(STDIN_FILENO, &readfds));
+	TC_ASSERT_NEQ_CLEANUP("select", errcnt, VFS_LOOP_COUNT, FD_CLR(STDIN_FILENO, &readfds));
 	TC_SUCCESS_RESULT();
 }
 #endif
 
 /**
-* @testcase         fs_vfs_rename_tc
+* @testcase         tc_fs_vfs_rename
 * @brief            Rename file to specific name
 * @scenario         Rename exist file to specific name
 * @apicovered       rename
 * @precondition     File VFS_FILE_PATH should be existed
 * @postcondition    NA
 */
-static void fs_vfs_rename_tc(void)
+static void tc_fs_vfs_rename(void)
 {
+	int fd;
 	int ret;
-	char *filename = VFS_FILE_PATH;
-	char dest_file[12];
+	char *old_file = VFS_FILE_PATH;
+	char new_file[12];
 
-	snprintf(dest_file, 12, "%s_re", filename);
-	unlink(dest_file);
+	snprintf(new_file, 12, "%s_re", old_file);
+	unlink(new_file);
 
-	ret = rename(filename, dest_file);
+	ret = rename(old_file, new_file);
 	TC_ASSERT_EQ("rename", ret, OK);
+
+	/* Nagative case with invalid argument, not existing old pathname. It will return ERROR */
+	ret = rename(old_file, new_file);
+	TC_ASSERT_EQ("rename", ret, ERROR);
+
+	old_file = new_file;
+
+	/* Nagative case with invalid argument, already existing new pathname. It will return ERROR */
+	fd = open(VFS_FILE_PATH, O_WROK | O_CREAT);
+	TC_ASSERT_GEQ("open", fd, 0);
+	close(fd);
+	ret = rename(old_file, VFS_FILE_PATH);
+	TC_ASSERT_EQ("rename", ret, ERROR);
+
+	/* Nagative case with invalid argument, NULL filepath. It will return ERROR */
+	ret = rename(old_file, NULL);
+	TC_ASSERT_EQ("rename", ret, ERROR);
+
+	/*Condition where rename is not possible*/
+	ret = rename(DEV_NULL_PATH, DEV_NEW_NULL_PATH);
+	TC_ASSERT_NEQ("rename", ret, ERROR);
+
+	ret = rename(DEV_NEW_NULL_PATH, DEV_NULL_PATH);
+	TC_ASSERT_NEQ("rename", ret, ERROR);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         fs_vfs_ioctl_tc
+* @testcase         tc_fs_vfs_ioctl
 * @brief            ioctl with opened file
 * @scenario         Get #byte of data from /dev/console by ioctl
 * @apicovered       open, ioctl
 * @precondition     NA
 * @postcondition    NA
 */
-static void fs_vfs_ioctl_tc(void)
+static void tc_fs_vfs_ioctl(void)
 {
-	int fd, ret;
+	int fd1;
+	int fd2;
+	int ret;
 	long size;
 
-	fd = open("/dev/console", O_RDWR);
-	TC_ASSERT_GEQ("open", fd, 0);
-	ret = ioctl(fd, FIONREAD, &size);
-	close(fd);
+	fd1 = open(DEV_CONSOLE_PATH, O_RDWR);
+	TC_ASSERT_GEQ("open", fd1, 0);
+	ret = ioctl(fd1, FIONREAD, &size);
+	close(fd1);
 	TC_ASSERT_EQ("ioctl", ret, OK);
+
+	/*Negative case where invalid fd */
+	ret = ioctl(INV_FD, FIONREAD, &size);
+	TC_ASSERT_EQ("ioctl", ret, ERROR);
+
+	/*Negative cae where invalid cmd */
+	fd2 = open(DEV_CONSOLE_PATH, O_RDWR);
+	TC_ASSERT_GEQ("open", fd2, 0);
+
+	ret = ioctl(fd2, FIONREAD, &size);
+	close(fd2);
+	TC_ASSERT_LEQ("ioctl", ret, 0);
+
+	TC_SUCCESS_RESULT();
+}
+/**
+* @testcase         tc_driver_mtd_config_ops
+* @brief            mtd_config operations
+* @scenario         Set and get config from /dev/config
+* @apicovered       mtd_config ops
+* @precondition     NA
+* @postcondition    NA
+*/
+#if defined(CONFIG_MTD_CONFIG)
+static void tc_driver_mtd_config_ops(void)
+{
+	int fd;
+	int ret;
+	struct config_data_s config;
+	char *buf = "test";
+
+	fd = open(MTD_CONFIG_PATH, O_RDOK);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	config.id = 0xff;
+	config.instance = 0;
+	config.configdata = (unsigned char *)buf;
+	config.len = 5;
+
+	ret = ioctl(fd, CFGDIOC_SETCONFIG, &config);
+	TC_ASSERT_EQ_CLEANUP("ioctl", ret, OK, close(fd));
+
+	ret = ioctl(fd, CFGDIOC_GETCONFIG, &config);
+	TC_ASSERT_EQ_CLEANUP("ioctl", ret, OK, close(fd));
+
+	/*To cover negative condition */
+
+	ret = ioctl(fd, CFGDIOC_SETCONFIG, NULL);
+	TC_ASSERT_NEQ_CLEANUP("ioctl", ret, OK, close(fd));
+
+	ret = close(fd);
+	TC_ASSERT_EQ("close", ret, OK);
+	TC_SUCCESS_RESULT();
+}
+#endif
+/**
+* @testcase         tc_driver_mtd_ftl_ops
+* @brief            ftl block operations
+* @scenario         opens the ftl device and perforsm operations
+* @apicovered       ftl block operations
+* @precondition     NA
+* @postcondition    NA
+*/
+#if defined(CONFIG_MTD_FTL) && defined(CONFIG_BCH)
+static void tc_driver_mtd_ftl_ops(void)
+{
+	int fd;
+	int ret;
+	char *buf;
+
+	buf = (char *)malloc(BUF_SIZE);
+	if (!buf) {
+		printf("Memory not allocated \n");
+		return;
+	}
+
+	fd = open(MTD_FTL_PATH, O_RDWR);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	ret = read(fd, buf, BUF_SIZE);
+	TC_ASSERT_EQ_CLEANUP("read", ret, BUF_SIZE, close(fd));
+#ifdef CONFIG_FS_WRITABLE
+	ret = write(fd, buf, BUF_SIZE);
+	TC_ASSERT_EQ_CLEANUP("write", ret, BUF_SIZE, close(fd));
+#endif
+	ret = close(fd);
+	TC_ASSERT_EQ("close", ret, OK);
+	TC_SUCCESS_RESULT();
+}
+#endif
+/**
+* @testcase         tc_libc_stdio_dprintf
+* @brief            Exact analogs of fprintf and vfprintf, except that they output to a file descriptor fd instead of to a stdio stream.
+* @scenario         Exact analogs of fprintf and vfprintf, except that they output to a file descriptor fd instead of to a stdio stream.
+* @apicovered       dprintf
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_dprintf(void)
+{
+	char *filename = VFS_FILE_PATH;
+	char *str = VFS_TEST_CONTENTS_1;
+	int fd;
+	int ret;
+
+	fd = open(filename, O_RDWR);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	ret = dprintf(fd, "%s", str);
+	close(fd);
+	TC_ASSERT_EQ("dprintf", ret, strnlen(str, VFS_CONTENTS_LEN));
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_fdopen_tc
+* @testcase         tc_libc_stdio_fdopen
 * @brief            fdopen with available fd value
 * @scenario         Open file with specific flags, and then fdopen with diffrent flag. Then check flag is changed properly
 * @apicovered       open, fdopen
 * @precondition     File VFS_FILE_PATH should be existed
 * @postcondition    NA
 */
-static void libc_stdio_fdopen_tc(void)
+static void tc_libc_stdio_fdopen(void)
 {
 	int fd;
 	FILE *fp;
@@ -1090,110 +1726,154 @@ static void libc_stdio_fdopen_tc(void)
 	TC_ASSERT_GEQ("open", fd, 0);
 
 	fp = fdopen(fd, "r");
-	TC_ASSERT_CLEANUP("fdopen", fp, ERROR_MSG_OP_FAILED, close(fd));
 	close(fd);
-	TC_ASSERT_EQ_CLEANUP("fdopen", fp->fs_oflags, O_RDONLY, ERROR_MSG_DIFFRENT_FLAG, fclose(fp));
+	TC_ASSERT_NEQ("fdopen", fp, NULL);
+	TC_ASSERT_EQ_CLEANUP("fdopen", fp->fs_oflags, O_RDONLY, fclose(fp));
 	fclose(fp);
+
+	/* Nagative case with invalid argument, negative fd value. It will return NULL */
+	fp = fdopen(-1, "r");
+	TC_ASSERT_EQ_CLEANUP("fdopen", fp, NULL, fclose(fp));
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_fopen_tc
+* @testcase         tc_libc_stdio_fopen
 * @brief            Open file by fopen
 * @scenario         Open file
 * @apicovered       fopen
 * @precondition     NA
 * @postcondition    NA
 */
-static void libc_stdio_fopen_tc(void)
+static void tc_libc_stdio_fopen(void)
 {
 	FILE *fp;
 	char *filename = VFS_FILE_PATH;
 
 	fp = fopen(filename, "w");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 	fclose(fp);
+
+	fp = fopen(filename, "r+");
+	TC_ASSERT_NEQ("fopen", fp, NULL);
+	fclose(fp);
+
+	fp = fopen(filename, "rb");
+	TC_ASSERT_NEQ("fopen", fp, NULL);
+	fclose(fp);
+
+	fp = fopen(filename, "rx");
+	TC_ASSERT_NEQ("fopen", fp, NULL);
+	fclose(fp);
+
+	/* Nagative cases with invalid mode. It will return NULL */
+	fp = fopen(filename, "b");
+	TC_ASSERT_EQ_CLEANUP("fopen", fp, NULL, fclose(fp));
+
+	fp = fopen(filename, "x");
+	TC_ASSERT_EQ_CLEANUP("fopen", fp, NULL, fclose(fp));
+
+	fp = fopen(filename, "z");
+	TC_ASSERT_EQ_CLEANUP("fopen", fp, NULL, fclose(fp));
+
+	fp = fopen(filename, "+");
+	TC_ASSERT_EQ_CLEANUP("fopen", fp, NULL, fclose(fp));
+
+	fp = fopen(filename, "rw");
+	TC_ASSERT_EQ_CLEANUP("fopen", fp, NULL, fclose(fp));
+
+	fp = fopen(filename, "wr");
+	TC_ASSERT_EQ_CLEANUP("fopen", fp, NULL, fclose(fp));
+
+	fp = fopen(filename, "wa");
+	TC_ASSERT_EQ_CLEANUP("fopen", fp, NULL, fclose(fp));
 
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_fclose_tc
+* @testcase         tc_libc_stdio_fclose
 * @brief            Close file by fopen
 * @scenario         Open and Close file
 * @apicovered       fopen, fclose
 * @precondition     NA
 * @postcondition    NA
 */
-static void libc_stdio_fclose_tc(void)
+static void tc_libc_stdio_fclose(void)
 {
 	FILE *fp;
 	int ret;
 	char *filename = VFS_FILE_PATH;
 
 	fp = fopen(filename, "w");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 	ret = fclose(fp);
 	TC_ASSERT_EQ("fclose", ret, OK);
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_fputs_tc
+* @testcase         tc_libc_stdio_fputs
 * @brief            Write contents through the fputs
 * @scenario         Write contents through the fputs, and check it works properly or not
 * @apicovered       fopen, fputs
 * @precondition     File VFS_FILE_PATH should be existed
 * @postcondition    NA
 */
-static void libc_stdio_fputs_tc(void)
+static void tc_libc_stdio_fputs(void)
 {
 	FILE *fp;
 	char *filename = VFS_FILE_PATH;
 	char *str = VFS_TEST_CONTENTS_1;
 
 	fp = fopen(filename, "w");
-	TC_ASSERT("fopen", fp);
-	TC_ASSERT_EQ_CLEANUP("fputs", fputs(str, fp), strlen(str), ERROR_MSG_OP_FAILED, fclose(fp));
+	TC_ASSERT_NEQ("fopen", fp, NULL);
+	TC_ASSERT_EQ_CLEANUP("fputs", fputs(str, fp), strlen(str), fclose(fp));
+
+	/* Nagative case with invalid argument, NULL stream. It will return EOF */
+	TC_ASSERT_EQ_CLEANUP("fputs", fputs(NULL, fp), EOF, fclose(fp));
 
 	fclose(fp);
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_fgets_tc
+* @testcase         tc_libc_stdio_fgets
 * @brief            Read cntents through the fgets
-* @scenario         Read contents through the fgets, and check it is same contents as written by libc_stdio_fgets_tc
+* @scenario         Read contents through the fgets, and check it is same contents as written by tc_libc_stdio_fgets
 * @apicovered       fopen, fgets
-* @precondition     libc_stdio_fputs_tc  should be passed
+* @precondition     tc_libc_stdio_fputs  should be passed
 * @postcondition    NA
 */
-static void libc_stdio_fgets_tc(void)
+static void tc_libc_stdio_fgets(void)
 {
 	FILE *fp;
 	char *filename = VFS_FILE_PATH;
 	char buf[20];
 
 	fp = fopen(filename, "r");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	memset(buf, 0, sizeof(buf));
-	TC_ASSERT_CLEANUP("fgets", fgets(buf, 20, fp), ERROR_MSG_OP_FAILED, fclose(fp));
-	TC_ASSERT_EQ_CLEANUP("fgets", strcmp(buf, VFS_TEST_CONTENTS_1), 0, ERROR_MSG_DIFFRENT_CONTENTS, fclose(fp));
+	TC_ASSERT_NEQ_CLEANUP("fgets", fgets(buf, 20, fp), NULL, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fgets", strcmp(buf, VFS_TEST_CONTENTS_1), 0, fclose(fp));
 
+	/* Nagative case with invalid argument, negative buffer size. It will return NULL */
+	TC_ASSERT_EQ_CLEANUP("fgets", fgets(buf, -1, fp), NULL, fclose(fp));
 	fclose(fp);
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_fseek_tc
+* @testcase         tc_libc_stdio_fseek
 * @brief            Move current file position to specific position
 * @scenario         Open file and move position, and then read data to check lseek works properly or not.
 * @apicovered       fopen, fseek, fgets
-* @precondition     libc_stdio_fputs_tc  should be passed
+* @precondition     tc_libc_stdio_fputs  should be passed
 * @postcondition    NA
 */
-static void libc_stdio_fseek_tc(void)
+static void tc_libc_stdio_fseek(void)
 {
 	FILE *fp;
 	int ret;
@@ -1201,55 +1881,63 @@ static void libc_stdio_fseek_tc(void)
 	char buf[20];
 
 	fp = fopen(filename, "r");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	ret = fseek(fp, 5, SEEK_SET);
-	TC_ASSERT_EQ_CLEANUP("fseek", ret, OK, ERROR_MSG_OP_FAILED, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fseek", ret, OK, fclose(fp));
 
 	memset(buf, 0, sizeof(buf));
-	TC_ASSERT_CLEANUP("fgets", fgets(buf, 20, fp), ERROR_MSG_OP_FAILED, fclose(fp));
+	TC_ASSERT_NEQ_CLEANUP("fgets", fgets(buf, 20, fp), NULL, fclose(fp));
 	fclose(fp);
 	TC_ASSERT_EQ("fgets", strcmp(buf, "IS VFS TEST 1"), 0);
+
+	/* Nagative case with invalid argument, NULL stream. It will return ERROR */
+	ret = fseek(NULL, 5, SEEK_SET);
+	TC_ASSERT_EQ("fseek", ret, ERROR);
 
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_ftell_tc
+* @testcase         tc_libc_stdio_ftell
 * @brief            Get current file position
 * @scenario         Open file and move position, and get current position by ftell
 * @apicovered       fopen, fseek, ftell
-* @precondition     libc_stdio_fputs_tc  should be passed
+* @precondition     tc_libc_stdio_fputs  should be passed
 * @postcondition    NA
 */
-static void libc_stdio_ftell_tc(void)
+static void tc_libc_stdio_ftell(void)
 {
 	FILE *fp;
 	int ret;
 	char *filename = VFS_FILE_PATH;
 
 	fp = fopen(filename, "r");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	ret = fseek(fp, 5, SEEK_SET);
-	TC_ASSERT_EQ_CLEANUP("fseek", ret, OK, ERROR_MSG_OP_FAILED, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fseek", ret, OK, fclose(fp));
 
 	ret = ftell(fp);
 	fclose(fp);
 	TC_ASSERT_EQ("ftell", ret, 5);
 
+	/* Nagative case with invalid argument, NULL stream. It will return ERROR */
+	ret = ftell(NULL);
+	TC_ASSERT_EQ("ftell", ret, ERROR);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_feof_tc
+* @testcase         tc_libc_stdio_feof
 * @brief            Check file pointer is positioned at the end of file
 * @scenario         Make long size file and print contents until it reaches at the end of file
 * @apicovered       fopen, feof
 * @precondition     NA
 * @postcondition    NA
 */
-static void libc_stdio_feof_tc(void)
+static void tc_libc_stdio_feof(void)
 {
 	FILE *fp;
 	char *filename = LONG_FILE_PATH;
@@ -1258,7 +1946,7 @@ static void libc_stdio_feof_tc(void)
 	TC_ASSERT_NEQ("make_long_file", make_long_file(), ERROR);
 
 	fp = fopen(filename, "r");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	/* Print contents of long file, if below became infinite loop, it means failed */
 	while (!feof(fp)) {
@@ -1272,14 +1960,14 @@ static void libc_stdio_feof_tc(void)
 }
 
 /**
-* @testcase         libc_stdio_fprintf_tc
+* @testcase         tc_libc_stdio_fprintf
 * @brief            Write contents.
 * @scenario         Write contents through the fprintf.
 * @apicovered       fopen, fprintf
 * @precondition     NA
 * @postcondition    NA
 */
-static void libc_stdio_fprintf_tc(void)
+static void tc_libc_stdio_fprintf(void)
 {
 	FILE *fp;
 	char *filename = VFS_FILE_PATH;
@@ -1287,7 +1975,7 @@ static void libc_stdio_fprintf_tc(void)
 	int ret;
 
 	fp = fopen(filename, "w+");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	ret = fprintf(fp, "%s", str);
 	fclose(fp);
@@ -1296,14 +1984,14 @@ static void libc_stdio_fprintf_tc(void)
 }
 
 /**
-* @testcase         libc_stdio_fsetpos_tc
+* @testcase         tc_libc_stdio_fsetpos
 * @brief            Set current file pointer to specific position
 * @scenario         Set new position of file pointer & check read contents to check it works properly
 * @apicovered       fopen, fsetpos, fgetc
-* @precondition     libc_stdio_fprintf_tc should be passed
+* @precondition     tc_libc_stdio_fprintf should be passed
 * @postcondition    NA
 */
-static void libc_stdio_fsetpos_tc(void)
+static void tc_libc_stdio_fsetpos(void)
 {
 	FILE *fp;
 	char *filename = VFS_FILE_PATH;
@@ -1311,29 +1999,34 @@ static void libc_stdio_fsetpos_tc(void)
 	int ch, ret;
 
 	fp = fopen(filename, "r");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	ret = fsetpos(fp, &pos);
-	TC_ASSERT_EQ_CLEANUP("fsetpos", ret, OK, ERROR_MSG_OP_FAILED, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fsetpos", ret, OK, fclose(fp));
 
 	ch = fgetc(fp);
 
-	TC_ASSERT_NEQ_CLEANUP("fgetc", ch, EOF, ERROR_MSG_OP_FAILED, fclose(fp));
+	TC_ASSERT_NEQ_CLEANUP("fgetc", ch, EOF, fclose(fp));
 	/* 'S' is 4th position of "THIS IS VFS TEST 2" */
-	TC_ASSERT_EQ_CLEANUP("fgetc", ch, 'S', ERROR_MSG_OP_FAILED, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fgetc", ch, 'S', fclose(fp));
+
+	/* Nagative case with invalid arguments, NULL position. It will return ERROR */
+	ret = fsetpos(fp, NULL);
+	fclose(fp);
+	TC_ASSERT_EQ("fsetpos", ret, ERROR);
 
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_fgetpos_tc
+* @testcase         tc_libc_stdio_fgetpos
 * @brief            Get current file pointer
 * @scenario         Set new position of file pointer & check current position by fgetpos
 * @apicovered       fopen, fsetpos, fgetpos
-* @precondition     libc_stdio_fprintf_tc should be passed
+* @precondition     tc_libc_stdio_fprintf should be passed
 * @postcondition    NA
 */
-static void libc_stdio_fgetpos_tc(void)
+static void tc_libc_stdio_fgetpos(void)
 {
 	FILE *fp;
 	char *filename = VFS_FILE_PATH;
@@ -1341,34 +2034,38 @@ static void libc_stdio_fgetpos_tc(void)
 	int ret;
 
 	fp = fopen(filename, "r");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	ret = fsetpos(fp, &pos);
-	TC_ASSERT_EQ_CLEANUP("fsetpos", ret, OK, ERROR_MSG_OP_FAILED, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fsetpos", ret, OK, fclose(fp));
 
 	ret = fgetpos(fp, &pos);
 	fclose(fp);
 	TC_ASSERT_EQ("fgetpos", ret, OK);
 
+	/* Nagative case with invalid arguments. It will return ERROR */
+	ret = fgetpos(NULL, NULL);
+	TC_ASSERT_EQ("fgetpos", ret, ERROR);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_fputc_tc
+* @testcase         tc_libc_stdio_fputc
 * @brief            Put character to file
 * @scenario         Put character 'S' to file
 * @apicovered       fopen, fputc
 * @precondition     NA
 * @postcondition    NA
 */
-static void libc_stdio_fputc_tc(void)
+static void tc_libc_stdio_fputc(void)
 {
 	FILE *fp;
 	char *filename = VFS_FILE_PATH;
 	int ret;
 
 	fp = fopen(filename, "w+");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	ret = fputc('S', fp);
 	fclose(fp);
@@ -1377,21 +2074,21 @@ static void libc_stdio_fputc_tc(void)
 }
 
 /**
-* @testcase         libc_stdio_fgetc_tc
+* @testcase         tc_libc_stdio_fgetc
 * @brief            get character from file
-* @scenario         get character from file and check it is same as which it put in libc_stdio_fputc_tc
+* @scenario         get character from file and check it is same as which it put in tc_libc_stdio_fputc
 * @apicovered       fopen, fgetc
-* @precondition     libc_stdio_fputc_tc should pass
+* @precondition     tc_libc_stdio_fputc should pass
 * @postcondition    NA
 */
-static void libc_stdio_fgetc_tc(void)
+static void tc_libc_stdio_fgetc(void)
 {
 	FILE *fp;
 	char *filename = VFS_FILE_PATH;
 	int ch;
 
 	fp = fopen(filename, "r");
-	TC_ASSERT("fgetc", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	ch = fgetc(fp);
 	fclose(fp);
@@ -1401,47 +2098,47 @@ static void libc_stdio_fgetc_tc(void)
 }
 
 /**
-* @testcase         libc_stdio_fwrite_tc
+* @testcase         tc_libc_stdio_fwrite
 * @brief            Write 1 line of contents
 * @scenario         Write 3 lines of contents and check its return value
 * @apicovered       fopen, fprintf
 * @precondition     NA
 * @postcondition    NA
 */
-static void libc_stdio_fwrite_tc(void)
+static void tc_libc_stdio_fwrite(void)
 {
 	FILE *fp;
 	char *filename = VFS_FILE_PATH;
 	int len, ret;
 
 	fp = fopen(filename, "w+");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	len = strlen(VFS_TEST_CONTENTS_1);
 	ret = fwrite(VFS_TEST_CONTENTS_1, 1, len, fp);
-	TC_ASSERT_EQ_CLEANUP("fwrite", ret, len, ERROR_MSG_BAD_SIZE, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fwrite", ret, len, fclose(fp));
 
 	len = strlen(VFS_TEST_CONTENTS_2);
 	ret = fwrite(VFS_TEST_CONTENTS_2, 1, len, fp);
-	TC_ASSERT_EQ_CLEANUP("fwrite", ret, len, ERROR_MSG_BAD_SIZE, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fwrite", ret, len, fclose(fp));
 
 	len = strlen(VFS_TEST_CONTENTS_3);
 	ret = fwrite(VFS_TEST_CONTENTS_3, 1, len, fp);
-	TC_ASSERT_EQ_CLEANUP("fwrite", ret, len, ERROR_MSG_BAD_SIZE, fclose(fp));
-
 	fclose(fp);
+	TC_ASSERT_EQ("fwrite", ret, len);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_fread_tc
+* @testcase         tc_libc_stdio_fread
 * @brief            Read 1 line of contents
-* @scenario         Read 3 lines of contents and check its same as contents which written in libc_stdio_fwrite_tc
+* @scenario         Read 3 lines of contents and check its same as contents which written in tc_libc_stdio_fwrite
 * @apicovered       fopen, fread
-* @precondition     libc_stdio_fwrite_tc should be passed
+* @precondition     tc_libc_stdio_fwrite should be passed
 * @postcondition    NA
 */
-static void libc_stdio_fread_tc(void)
+static void tc_libc_stdio_fread(void)
 {
 	FILE *fp;
 	char *filename = VFS_FILE_PATH;
@@ -1449,49 +2146,85 @@ static void libc_stdio_fread_tc(void)
 	int len, ret;
 
 	fp = fopen(filename, "r");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	len = strlen(VFS_TEST_CONTENTS_1);
 	memset(buf, 0, sizeof(buf));
 	ret = fread(buf, 1, len, fp);
-	TC_ASSERT_EQ_CLEANUP("fread", ret, len, ERROR_MSG_BAD_SIZE, fclose(fp));
-	TC_ASSERT_EQ_CLEANUP("fread", strcmp(buf, VFS_TEST_CONTENTS_1), 0, ERROR_MSG_DIFFRENT_CONTENTS, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fread", ret, len, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fread", strcmp(buf, VFS_TEST_CONTENTS_1), 0, fclose(fp));
 
 	len = strlen(VFS_TEST_CONTENTS_2);
 	memset(buf, 0, sizeof(buf));
 	ret = fread(buf, 1, len, fp);
-	TC_ASSERT_EQ_CLEANUP("fread", ret, len, ERROR_MSG_BAD_SIZE, fclose(fp));
-	TC_ASSERT_EQ_CLEANUP("fread", strcmp(buf, VFS_TEST_CONTENTS_2), 0, ERROR_MSG_DIFFRENT_CONTENTS, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fread", ret, len, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fread", strcmp(buf, VFS_TEST_CONTENTS_2), 0, fclose(fp));
 
 	len = strlen(VFS_TEST_CONTENTS_3);
 	memset(buf, 0, sizeof(buf));
 	ret = fread(buf, 1, len, fp);
-	TC_ASSERT_EQ_CLEANUP("fread", ret, len, ERROR_MSG_BAD_SIZE, fclose(fp));
-	TC_ASSERT_EQ_CLEANUP("fread", strcmp(buf, VFS_TEST_CONTENTS_3), 0, ERROR_MSG_DIFFRENT_CONTENTS, fclose(fp));
-
 	fclose(fp);
+	TC_ASSERT_EQ("fread", ret, len);
+	TC_ASSERT_EQ("fread", strcmp(buf, VFS_TEST_CONTENTS_3), 0);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_ferror_tc
+* @testcase         tc_libc_stdio_freopen
+* @brief            Open file by freopen
+* @scenario         Open file
+* @apicovered       freopen
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_freopen(void)
+{
+	FILE *fp;
+	char *filename = VFS_FILE_PATH;
+
+	fp = freopen(filename, "w", NULL);
+	TC_ASSERT_NEQ("freopen", fp, NULL);
+
+	/* A case with non-NULL filename and valid stream */
+	fp = freopen(filename, "w", fp);
+	TC_ASSERT_NEQ("freopen", fp, NULL);
+
+	/* A case with NULL filename, valid stream and mode flag */
+	fp = freopen(NULL, "r", fp);
+	fclose(fp);
+	TC_ASSERT_NEQ("freopen", fp, NULL);
+
+	/* A negative case with NULL path, valid stream and invalid mode. It will return NULL */
+	fp = freopen(NULL, "z", fp);
+	TC_ASSERT_EQ_CLEANUP("freopen", fp, NULL, fclose(fp));
+
+	/* A negative case with NULL path and stream. It will return NULL */
+	fp = freopen(NULL, "w", NULL);
+	TC_ASSERT_EQ_CLEANUP("freopen", fp, NULL, fclose(fp));
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_ferror
 * @brief            Check error occured during operation
 * @scenario         Write data to file which opened with read only flag to make an error forcely and check ferror works properly
 * @apicovered       fopen, fputc, ferror
 * @precondition     File VFS_FILE_PATH should be existed
 * @postcondition    NA
 */
-static void libc_stdio_ferror_tc(void)
+static void tc_libc_stdio_ferror(void)
 {
 	FILE *fp;
 	int ret;
 	char *filename = VFS_FILE_PATH;
 
 	fp = fopen(filename, "r");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	ret = fputc(32, fp);
-	TC_ASSERT_EQ_CLEANUP("fputc", ret, EOF, ERROR_MSG_OP_FAILED, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fputc", ret, EOF, fclose(fp));
 
 	ret = ferror(fp);
 	fclose(fp);
@@ -1501,7 +2234,7 @@ static void libc_stdio_ferror_tc(void)
 }
 
 /**
-* @testcase         libc_stdio_clearerr_tc
+* @testcase         tc_libc_stdio_clearerr
 * @brief            Check error cleared by clearerr after error occured during operation
 * @scenario         Write data to file which opened with read only flag to make an error forcely and
 *                   check ferror works properly and then check error disappeared by clearerr
@@ -1509,20 +2242,20 @@ static void libc_stdio_ferror_tc(void)
 * @precondition     File VFS_FILE_PATH should be existed
 * @postcondition    NA
 */
-static void libc_stdio_clearerr_tc(void)
+static void tc_libc_stdio_clearerr(void)
 {
 	FILE *fp;
 	int ret;
 	char *filename = VFS_FILE_PATH;
 
 	fp = fopen(filename, "r");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	ret = fputc(32, fp);
-	TC_ASSERT_EQ_CLEANUP("fputc", ret, EOF, ERROR_MSG_OP_FAILED, fclose(fp));
+	TC_ASSERT_EQ_CLEANUP("fputc", ret, EOF, fclose(fp));
 
 	ret = ferror(fp);
-	TC_ASSERT_NEQ_CLEANUP("ferror", ret, OK, ERROR_MSG_OP_FAILED, fclose(fp));
+	TC_ASSERT_NEQ_CLEANUP("ferror", ret, OK, fclose(fp));
 
 	clearerr(fp);
 
@@ -1533,96 +2266,1180 @@ static void libc_stdio_clearerr_tc(void)
 }
 
 /**
-* @testcase         libc_stdio_gets_tc
+* @testcase         tc_libc_stdio_gets
 * @brief            get string by user input
 * @scenario         get string by user input and check it is NULL or not
 * @apicovered       gets
 * @precondition     NA
 * @postcondition    NA
 */
-static void libc_stdio_gets_tc(void)
+static void tc_libc_stdio_gets(void)
 {
 	char input_str[64];
 
 	printf("Enter text here : \n");
 	fflush(stdout);
-	TC_ASSERT("gets", gets(input_str));
+	TC_ASSERT_NEQ("gets", gets(input_str), NULL);
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_gets_s_tc
+* @testcase         tc_libc_stdio_gets_s
 * @brief            get string by user input
 * @scenario         get string by user input and check it is NULL or not
 * @apicovered       gets
 * @precondition     NA
 * @postcondition    NA
 */
-static void libc_stdio_gets_s_tc(void)
+static void tc_libc_stdio_gets_s(void)
 {
 	char input_str[64];
 
 	printf("Enter text here : \n");
 	fflush(stdout);
-	TC_ASSERT("gets_s", gets_s(input_str, sizeof(input_str)));
+	TC_ASSERT_NEQ("gets_s", gets_s(input_str, sizeof(input_str)), NULL);
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_fileno_tc
+* @testcase         tc_libc_stdio_fileno
 * @brief            Get fd value related to file stream
 * @scenario         Open file with fopen and get fd value through the fileno
 * @apicovered       fopen, fileno
 * @precondition     NA
 * @postcondition    NA
 */
-static void libc_stdio_fileno_tc(void)
+static void tc_libc_stdio_fileno(void)
 {
 	FILE *fp;
 	char *filename = VFS_FILE_PATH;
 	int fd;
 
 	fp = fopen(filename, "w");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	fd = fileno(fp);
 	fclose(fp);
 	TC_ASSERT_GEQ("fileno", fd, 0);
 
+	/* Nagative case with invalid argument, NULL stream. It will return ERROR */
+	fd = fileno(NULL);
+	TC_ASSERT_EQ("fileno", fd, ERROR);
+
+	TC_SUCCESS_RESULT();
+}
+
+#if CONFIG_STDIO_BUFFER_SIZE > 0
+/**
+* @testcase         tc_libc_stdio_lib_rdflush
+* @brief            Flush read data from the I/O buffer and adjust the file pointer to account for the unread data.
+* @scenario         Flush read data from the I/O buffer and adjust the file pointer to account for the unread data.
+* @apicovered       lib_rdflush
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_lib_rdflush(void)
+{
+	char *filename = VFS_FILE_PATH;
+	FILE *stream;
+	int ret;
+
+	stream = fopen(filename, "r");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+
+	ret = lib_rdflush(stream);
+	fclose(stream);
+	TC_ASSERT_EQ("lib_rdflush", ret, OK);
+
+	TC_SUCCESS_RESULT();
+}
+#endif
+
+#ifdef CONFIG_STDIO_LINEBUFFER
+/**
+* @testcase         tc_libc_stdio_lib_snoflush
+* @brief            provides a common, dummy flush method for seekable output streams that are not flushable.
+* @scenario         Only used if CONFIG_STDIO_LINEBUFFER is selected.
+* @apicovered       lib_snoflush
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_lib_snoflush(void)
+{
+	int ret;
+
+	ret = lib_snoflush((FAR struct lib_sostream_s *)stdout);
+	TC_ASSERT_EQ("lib_snoflush", ret, OK);
+
+	TC_SUCCESS_RESULT();
+}
+#endif
+
+/**
+* @testcase         tc_libc_stdio_lib_sprintf
+* @brief            Composes a string with the same text that would be printed if format was used on printf
+*                   But instead of being printed the content is stored as a C string in the buffer pointed by str
+* @scenario         A terminating null character is automatically appended after the content.
+* @apicovered       lib_sprintf
+* @precondition     The size of the buffer should be large enough to contain the entire resulting string
+* @postcondition    NA
+*/
+static void tc_libc_stdio_lib_sprintf(void)
+{
+	struct lib_memoutstream_s memoutstream;
+	char *str = VFS_TEST_CONTENTS_1;
+	char buf[STDIO_BUFLEN];
+	int ret;
+
+	lib_memoutstream((FAR struct lib_memoutstream_s *)&memoutstream, buf, STDIO_BUFLEN);
+	TC_ASSERT_EQ("lib_memoutstream", memoutstream.buffer, (FAR char *)(buf));
+
+	ret = lib_sprintf((FAR struct lib_outstream_s *)&memoutstream, "%s", str);
+	TC_ASSERT_EQ("lib_sprintf", ret, strnlen(str, VFS_CONTENTS_LEN));
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @testcase         libc_stdio_ungetc_tc
+* @testcase         tc_libc_stdio_remove
+* @brief            Deletes the file whose name is specified in filename.
+* @scenario         Open file
+* @apicovered       remove
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_remove(void)
+{
+	char *filename = VFS_FILE_PATH;
+	int ret;
+
+	ret = remove(filename);
+	TC_ASSERT_EQ("remove", ret, 0);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_setbuf
+* @brief            Set stream buffer
+* @scenario         Open file
+* @apicovered       setbuf, setvbuf
+* @precondition     NA
+* @postcondition    NA
+*/
+#if CONFIG_STDIO_BUFFER_SIZE > 0
+static void tc_libc_stdio_setbuf(void)
+{
+	FILE *fp;
+	char buffer[64];
+	char *filename = VFS_FILE_PATH;
+
+	/* setbuf_test: DEFAULT buffering */
+
+	fp = fopen(filename, "w");
+	TC_ASSERT_NEQ("fopen", fp, NULL);
+
+	/* setbuf_test: NO buffering */
+
+	setbuf(fp, NULL);
+	TC_ASSERT_EQ_CLEANUP("setbuf", fp->fs_bufstart, NULL, fclose(fp));
+
+	/* setbuf_test: pre-allocated buffer */
+
+	setbuf(fp, buffer);
+	TC_ASSERT_EQ_CLEANUP("setbuf", fp->fs_bufstart, (FAR unsigned char *)buffer, fclose(fp));
+	setbuf(fp, NULL);
+	TC_ASSERT_EQ_CLEANUP("setbuf", fp->fs_bufstart, NULL, fclose(fp));
+
+	fclose(fp);
+
+	TC_SUCCESS_RESULT();
+}
+#endif
+
+/**
+* @testcase         tc_libc_stdio_setvbuf
+* @brief            Change stream buffering
+* @scenario         Open file
+* @apicovered       setbuf, setvbuf
+* @precondition     NA
+* @postcondition    NA
+*/
+#if CONFIG_STDIO_BUFFER_SIZE > 0
+static void tc_libc_stdio_setvbuf(void)
+{
+	FILE *fp;
+	char buffer[64];
+	char *filename = VFS_FILE_PATH;
+	int ret;
+
+	/* setvbuf_test: DEFAULT buffering */
+
+	fp = fopen(filename, "w");
+	TC_ASSERT_NEQ("fopen", fp, NULL);
+
+	/* setvbuf_test: NO buffering */
+
+	ret = setvbuf(fp, NULL, _IONBF, 0);
+	TC_ASSERT_LEQ_CLEANUP("setvbuf", ret, 0, fclose(fp));
+
+	/* setvbuf_test: FULL buffering */
+
+	ret = setvbuf(fp, NULL, _IOFBF, 0);
+	TC_ASSERT_LEQ_CLEANUP("setvbuf", ret, 0, fclose(fp));
+	ret = setvbuf(fp, NULL, _IONBF, 0);
+	TC_ASSERT_LEQ_CLEANUP("setvbuf", ret, 0, fclose(fp));
+
+	/* setvbuf_test: LINE buffering */
+
+	ret = setvbuf(fp, NULL, _IOLBF, 64);
+	TC_ASSERT_LEQ_CLEANUP("setvbuf", ret, 0, fclose(fp));
+	ret = setvbuf(fp, NULL, _IONBF, 0);
+	TC_ASSERT_LEQ_CLEANUP("setvbuf", ret, 0, fclose(fp));
+
+	/* setvbuf_test: FULL buffering, pre-allocated buffer */
+
+	ret = setvbuf(fp, buffer, _IOFBF, 64);
+	TC_ASSERT_LEQ_CLEANUP("setvbuf", ret, 0, fclose(fp));
+	ret = setvbuf(fp, NULL, _IONBF, 0);
+	fclose(fp);
+	TC_ASSERT_LEQ("setvbuf", ret, 0);
+
+	TC_SUCCESS_RESULT();
+}
+#endif
+
+/**
+* @testcase         tc_libc_stdio_meminstream
+* @brief            Initializes a stream for use with a fixed-size memory buffer
+* @scenario         Initializes a stream for use with a fixed-size memory buffer
+* @apicovered       lib_meminstream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_meminstream(void)
+{
+	const char *str = STREAM_TEST_CONTENTS;
+	int getch;
+
+	struct lib_meminstream_s meminstream;
+
+	/* Check with 0 length */
+
+	lib_meminstream((FAR struct lib_meminstream_s *)&meminstream, str, 0);
+	TC_ASSERT_EQ("lib_meminstream", meminstream.buffer, (FAR char *)(str));
+
+	getch = meminstream.public.get((FAR struct lib_instream_s *)&meminstream.public);
+	TC_ASSERT_EQ("meminstream_getc", meminstream.public.nget, 0);
+	TC_ASSERT_EQ("meminstream_getc", getch, EOF);
+
+	/* Check with valid length */
+
+	lib_meminstream((FAR struct lib_meminstream_s *)&meminstream, str, STDIO_BUFLEN);
+	TC_ASSERT_EQ("lib_meminstream", meminstream.buffer, (FAR char *)(str));
+	TC_ASSERT_EQ("lib_meminstream", meminstream.buflen, STDIO_BUFLEN);
+
+	getch = meminstream.public.get((FAR struct lib_instream_s *)&meminstream.public);
+	TC_ASSERT_EQ("meminstream_getc", meminstream.public.nget, 1);
+	TC_ASSERT_EQ("meminstream_getc", getch, str[0]);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_memoutstream
+* @brief            Initializes a stream for use with a fixed-size memory buffer
+* @scenario         Initializes a stream for use with a fixed-size memory buffer
+* @apicovered       lib_memoutstream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_memoutstream(void)
+{
+	char buffer[STDIO_BUFLEN];
+	char *str = STREAM_TEST_CONTENTS;
+
+	struct lib_memoutstream_s memoutstream;
+
+	/* Check with valid length */
+
+	lib_memoutstream((FAR struct lib_memoutstream_s *)&memoutstream, buffer, STDIO_BUFLEN);
+	TC_ASSERT_EQ("lib_memoutstream", memoutstream.buffer, (FAR char *)(buffer));
+	TC_ASSERT_EQ("lib_memoutstream", memoutstream.buflen, (STDIO_BUFLEN - 1));	/* Save space for null terminator, hence checking with (STDIO_BUFLEN-1)*/
+
+	memoutstream.public.put((FAR struct lib_outstream_s *)&memoutstream.public, str[0]);
+	TC_ASSERT_EQ("memoutstream_putc", memoutstream.public.nput, 1);
+	TC_ASSERT_EQ("lib_memoutstream", memoutstream.buffer[0], str[0]);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_memsistream
+* @brief            Initializes a stream for use with a fixed-size memory buffer
+* @scenario         Initializes a stream for use with a fixed-size memory buffer
+* @apicovered       lib_memsistream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_memsistream(void)
+{
+	const char *str = STREAM_TEST_CONTENTS;
+	int getch;
+	off_t offset;
+	struct lib_memsistream_s memsistream;
+
+	/* Check with 0 length */
+
+	lib_memsistream((FAR struct lib_memsistream_s *)&memsistream, str, 0);
+	TC_ASSERT_EQ("lib_memsistream", memsistream.buffer, (FAR char *)(str));
+
+	getch = memsistream.public.get((FAR struct lib_sistream_s *)&memsistream.public);
+	TC_ASSERT_EQ("memsistream_getc", memsistream.public.nget, 0);
+	TC_ASSERT_EQ("memsistream_getc", getch, EOF);
+
+	/* Check with valid length */
+
+	lib_memsistream((FAR struct lib_memsistream_s *)&memsistream, str, STDIO_BUFLEN);
+	TC_ASSERT_EQ("lib_memsistream", memsistream.buffer, (FAR char *)(str));
+
+	getch = memsistream.public.get((FAR struct lib_sistream_s *)&memsistream.public);
+	TC_ASSERT_EQ("memsistream_getc", memsistream.public.nget, 1);
+	TC_ASSERT_EQ("meminstream_getc", getch, str[0]);
+
+	/* Check seek operation */
+
+	offset = memsistream.public.seek((FAR struct lib_sistream_s *)&memsistream.public, SEEK_OFFSET, SEEK_SET);	/* Seek from the start of the file */
+	TC_ASSERT_EQ("memsistream_seek", memsistream.offset, SEEK_OFFSET);
+	TC_ASSERT_EQ("memsistream_seek", offset, (off_t)SEEK_OFFSET);
+
+	offset = memsistream.public.seek((FAR struct lib_sistream_s *)&memsistream.public, SEEK_OFFSET, SEEK_CUR);	/* Seek from the current file offset */
+	TC_ASSERT_EQ("memsistream_seek", memsistream.offset, SEEK_OFFSET * 2);
+	TC_ASSERT_EQ("memsistream_seek", offset, (off_t)(SEEK_OFFSET + SEEK_OFFSET));
+
+	offset = memsistream.public.seek((FAR struct lib_sistream_s *)&memsistream.public, SEEK_OFFSET, SEEK_END);	/* Seek from the end of the file */
+	TC_ASSERT_EQ("memsistream_seek", memsistream.offset, SEEK_OFFSET * 2);
+	TC_ASSERT_EQ("memsistream_seek", offset, (off_t)ERROR);
+
+	offset = memsistream.public.seek((FAR struct lib_sistream_s *)&memsistream.public, SEEK_OFFSET, SEEK_DEF);	/* Seek none */
+	TC_ASSERT_EQ("memsistream_seek", memsistream.offset, SEEK_OFFSET * 2);
+	TC_ASSERT_EQ("memsistream_seek", offset, (off_t)ERROR);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_memsostream
+* @brief            Initializes a stream for use with a fixed-size memory buffer
+* @scenario         Initializes a stream for use with a fixed-size memory buffer
+* @apicovered       lib_memsostream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_memsostream(void)
+{
+	char buffer[STDIO_BUFLEN];
+	char *str = STREAM_TEST_CONTENTS;
+	off_t offset;
+
+	struct lib_memsostream_s memsostream;
+
+	/* Check with valid length */
+
+	lib_memsostream((FAR struct lib_memsostream_s *)&memsostream, buffer, STDIO_BUFLEN);
+	TC_ASSERT_EQ("lib_memsostream", memsostream.buffer, (FAR char *)(buffer));
+
+	memsostream.public.put((FAR struct lib_sostream_s *)&memsostream.public, str[0]);
+	TC_ASSERT_EQ("memsostream_putc", memsostream.public.nput, 1);
+	TC_ASSERT_EQ("lib_memsostream", memsostream.buffer[0], str[0]);
+
+	/* Check seek operation */
+
+	offset = memsostream.public.seek((FAR struct lib_sostream_s *)&memsostream.public, SEEK_OFFSET, SEEK_SET);	/* Seek from the start of the file */
+	TC_ASSERT_EQ("memsostream_seek", memsostream.offset, SEEK_OFFSET);
+	TC_ASSERT_EQ("memsostream_seek", offset, (off_t)SEEK_OFFSET);
+
+	offset = memsostream.public.seek((FAR struct lib_sostream_s *)&memsostream.public, SEEK_OFFSET, SEEK_CUR);	/* Seek from the current file offset */
+	TC_ASSERT_EQ("memsostream_seek", memsostream.offset, SEEK_OFFSET * 2);
+	TC_ASSERT_EQ("memsostream_seek", offset, (off_t)(SEEK_OFFSET + SEEK_OFFSET));
+
+	offset = memsostream.public.seek((FAR struct lib_sostream_s *)&memsostream.public, SEEK_OFFSET, SEEK_END);	/* Seek from the end of the file */
+	TC_ASSERT_EQ("memsostream_seek", memsostream.offset, SEEK_OFFSET * 2);
+	TC_ASSERT_EQ("memsostream_seek", offset, (off_t)ERROR);
+
+	offset = memsostream.public.seek((FAR struct lib_sostream_s *)&memsostream.public, SEEK_OFFSET, SEEK_DEF);	/* Seek none */
+	TC_ASSERT_EQ("memsostream_seek", memsostream.offset, SEEK_OFFSET * 2);
+	TC_ASSERT_EQ("memsostream_seek", offset, (off_t)ERROR);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_nullinstream
+* @brief            Initializes a NULL stream. The initialized stream will return only EOF
+* @scenario         Initializes a NULL stream. The initialized stream will return only EOF
+* @apicovered       lib_nullinstream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_nullinstream(void)
+{
+	struct lib_instream_s nullinstream;
+	int getch;
+
+	lib_nullinstream((FAR struct lib_instream_s *)&nullinstream);
+	TC_ASSERT_EQ("lib_nullinstream", nullinstream.nget, 0);
+
+	getch = nullinstream.get((FAR struct lib_instream_s *)&nullinstream);
+	TC_ASSERT_EQ("lib_nullinstream", getch, EOF);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_nulloutstream
+* @brief            Initializes a NULL stream. The initialized stream will write all data to the bit-bucket
+* @scenario         Initializes a NULL stream. The initialized stream will write all data to the bit-bucket
+* @apicovered       lib_nulloutstream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_nulloutstream(void)
+{
+	struct lib_outstream_s nulloutstream;
+
+	lib_nulloutstream((FAR struct lib_outstream_s *)&nulloutstream);
+	TC_ASSERT_EQ("lib_nulloutstream", nulloutstream.nput, 0);
+
+	nulloutstream.put((FAR struct lib_outstream_s *)&nulloutstream, 1);
+	TC_ASSERT_EQ("nulloutstream_putc", nulloutstream.nput, 1);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_rawinstream
+* @brief            Initializes a stream for use with a file descriptor
+* @scenario         Initializes a stream for use with a file descriptor
+* @apicovered       lib_rawinstream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_rawinstream(void)
+{
+	int fd;
+	int ret;
+	int getch;
+	char *str = STREAM_TEST_CONTENTS;
+
+	struct lib_rawinstream_s rawinstream;
+
+	/* Negative case, invalid file permission: no character is read from the rawinstream */
+
+	fd = open(VFS_FILE_PATH, O_WRONLY);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	lib_rawinstream((FAR struct lib_rawinstream_s *)&rawinstream, fd);
+	TC_ASSERT_EQ_CLEANUP("lib_rawinstream", rawinstream.fd, fd, close(fd));
+
+	getch = rawinstream.public.get((FAR struct lib_instream_s *)&rawinstream.public);
+	close(fd);
+	TC_ASSERT_EQ("rawinstream_getc", rawinstream.public.nget, 0);
+	TC_ASSERT_EQ("rawinstream_getc", getch, EOF);
+
+	/* Positive case, one character is read from the rawinstream*/
+
+	fd = open(VFS_FILE_PATH, O_WRONLY | O_TRUNC);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	ret = write(fd, str, strlen(str));
+	close(fd);
+	TC_ASSERT_EQ("write", ret, strlen(str));
+
+	fd = open(VFS_FILE_PATH, O_RDONLY);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	lib_rawinstream((FAR struct lib_rawinstream_s *)&rawinstream, fd);
+	TC_ASSERT_EQ_CLEANUP("lib_rawinstream", rawinstream.fd, fd, close(fd));
+
+	getch = rawinstream.public.get((FAR struct lib_instream_s *)&rawinstream.public);
+	close(fd);
+	TC_ASSERT_EQ("rawinstream_getc", rawinstream.public.nget, 1);
+	TC_ASSERT_EQ("rawinstream_getc", getch, str[0]);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_rawoutstream
+* @brief            Initializes a stream for use with a file descriptor
+* @scenario         Initializes a stream for use with a file descriptor
+* @apicovered       lib_rawoutstream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_rawoutstream(void)
+{
+	int fd;
+	char buffer[STDIO_BUFLEN];
+	char *str = STREAM_TEST_CONTENTS;
+	int ret;
+
+	struct lib_rawoutstream_s rawoutstream;
+
+	/* Negative case, invalid file permission: no character is written to the rawoutstream */
+
+	fd = open(VFS_FILE_PATH, O_RDONLY);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	lib_rawoutstream((FAR struct lib_rawoutstream_s *)&rawoutstream, fd);
+	TC_ASSERT_EQ_CLEANUP("lib_rawoutstream", rawoutstream.fd, fd, close(fd));
+
+	rawoutstream.public.put((FAR struct lib_outstream_s *)&rawoutstream.public, 1);
+	close(fd);
+	TC_ASSERT_EQ("rawoutstream_putc", rawoutstream.public.nput, 0);
+
+	/* Positive case, one character is put to the rawoutstream */
+
+	fd = open(VFS_FILE_PATH, O_WRONLY | O_TRUNC);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	lib_rawoutstream((FAR struct lib_rawoutstream_s *)&rawoutstream, fd);
+	TC_ASSERT_EQ_CLEANUP("lib_rawoutstream", rawoutstream.fd, fd, close(fd));
+
+	rawoutstream.public.put((FAR struct lib_outstream_s *)&rawoutstream.public, str[0]);
+	close(fd);
+	TC_ASSERT_EQ("rawoutstream_putc", rawoutstream.public.nput, 1);
+
+	fd = open(VFS_FILE_PATH, O_RDONLY);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	memset(buffer, 0, sizeof(buffer));
+	ret = read(fd, buffer, sizeof(buffer));
+	close(fd);
+	TC_ASSERT_GEQ("read", ret, 0);
+	TC_ASSERT_EQ("read", buffer[0], str[0]);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_rawsistream
+* @brief            Initializes a stream for use with a file descriptor
+* @scenario         Initializes a stream for use with a file descriptor
+* @apicovered       lib_rawsistream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_rawsistream(void)
+{
+	int fd;
+	int ret;
+	int getch;
+	off_t offset;
+	char *str = STREAM_TEST_CONTENTS;
+
+	struct lib_rawsistream_s rawsistream;
+
+	/* Negative case, invalid file permission: no character is read from the rawsistream */
+
+	fd = open(VFS_FILE_PATH, O_WRONLY);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	lib_rawsistream((FAR struct lib_rawsistream_s *)&rawsistream, fd);
+	TC_ASSERT_EQ_CLEANUP("lib_rawsistream", rawsistream.fd, fd, close(fd));
+
+	getch = rawsistream.public.get((FAR struct lib_sistream_s *)&rawsistream.public);
+	close(fd);
+	TC_ASSERT_EQ("rawsistream_getc", rawsistream.public.nget, 0);
+	TC_ASSERT_EQ("rawsistream_getc", getch, EOF);
+
+	/* Positive case, one character is read from the rawsistream */
+
+	fd = open(VFS_FILE_PATH, O_WRONLY | O_TRUNC);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	ret = write(fd, str, strlen(str));
+	close(fd);
+	TC_ASSERT_EQ("write", ret, strlen(str));
+
+	fd = open(VFS_FILE_PATH, O_RDONLY);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	lib_rawsistream((FAR struct lib_rawsistream_s *)&rawsistream, fd);
+	TC_ASSERT_EQ_CLEANUP("lib_rawsistream", rawsistream.fd, fd, close(fd));
+
+	getch = rawsistream.public.get((FAR struct lib_sistream_s *)&rawsistream.public);
+	TC_ASSERT_EQ_CLEANUP("rawsistream_getc", rawsistream.public.nget, 1, close(fd));
+	TC_ASSERT_EQ_CLEANUP("rawsistream_getc", getch, str[0], close(fd));
+
+	/* Check seek operation */
+
+	offset = rawsistream.public.seek((FAR struct lib_sistream_s *)&rawsistream.public, SEEK_OFFSET, SEEK_SET);
+	close(fd);
+	TC_ASSERT_EQ("rawsistream_seek", offset, (off_t)SEEK_OFFSET);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_rawsostream
+* @brief            Initializes a stream for use with a file descriptor
+* @scenario         Initializes a stream for use with a file descriptor
+* @apicovered       lib_rawsostream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_rawsostream(void)
+{
+	int fd;
+	off_t offset;
+	char buffer[STDIO_BUFLEN];
+	char *str = STREAM_TEST_CONTENTS;
+	int ret;
+
+	struct lib_rawsostream_s rawsostream;
+
+	/* Negative case, invalid file permission: no character is written to the rawsostream */
+
+	fd = open(VFS_FILE_PATH, O_RDONLY);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	lib_rawsostream((FAR struct lib_rawsostream_s *)&rawsostream, fd);
+	TC_ASSERT_EQ_CLEANUP("lib_rawsostream", rawsostream.fd, fd, close(fd));
+
+	rawsostream.public.put((FAR struct lib_sostream_s *)&rawsostream.public, str[0]);
+	close(fd);
+	TC_ASSERT_EQ("rawsostream_putc", rawsostream.public.nput, 0);
+
+	/* Positive case, two characters are put to the rawsostream */
+
+	fd = open(VFS_FILE_PATH, O_WRONLY | O_TRUNC);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	lib_rawsostream((FAR struct lib_rawsostream_s *)&rawsostream, fd);
+	TC_ASSERT_EQ_CLEANUP("lib_rawsostream", rawsostream.fd, fd, close(fd));
+
+	rawsostream.public.put((FAR struct lib_sostream_s *)&rawsostream.public, str[0]);
+	TC_ASSERT_EQ_CLEANUP("rawsostream_putc", rawsostream.public.nput, 1, close(fd));
+	rawsostream.public.put((FAR struct lib_sostream_s *)&rawsostream.public, str[1]);
+	close(fd);
+	TC_ASSERT_EQ("rawsostream_putc", rawsostream.public.nput, 2);
+
+	fd = open(VFS_FILE_PATH, O_RDONLY);
+	TC_ASSERT_GEQ("open", fd, 0);
+
+	memset(buffer, 0, sizeof(buffer));
+	ret = read(fd, buffer, sizeof(buffer));
+	TC_ASSERT_GEQ_CLEANUP("read", ret, 0, close(fd));
+	TC_ASSERT_EQ_CLEANUP("read", buffer[0], str[0], close(fd));
+	TC_ASSERT_EQ_CLEANUP("read", buffer[1], str[1], close(fd));
+
+	/* Check seek operation */
+
+	offset = rawsostream.public.seek((FAR struct lib_sostream_s *)&rawsostream.public, SEEK_OFFSET, SEEK_SET);
+	close(fd);
+	TC_ASSERT_EQ("rawsostream_seek", offset, (off_t)2);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_sprintf
+* @brief            Composes a string with the same text that would be printed if format was used on printf
+*                   But instead of being printed the content is stored as a C string in the buffer pointed by str
+* @scenario         A terminating null character is automatically appended after the content.
+* @apicovered       sprintf
+* @precondition     The size of the buffer should be large enough to contain the entire resulting string
+* @postcondition    NA
+*/
+static void tc_libc_stdio_sprintf(void)
+{
+	char buf[STDIO_BUFLEN];
+	char *str = VFS_TEST_CONTENTS_1;
+	int ret;
+
+	ret = sprintf((FAR char *)&buf, "%s", str);
+	TC_ASSERT_EQ("sprintf", ret, strnlen(str, VFS_CONTENTS_LEN));
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_stdinstream
+* @brief            Initializes a stream for use with a FILE instance
+* @scenario         Initializes a stream for use with a FILE instance
+* @apicovered       lib_stdinstream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_stdinstream(void)
+{
+	FILE *stream;
+	int getch;
+	char *str = STREAM_TEST_CONTENTS;
+
+	struct lib_stdinstream_s stdinstream;
+
+	/* Negative case, file opened with inappropriate permission */
+
+	stream = fopen(VFS_FILE_PATH, "w");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+
+	lib_stdinstream((FAR struct lib_stdinstream_s *)&stdinstream, stream);
+	TC_ASSERT_EQ_CLEANUP("lib_stdinstream", stdinstream.stream, stream, fclose(stream));
+
+	getch = stdinstream.public.get((FAR struct lib_instream_s *)&stdinstream.public);
+	fclose(stream);
+	TC_ASSERT_EQ("stdinstream_getc", stdinstream.public.nget, 0);
+	TC_ASSERT_EQ("stdinstream_getc", getch, EOF);
+
+	/* Positive case, one character is read from the stdinstream */
+
+	stream = fopen(VFS_FILE_PATH, "w+");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+	TC_ASSERT_EQ_CLEANUP("fputs", fputs(str, stream), strlen(str), fclose(stream));
+	fclose(stream);
+
+	stream = fopen(VFS_FILE_PATH, "r+");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+
+	lib_stdinstream((FAR struct lib_stdinstream_s *)&stdinstream, stream);
+	TC_ASSERT_EQ_CLEANUP("lib_stdinstream", stdinstream.stream, stream, fclose(stream));
+
+	getch = stdinstream.public.get((FAR struct lib_instream_s *)&stdinstream.public);
+	fclose(stream);
+	TC_ASSERT_EQ("stdinstream_getc", stdinstream.public.nget, 1);
+	TC_ASSERT_EQ("stdinstream_getc", getch, str[0]);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_stdoutstream
+* @brief            Initializes a stream for use with a FILE instance
+* @scenario         Initializes a stream for use with a FILE instance
+* @apicovered       lib_stdoutstream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_stdoutstream(void)
+{
+	FILE *stream;
+	char buffer[STDIO_BUFLEN];
+	char *str = STREAM_TEST_CONTENTS;
+	int ret;
+
+	struct lib_stdoutstream_s stdoutstream;
+
+	/* Negative case, file opened with inappropriate permission */
+
+	stream = fopen(VFS_FILE_PATH, "r");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+
+	lib_stdoutstream((FAR struct lib_stdoutstream_s *)&stdoutstream, stream);
+	TC_ASSERT_EQ_CLEANUP("lib_stdoutstream", stdoutstream.stream, stream, fclose(stream));
+
+	stdoutstream.public.put((FAR struct lib_outstream_s *)&stdoutstream.public, str[0]);
+	fclose(stream);
+	TC_ASSERT_EQ("stdoutstream_putc", stdoutstream.public.nput, 0);
+
+	/* Positive case, one character is put to the stdoutstream */
+
+	stream = fopen(VFS_FILE_PATH, "w+");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+
+	lib_stdoutstream((FAR struct lib_stdoutstream_s *)&stdoutstream, stream);
+	TC_ASSERT_EQ_CLEANUP("lib_stdoutstream", stdoutstream.stream, stream, fclose(stream));
+
+	stdoutstream.public.put((FAR struct lib_outstream_s *)&stdoutstream.public, str[0]);
+	TC_ASSERT_EQ_CLEANUP("stdoutstream_putc", stdoutstream.public.nput, 1, fclose(stream));
+
+	/* Check flush operation */
+
+#if defined(CONFIG_STDIO_LINEBUFFER) && CONFIG_STDIO_BUFFER_SIZE > 0
+	stdoutstream.public.flush((FAR struct lib_outstream_s *)&stdoutstream.public);
+#endif
+	fclose(stream);
+
+	stream = fopen(VFS_FILE_PATH, "r+");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+
+	memset(buffer, 0, sizeof(buffer));
+	ret = fread(buffer, 1, 1, stream);
+	fclose(stream);
+	TC_ASSERT_EQ("fread", ret, 1);
+	TC_ASSERT_EQ("fread", buffer[0], str[0]);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_stdsistream
+* @brief            Initializes a stream for use with a FILE instance
+* @scenario         Initializes a stream for use with a FILE instance
+* @apicovered       lib_stdsistream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_stdsistream(void)
+{
+	FILE *stream;
+	int getch;
+	off_t offset;
+	char *str = STREAM_TEST_CONTENTS;
+
+	struct lib_stdsistream_s stdsistream;
+
+	/* Negative case, file opened with inappropriate permission */
+
+	stream = fopen(VFS_FILE_PATH, "w");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+
+	lib_stdsistream((FAR struct lib_stdsistream_s *)&stdsistream, stream);
+	TC_ASSERT_EQ_CLEANUP("lib_stdsistream", stdsistream.stream, stream, fclose(stream));
+
+	getch = stdsistream.public.get((FAR struct lib_sistream_s *)&stdsistream.public);
+	fclose(stream);
+	TC_ASSERT_EQ("stdsistream_getc", stdsistream.public.nget, 0);
+	TC_ASSERT_EQ("stdsistream_getc", getch, EOF);
+
+	/* Positive case, one character is read from the stdsistream */
+
+	stream = fopen(VFS_FILE_PATH, "w+");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+	TC_ASSERT_EQ_CLEANUP("fputs", fputs(str, stream), strlen(str), fclose(stream));
+
+	fclose(stream);
+
+	stream = fopen(VFS_FILE_PATH, "r+");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+
+	lib_stdsistream((FAR struct lib_stdsistream_s *)&stdsistream, stream);
+	TC_ASSERT_EQ_CLEANUP("lib_stdsistream", stdsistream.stream, stream, fclose(stream));
+
+	getch = stdsistream.public.get((FAR struct lib_sistream_s *)&stdsistream.public);
+	TC_ASSERT_EQ_CLEANUP("stdsistream_getc", stdsistream.public.nget, 1, fclose(stream));
+	TC_ASSERT_EQ_CLEANUP("stdsistream_getc", getch, str[0], fclose(stream));
+
+	/* Check seek operation */
+
+	offset = stdsistream.public.seek((FAR struct lib_sistream_s *)&stdsistream.public, SEEK_OFFSET, SEEK_SET);
+	TC_ASSERT_EQ_CLEANUP("stdsistream_seek", offset, (off_t)OK, fclose(stream));
+
+	fclose(stream);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_stdsostream
+* @brief            Initializes a stream for use with a FILE instance
+* @scenario         Initializes a stream for use with a FILE instance
+* @apicovered       lib_stdsostream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_stdsostream(void)
+{
+	FILE *stream;
+	off_t offset;
+	char buffer[STDIO_BUFLEN];
+	char *str = STREAM_TEST_CONTENTS;
+	int ret;
+
+	struct lib_stdsostream_s stdsostream;
+
+	/* Negative case, file opened with inappropriate permission */
+
+	stream = fopen(VFS_FILE_PATH, "r");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+
+	lib_stdsostream((FAR struct lib_stdsostream_s *)&stdsostream, stream);
+	TC_ASSERT_EQ_CLEANUP("lib_stdsostream", stdsostream.stream, stream, fclose(stream));
+
+	stdsostream.public.put((FAR struct lib_sostream_s *)&stdsostream.public, str[0]);
+	fclose(stream);
+	TC_ASSERT_EQ("stdsostream_putc", stdsostream.public.nput, 0);
+
+	/* Positive case, one character is put to the stdsostream */
+
+	stream = fopen(VFS_FILE_PATH, "w+");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+
+	lib_stdsostream((FAR struct lib_stdsostream_s *)&stdsostream, stream);
+	TC_ASSERT_EQ_CLEANUP("lib_stdsostream", stdsostream.stream, stream, fclose(stream));
+
+	stdsostream.public.put((FAR struct lib_sostream_s *)&stdsostream.public, str[0]);
+	TC_ASSERT_EQ_CLEANUP("stdsostream_putc", stdsostream.public.nput, 1, fclose(stream));
+
+	/* Check seek operation */
+
+	offset = stdsostream.public.seek(&stdsostream.public, SEEK_OFFSET, SEEK_SET);
+	TC_ASSERT_EQ_CLEANUP("stdsostream_seek", offset, (off_t)OK, fclose(stream));
+
+	/* Check flush operation */
+
+#if defined(CONFIG_STDIO_LINEBUFFER) && CONFIG_STDIO_BUFFER_SIZE > 0
+	stdsostream.public.flush((FAR struct lib_sostream_s *)&stdsostream.public);
+#endif
+	fclose(stream);
+
+	stream = fopen(VFS_FILE_PATH, "r+");
+	TC_ASSERT_NEQ("fopen", stream, NULL);
+
+	memset(buffer, 0, sizeof(buffer));
+	ret = fread(buffer, 1, 1, stream);
+	fclose(stream);
+	TC_ASSERT_EQ("fread", ret, 1);
+	TC_ASSERT_EQ("fread", buffer[0], str[0]);
+
+	TC_SUCCESS_RESULT();
+}
+
+/**
+* @testcase         tc_libc_stdio_tempnam
+* @brief            Returns a pointer to a string that is a valid filename
+* @scenario         The tempnam() function returns a pointer to a unique temporary filename, or NULL if a unique name cannot be generated.
+* @apicovered       tempnam(), mkstemp(), mktemp()
+* @precondition     NA
+* @postcondition    NA
+*/
+
+static void tc_libc_stdio_tempnam(void)
+{
+	const char filename[] = "tempnam_tc_test";
+	char *ret1 = NULL;
+	char *ret2 = NULL;
+	int ret_check = 0;
+	FILE *fp;
+
+	/* TC 1 with valid prefix */
+
+	ret_check = mount(MOUNT_DEV_DIR, CONFIG_LIBC_TMPDIR, "smartfs", 0, NULL);
+	TC_ASSERT_EQ("mount", ret_check, OK);
+
+	ret1 = tempnam(CONFIG_LIBC_TMPDIR, filename);
+	TC_ASSERT_NEQ_CLEANUP("tempnam", ret1, NULL, goto errout);
+
+	fp = fopen(ret1, "w");
+	TC_ASSERT_NEQ_CLEANUP("fopen", fp, NULL, goto errout1);
+	fclose(fp);
+
+	/* TC 2 with NULL prefix */
+
+	ret2 = tempnam(CONFIG_LIBC_TMPDIR, NULL);
+	TC_ASSERT_NEQ_CLEANUP("tempnam", ret2, NULL, goto errout1);
+
+	fp = fopen(ret2, "w");
+	TC_ASSERT_NEQ_CLEANUP("fopen", fp, NULL, goto errout2);
+	fclose(fp);
+
+	unlink(ret1);
+	unlink(ret2);
+	umount(CONFIG_LIBC_TMPDIR);
+
+	TC_SUCCESS_RESULT();
+
+errout2:
+	unlink(ret2);
+errout1:
+	unlink(ret1);
+errout:
+	umount(CONFIG_LIBC_TMPDIR);
+}
+
+/**
+* @testcase         tc_libc_stdio_tmpnam
+* @brief            Returns a pointer to a string that is a valid filename
+* @scenario         The tmpnam() function returns a pointer to a unique temporary filename, or NULL if a unique name cannot be generated.
+* @apicovered       tmpnam(), mkstemp(), mktemp()
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_tmpnam(void)
+{
+	char filename[] = "tmpnam_tc_test";
+	char *ret1 = NULL;
+	char *ret2 = NULL;
+	int ret_check;
+	FILE *fp;
+
+	/* TC 1 with NULL string */
+
+	ret_check = mount(MOUNT_DEV_DIR, CONFIG_LIBC_TMPDIR, "smartfs", 0, NULL);
+	TC_ASSERT_EQ("mount", ret_check, OK);
+
+	ret1 = tmpnam(NULL);
+	TC_ASSERT_NEQ_CLEANUP("tmpnam", ret1, NULL, goto errout);
+
+	fp = fopen(ret1, "w");
+	TC_ASSERT_NEQ_CLEANUP("fopen", fp, NULL, goto errout1);
+	fclose(fp);
+
+	/* TC 2 with valid string */
+
+	ret2 = tmpnam(filename);
+	TC_ASSERT_NEQ_CLEANUP("tmpnam", ret2, NULL, goto errout1);
+
+	fp = fopen(ret2, "w");
+	TC_ASSERT_NEQ_CLEANUP("fopen", fp, NULL, goto errout2);
+	fclose(fp);
+
+	unlink(ret1);
+	unlink(ret2);
+	umount(CONFIG_LIBC_TMPDIR);
+
+	TC_SUCCESS_RESULT();
+
+errout2:
+	unlink(ret2);
+errout1:
+	unlink(ret1);
+errout:
+	umount(CONFIG_LIBC_TMPDIR);
+}
+
+/**
+* @testcase         tc_libc_stdio_zeroinstream
+* @brief            Initializes a NULL stream.  The initialized stream will return an infinitely long stream of zeroes.
+* @scenario         Initializes a NULL stream.  The initialized stream will return an infinitely long stream of zeroes.
+* @apicovered       lib_zeroinstream
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_libc_stdio_zeroinstream(void)
+{
+	struct lib_instream_s zeroinstream;
+	int getch;
+
+	lib_zeroinstream((FAR struct lib_instream_s *)&zeroinstream);
+	TC_ASSERT_EQ("lib_zeroinstream", zeroinstream.nget, 0);
+
+	getch = zeroinstream.get((FAR struct lib_instream_s *)&zeroinstream);
+	TC_ASSERT_EQ("zeroinstream_getc", zeroinstream.nget, 1);
+	TC_ASSERT_EQ("zeroinstream_getc", getch, 0);
+
+	TC_SUCCESS_RESULT();
+}
+/**
+* @testcase         tc_fs_driver_mtd_procfs_ops
+* @brief            mtd procfs ops
+* @scenario         opens /proc/mtd and performs operations
+* @apicovered       mtdprocfs_operations (mtd_open, mtd_dup, mtd_stat, mtd_close)
+* @precondition     NA
+* @postcondition    NA
+*/
+#if !defined(CONFIG_FS_PROCFS_EXCLUDE_MTD)
+static void tc_driver_mtd_procfs_ops(void)
+{
+	int fd1;
+	int fd2;
+	int ret;
+	struct stat st;
+
+	fd1 = open(MTD_PROCFS_PATH, O_RDONLY);
+	TC_ASSERT_GEQ("open", fd1, 0);
+
+	fd2 = dup(fd1);
+	TC_ASSERT_GEQ_CLEANUP("dup", fd2, 0, close(fd1));
+
+	ret = stat(MTD_PROCFS_PATH, &st);
+	TC_ASSERT_EQ_CLEANUP("stat", ret, OK, close(fd1));
+
+	ret = close(fd1);
+	TC_ASSERT_EQ("close", ret, OK);
+
+	TC_SUCCESS_RESULT();
+}
+#endif
+/**
+* @testcase         tc_fs_mqueue_ops
+* @brief            mqueue creation
+* @scenario         opens the mqueue
+* @apicovered       mq_open and mq_unlink
+* @precondition     NA
+* @postcondition    NA
+*/
+static void tc_fs_mqueue_ops(void)
+{
+	mqd_t mqd_fd;
+	int ret;
+	struct mq_attr attr;
+	attr.mq_maxmsg  = 20;
+	attr.mq_msgsize = 10;
+	attr.mq_flags   = 0;
+
+	/*Invalid param*/
+	mqd_fd = mq_open(NULL, O_WRONLY | O_CREAT, 0666, &attr);
+	TC_ASSERT_EQ("mq_open", mqd_fd, (mqd_t)ERROR);
+
+	mqd_fd = mq_open(MOUNT_DIR, O_RDONLY, 0666, &attr);
+	TC_ASSERT_EQ("mq_open", mqd_fd, (mqd_t)ERROR);
+
+	mqd_fd = mq_open("test_mqueue", O_CREAT, 0666, &attr);
+	TC_ASSERT_NEQ("mq_open", mqd_fd, (mqd_t)ERROR);
+
+	/*Opening invalid mqueue*/
+	mqd_fd = mq_open("Test_mqueue", O_RDONLY, 0666, &attr);
+	TC_ASSERT_EQ("mq_open", mqd_fd, (mqd_t)ERROR);
+
+	ret = mq_unlink("Test_mqueue");
+	TC_ASSERT_EQ("mq_unlink", mqd_fd, (mqd_t)ERROR);
+
+	ret = mq_unlink("test_mqueue");
+	TC_ASSERT_EQ("mq_unlink", ret, OK);
+
+	TC_SUCCESS_RESULT();
+}
+/**
+* @testcase         tc_libc_stdio_ungetc
 * @brief            Input character into file stream
 * @scenario         Get character by fgets and then input again with ungetc. after that compare both of characters
 * @apicovered       fopen, fputc, fgetc, ungetc
 * @precondition     NA
 * @postcondition    NA
 */
-static void libc_stdio_ungetc_tc(void)
+static void tc_libc_stdio_ungetc(void)
 {
 	FILE *fp;
 	char *filename = VFS_FILE_PATH;
 	int ret;
 	int ch1, ch2;
+#if CONFIG_NUNGET_CHARS > 0
+	int num;
+#endif
 
 	fp = fopen(filename, "w+");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	ret = fputc(32, fp);
 	fclose(fp);
 	TC_ASSERT_NEQ("fputc", ret, EOF);
 
 	fp = fopen(filename, "r");
-	TC_ASSERT("fopen", fp);
+	TC_ASSERT_NEQ("fopen", fp, NULL);
 
 	ch1 = fgetc(fp);
-	TC_ASSERT_NEQ_CLEANUP("fgetc", ch1, EOF, ERROR_MSG_DIFFRENT_CONTENTS, fclose(fp));
+	TC_ASSERT_NEQ_CLEANUP("fgetc", ch1, EOF, fclose(fp));
 
-	ret = ungetc(64, fp);
-	TC_ASSERT_NEQ_CLEANUP("ungetc", ret, EOF, ERROR_MSG_OP_FAILED, fclose(fp));
+	/* Negative case with invalid argument, NULL stream. It will return EOF */
 
+	ret = ungetc(STDIO_BUFLEN, NULL);
+	TC_ASSERT_EQ_CLEANUP("ungetc", ret, EOF, fclose(fp));
+
+	ret = ungetc(STDIO_BUFLEN, fp);
+	TC_ASSERT_NEQ_CLEANUP("ungetc", ret, EOF, fclose(fp));
+
+	/* Negative case with invalid argument. It will return EOF */
+
+#if CONFIG_NUNGET_CHARS > 0
+	num = fp->fs_nungotten;
+	fp->fs_nungotten = 4;
+	ret = ungetc(STDIO_BUFLEN, fp);
+	fp->fs_nungotten = num;
+	TC_ASSERT_EQ_CLEANUP("ungetc", ret, EOF, fclose(fp));
+#endif
 	ch2 = fgetc(fp);
 	fclose(fp);
 	TC_ASSERT_NEQ("fgetc", ch2, EOF);
@@ -1631,96 +3448,193 @@ static void libc_stdio_ungetc_tc(void)
 	TC_SUCCESS_RESULT();
 }
 
-static int fs_sample_launcher(int argc, char **args)
+/**
+* @testcase         tc_fs_driver_ramdisk_ops
+* @brief            creating an ramddisk device
+* @scenario         Creates an /dev/ram2 and peforms operations on /dev/ram2
+* @apicovered       rd_open, rd_close, ramdisk_register, rd_read, rd_write
+* @precondition     NA
+* @postcondition    NA
+*/
+#ifdef CONFIG_BCH
+static void tc_fs_driver_ramdisk_ops(void)
 {
-	total_pass = 0;
-	total_fail = 0;
+	uint8_t *buffer;
+	int sectsize = 512;
+	uint32_t nsectors = 1;
+	int minor = 2;
+	int ret;
+	int fd;
+	char buf[20];
+	long size;
 
-	fs_vfs_umount_tc();
-	fs_vfs_mount_tc();
-	fs_vfs_open_tc();
-	fs_vfs_write_tc();
-	fs_vfs_read_tc();
-	fs_vfs_close_tc();
-	fs_vfs_dup_tc();
-	fs_vfs_dup2_tc();
-	fs_vfs_fsync_tc();
-	fs_vfs_lseek_tc();
-	fs_vfs_pwrite_tc();
-	fs_vfs_pread_tc();
-	fs_vfs_mkdir_tc();
-	fs_vfs_opendir_tc();
-	fs_vfs_readdir_tc();
-	fs_vfs_rewinddir_tc();
-	fs_vfs_seekdir_tc();
-	fs_vfs_closedir_tc();
-	fs_libc_dirent_readdir_r_tc();
-	fs_libc_dirent_telldir_tc();
-	fs_vfs_rmdir_tc();
-	fs_vfs_unlink_tc();
-	fs_vfs_stat_tc();
-	fs_vfs_statfs_tc();
-#if defined(CONFIG_PIPES) && (CONFIG_DEV_PIPE_SIZE > 11)
-	fs_vfs_mkfifo_tc();
-#endif
-	fs_vfs_sendfile_tc();
-	fs_vfs_fcntl_tc();
-#ifndef CONFIG_DISABLE_POLL
-	fs_vfs_poll_tc();
-	fs_vfs_select_tc();
-#endif
-	fs_vfs_rename_tc();
-	fs_vfs_ioctl_tc();
-#ifdef CONFIG_TC_FS_PROCFS
-	tc_fs_procfs_main();
-#endif
-	libc_stdio_fdopen_tc();
-	libc_stdio_fopen_tc();
-	libc_stdio_fclose_tc();
-	libc_stdio_fputs_tc();
-	libc_stdio_fgets_tc();
-	libc_stdio_fseek_tc();
-	libc_stdio_ftell_tc();
-	libc_stdio_feof_tc();
-	libc_stdio_fprintf_tc();
-	libc_stdio_fsetpos_tc();
-	libc_stdio_fgetpos_tc();
-	libc_stdio_fputc_tc();
-	libc_stdio_fgetc_tc();
-	libc_stdio_fwrite_tc();
-	libc_stdio_fread_tc();
-	libc_stdio_ferror_tc();
-	libc_stdio_clearerr_tc();
-	libc_stdio_gets_tc();
-	libc_stdio_gets_s_tc();
-	libc_stdio_fileno_tc();
-	libc_stdio_ungetc_tc();
+	/* Allocate the memory backing up the ramdisk */
+	buffer = (uint8_t *)malloc(sectsize * nsectors);
+	if (!buffer) {
+		printf("out of memory \n");
+		return;
+	}
 
-	printf("#########################################\n");
-	printf("           FS TC Result               \n");
-	printf("           PASS : %d FAIL : %d        \n",
-		   total_pass, total_fail);
-	printf("#########################################\n");
-	return total_pass;
+	ret = ramdisk_register(minor, buffer, nsectors, sectsize, RDFLAG_WRENABLED | RDFLAG_FUNLINK);
+	TC_ASSERT_EQ_CLEANUP("ramdisk_register", ret, OK, free(buffer));
+
+	fd = open(DEV_RAMDISK_PATH, O_RDWR);
+	TC_ASSERT_GEQ_CLEANUP("open", fd, 0, free(buffer));
+
+	ret = ioctl(fd, BIOC_XIPBASE, &size);
+	TC_ASSERT_EQ_CLEANUP("ioctl", ret, OK, free(buffer); close(fd));
+
+	ret = read(fd, buf, sizeof(buf));
+	TC_ASSERT_NEQ_CLEANUP("read", ret, ERROR, free(buffer); close(fd));
+
+#ifdef CONFIG_FS_WRITABLE
+	ret = write(fd, buf, sizeof(buf));
+	TC_ASSERT_NEQ_CLEANUP("write", ret, ERROR, free(buffer); close(fd));
+#endif
+
+	ret = close(fd);
+	TC_ASSERT_EQ_CLEANUP("close", ret, OK, free(buffer));
+
+	ret = unlink(DEV_RAMDISK_PATH);
+	TC_ASSERT_EQ_CLEANUP("unlink", ret, OK, free(buffer));
+
+	TC_SUCCESS_RESULT();
 }
-
+#endif
 #ifdef CONFIG_BUILD_KERNEL
 int main(int argc, FAR char *argv[])
 #else
-int fs_main(int argc, char *argv[])
+int tc_filesystem_main(int argc, char *argv[])
 #endif
 {
-	sem_wait(&tc_sem);
-	working_tc++;
+	if (tc_handler(TC_START, "FileSystem TC") == ERROR) {
+		return ERROR;
+	}
 
-#ifdef CONFIG_TASH
-	tash_cmd_install("fs_sample", fs_sample_launcher, TASH_EXECMD_SYNC);
-#else
-	fs_sample_launcher(argc, argv);
+	tc_fs_vfs_umount();
+	tc_fs_vfs_mount();
+	tc_fs_vfs_open();
+	tc_fs_vfs_write();
+	tc_fs_vfs_read();
+	tc_fs_vfs_close();
+	tc_fs_vfs_dup();
+	tc_fs_vfs_dup2();
+	tc_fs_vfs_fsync();
+	tc_fs_vfs_lseek();
+	tc_fs_vfs_pwrite();
+	tc_fs_vfs_pread();
+	tc_fs_vfs_mkdir();
+	tc_fs_vfs_opendir();
+	tc_fs_vfs_readdir();
+	tc_fs_vfs_rewinddir();
+	tc_fs_vfs_seekdir();
+	tc_fs_vfs_closedir();
+	fs_libc_dirent_readdir_r();
+	fs_libc_dirent_telldir();
+	tc_fs_vfs_rmdir();
+	tc_fs_vfs_unlink();
+	tc_fs_vfs_stat();
+	tc_fs_vfs_statfs();
+	tc_fs_vfs_fstat();
+	tc_fs_vfs_fstatfs();
+#if defined(CONFIG_PIPES) && (CONFIG_DEV_PIPE_SIZE > 11)
+	tc_fs_vfs_mkfifo();
+#endif
+	tc_fs_vfs_sendfile();
+	tc_fs_vfs_fcntl();
+	tc_fs_vfs_fdopen();
+#ifndef CONFIG_DISABLE_POLL
+	tc_fs_vfs_poll();
+#ifndef CONFIG_DISABLE_MANUAL_TESTCASE
+	tc_fs_vfs_select();
+#endif
 #endif
 
-	working_tc--;
-	sem_post(&tc_sem);
+	tc_fs_vfs_rename();
+	tc_fs_vfs_ioctl();
+#ifdef CONFIG_TC_FS_PROCFS
+	tc_fs_procfs_main();
+#endif
+#if defined(CONFIG_TC_FS_PROCFS) && !defined(CONFIG_FS_PROCFS_EXCLUDE_SMARTFS)
+	tc_fs_smartfs_procfs_main();
+#endif
+#if defined(CONFIG_MTD_CONFIG)
+	tc_driver_mtd_config_ops();
+#endif
+
+#if defined(CONFIG_MTD_FTL) && defined(CONFIG_BCH)
+	tc_driver_mtd_ftl_ops();
+#endif
+
+	tc_libc_stdio_dprintf();
+	tc_libc_stdio_fdopen();
+	tc_libc_stdio_fopen();
+	tc_libc_stdio_fclose();
+	tc_libc_stdio_fputs();
+	tc_libc_stdio_fgets();
+	tc_libc_stdio_fseek();
+	tc_libc_stdio_ftell();
+	tc_libc_stdio_feof();
+	tc_libc_stdio_fprintf();
+	tc_libc_stdio_fsetpos();
+	tc_libc_stdio_fgetpos();
+	tc_libc_stdio_fputc();
+	tc_libc_stdio_fgetc();
+	tc_libc_stdio_fwrite();
+	tc_libc_stdio_fread();
+	tc_libc_stdio_freopen();
+	tc_libc_stdio_ferror();
+	tc_libc_stdio_clearerr();
+#ifndef CONFIG_DISABLE_MANUAL_TESTCASE
+	tc_libc_stdio_gets();
+	tc_libc_stdio_gets_s();
+#endif
+	tc_libc_stdio_fileno();
+#if CONFIG_STDIO_BUFFER_SIZE > 0
+	tc_libc_stdio_lib_rdflush();
+#endif
+#ifdef CONFIG_STDIO_LINEBUFFER
+	tc_libc_stdio_lib_snoflush();
+#endif
+	tc_libc_stdio_lib_sprintf();
+	tc_libc_stdio_remove();
+#if CONFIG_STDIO_BUFFER_SIZE > 0
+	tc_libc_stdio_setbuf();
+	tc_libc_stdio_setvbuf();
+#endif
+#if !defined(CONFIG_FS_PROCFS_EXCLUDE_MTD)
+	tc_driver_mtd_procfs_ops();
+#endif
+	tc_fs_mqueue_ops();
+#ifdef CONFIG_BCH
+	tc_fs_driver_ramdisk_ops();
+#endif
+	tc_libc_stdio_meminstream();
+	tc_libc_stdio_memoutstream();
+	tc_libc_stdio_memsistream();
+	tc_libc_stdio_memsostream();
+	tc_libc_stdio_nullinstream();
+	tc_libc_stdio_nulloutstream();
+	tc_libc_stdio_rawinstream();
+	tc_libc_stdio_rawoutstream();
+	tc_libc_stdio_rawsistream();
+	tc_libc_stdio_rawsostream();
+	tc_libc_stdio_sprintf();
+	tc_libc_stdio_stdinstream();
+	tc_libc_stdio_stdoutstream();
+	tc_libc_stdio_stdsistream();
+	tc_libc_stdio_stdsostream();
+	tc_libc_stdio_tempnam();
+	tc_libc_stdio_tmpnam();
+	tc_libc_stdio_ungetc();
+	tc_libc_stdio_zeroinstream();
+#ifdef CONFIG_ITC_FS
+	itc_fs_main();
+#endif
+#if defined(CONFIG_TC_FS_PROCFS) && !defined(CONFIG_SMARTFS_MULTI_ROOT_DIRS)
+	tc_fs_smartfs_mksmartfs();
+#endif
+	(void)tc_handler(TC_END, "FileSystem TC");
 
 	return 0;
 }

@@ -100,19 +100,21 @@ extern "C" {
 /**
  * @ingroup TIME_KERNEL
  * @brief Return true if the specified year is a leap year
- * @param[in] year to check whether a leap year or not
+ * @details @b #include <tinyara/time.h>
+ * @param[in] year year to check whether a leap year or not
  * @return if leap year, TRUE or FALSE
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 EXTERN int clock_isleapyear(int year);
 
 /**
  * @ingroup TIME_KERNEL
  * @brief Get the number of days that occurred before the beginning of the month.
- * @param[in] the beginning of the month
- * @param[in] leap year
+ * @details @b #include <tinyara/time.h>
+ * @param[in] month the beginning of the month
+ * @param[in] leapyear leap year
  * @return the number of days
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 EXTERN int clock_daysbeforemonth(int month, bool leapyear);
 
@@ -122,13 +124,13 @@ EXTERN int clock_daysbeforemonth(int month, bool leapyear);
  */
 /**
  * @ingroup TIME_KERNEL
- * @todo
  * @brief Get the day of the week
- * @param[in] The day of the month 1 - 31
- * @param[in] The month of the year 1 - 12
- * @param[in] the year including the 1900
+ * @details @b #include <tinyara/time.h>
+ * @param[in] mday The day of the month 1 - 31
+ * @param[in] month The month of the year 1 - 12
+ * @param[in] year the year including the 1900
  * @return Zero based day of the week 0-6, 0 = Sunday, 1 = Monday... 6 = Saturday
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #if defined(CONFIG_TIME_EXTENDED)
 int clock_dayoftheweek(int mday, int month, int year);
@@ -140,15 +142,16 @@ int clock_dayoftheweek(int mday, int month, int year);
 /**
  * @ingroup TIME_KERNEL
  * @brief Conversion Calendar/UTC
- * @details based on algorithms from p. 604
+ * @details @b #include <tinyara/time.h> \n
+ *    based on algorithms from p. 604
  *    of Seidelman, P. K. 1992.  Explanatory Supplement to
  *    the Astronomical Almanac.  University Science Books,
  *    Mill Valley.
- * @param[in] year to change
- * @param[in] month to change
- * @param[in] day to change
+ * @param[in] year year to change
+ * @param[in] month month to change
+ * @param[in] day day to change
  * @return the specific time
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 EXTERN time_t clock_calendar2utc(int year, int month, int day);
 

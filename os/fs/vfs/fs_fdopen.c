@@ -228,11 +228,7 @@ FAR struct file_struct *fs_fdopen(int fd, int oflags, FAR struct tcb_s *tcb)
 		if (stream->fs_fd < 0) {
 			/* Zero the structure */
 
-#if CONFIG_STDIO_BUFFER_SIZE > 0
 			memset(stream, 0, sizeof(FILE));
-#elif CONFIG_NUNGET_CHARS > 0
-			stream->fs_nungotten = 0;
-#endif
 
 #if CONFIG_STDIO_BUFFER_SIZE > 0
 			/* Initialize the semaphore the manages access to the buffer */
@@ -253,7 +249,6 @@ FAR struct file_struct *fs_fdopen(int fd, int oflags, FAR struct tcb_s *tcb)
 			/* Set up pointers */
 
 			stream->fs_bufend = &stream->fs_bufstart[CONFIG_STDIO_BUFFER_SIZE];
-			stream->fs_bufpos = stream->fs_bufstart;
 			stream->fs_bufpos = stream->fs_bufstart;
 			stream->fs_bufread = stream->fs_bufstart;
 #endif

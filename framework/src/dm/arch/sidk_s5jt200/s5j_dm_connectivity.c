@@ -40,9 +40,9 @@
 #include <dm/dm_error.h>
 #include <dm/dm_connectivity.h>
 
-#include <apps/netutils/dhcpc.h>
-#include <apps/netutils/wifi/slsi_wifi_api.h>
-#include <apps/netutils/wifi/slsi_wifi_utils.h>
+#include <protocols/dhcpc.h>
+#include <slsi_wifi/slsi_wifi_api.h>
+#include <slsi_wifi/slsi_wifi_utils.h>
 #include <arpa/inet.h>
 
 #define DM_GET_INTERFACE_INFO 0
@@ -200,7 +200,7 @@ int dm_conn_get_address(char *ipAddr)
 	ifcfg.ifc_buf = NULL;
 	ifcfg.ifc_len = sizeof(struct ifreq) * numreqs;
 	ifcfg.ifc_buf = malloc(ifcfg.ifc_len);
-	if (ioctl(fd, SIOCGIFCONF, (void *)&ifcfg) < 0) {
+	if (ioctl(fd, SIOCGIFCONF, (unsigned long)&ifcfg) < 0) {
 		perror("SIOCGIFCONF ");
 		goto DONE;
 	}
@@ -243,7 +243,7 @@ int dm_conn_get_interface(char *interface)
 	ifcfg.ifc_buf = NULL;
 	ifcfg.ifc_len = sizeof(struct ifreq) * numreqs;
 	ifcfg.ifc_buf = malloc(ifcfg.ifc_len);
-	if (ioctl(fd, SIOCGIFCONF, (void *)&ifcfg) < 0) {
+	if (ioctl(fd, SIOCGIFCONF, (unsigned long)&ifcfg) < 0) {
 		perror("SIOCGIFCONF ");
 		goto DONE;
 	}

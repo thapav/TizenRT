@@ -72,11 +72,15 @@ static void tc_libc_stdio_flush(void)
 	sleep(3);
 	printf("\n");
 
+	/* flush with stream argument NULL. It will flush all streams */
+	ret_chk = fflush(NULL);
+	TC_ASSERT_EQ("fflush", ret_chk, OK);
+
 	TC_SUCCESS_RESULT();
 }
 
 /**
-* @fn                   :tc_libc_stdio_avsprintf
+* @fn                   :tc_libc_stdio_vasprintf
 * @brief                :write formatted output to a dynamically allocated string
 * @scenario             :function shall write formatted output to a dynamically allocated string
 * API's covered         :avsprintf
@@ -84,22 +88,20 @@ static void tc_libc_stdio_flush(void)
 * Postconditions        :none
 * @return               :void
 */
-static void tc_libc_stdio_avsprintf(const char *format, ...)
+static void tc_libc_stdio_vasprintf(const char *format, ...)
 {
 	int ret_chk;
 	char *buffer;
 	va_list args;
 	va_start(args, format);
-	ret_chk = avsprintf(&buffer, format, args);
+	ret_chk = vasprintf(&buffer, format, args);
 	va_end(args);
-	TC_ASSERT_NOT_NULL("avsprintf", buffer);
+	TC_ASSERT_NEQ("avsprintf", buffer, NULL);
 	TC_ASSERT_EQ_CLEANUP("avsprintf",
 						 ret_chk, strlen(printable_chars),
-						 get_errno(),
 						 TC_FREE_MEMORY(buffer));
 	TC_ASSERT_EQ_CLEANUP("avsprintf",
 						 strcmp(printable_chars, buffer), 0,
-						 get_errno(),
 						 TC_FREE_MEMORY(buffer));
 
 	TC_FREE_MEMORY(buffer);
@@ -545,14 +547,12 @@ static void tc_libc_stdio_asprintf(void)
 
 	ret_chk = asprintf(&buffer, "%s", printable_chars);
 
-	TC_ASSERT_NOT_NULL("asprintf", buffer);
+	TC_ASSERT_NEQ("asprintf", buffer, NULL);
 	TC_ASSERT_EQ_CLEANUP("asprintf",
 						 ret_chk, strlen(printable_chars),
-						 get_errno(),
 						 TC_FREE_MEMORY(buffer));
 	TC_ASSERT_EQ_CLEANUP("asprintf",
 						 strcmp(printable_chars, buffer), 0,
-						 get_errno(),
 						 TC_FREE_MEMORY(buffer));
 
 	TC_FREE_MEMORY(buffer);
@@ -590,7 +590,7 @@ static void tc_libc_stdio_putchar(void)
 int libc_stdio_main(void)
 {
 	tc_libc_stdio_flush();
-	tc_libc_stdio_avsprintf("%s", printable_chars);
+	tc_libc_stdio_vasprintf("%s", printable_chars);
 	tc_libc_stdio_snprintf();
 	tc_libc_stdio_sscanf();
 	tc_libc_stdio_sprintf();

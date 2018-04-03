@@ -22,25 +22,18 @@
 
 #include <tinyara/config.h>
 #include <stdio.h>
-#include <semaphore.h>
+#include "tc_common.h"
 #include "tc_internal.h"
-
-extern sem_t tc_sem;
-extern int working_tc;
 
 #ifdef CONFIG_BUILD_KERNEL
 int main(int argc, FAR char *argv[])
 #else
-int kernel_tc_main(int argc, char *argv[])
+int tc_kernel_main(int argc, char *argv[])
 #endif
 {
-	sem_wait(&tc_sem);
-	working_tc++;
-
-	total_pass = 0;
-	total_fail = 0;
-
-	printf("=== TINYARA Kernel TC START! ===\n");
+	if (tc_handler(TC_START, "Kernel TC") == ERROR) {
+		return ERROR;
+	}
 
 #ifdef CONFIG_TC_KERNEL_TASH_HEAPINFO
 	tash_heapinfo_main();
@@ -75,6 +68,10 @@ int kernel_tc_main(int argc, char *argv[])
 	group_main();
 #endif
 
+#ifdef CONFIG_TC_KERNEL_LIBC_FIXEDMATH
+	libc_fixedmath_main();
+#endif
+
 #ifdef CONFIG_TC_KERNEL_LIBC_LIBGEN
 	libc_libgen_main();
 #endif
@@ -90,10 +87,11 @@ int kernel_tc_main(int argc, char *argv[])
 	libc_misc_main();
 #endif
 
-#ifdef CONFIG_TC_KERNEL_LIBC_PTHREAD
-#if (!defined CONFIG_PTHREAD_MUTEX_TYPES)
-#error CONFIG_PTHREAD_MUTEX_TYPES is needed for testing LIBC_PTHREAD TC
+#ifdef CONFIG_TC_KERNEL_LIBC_MQUEUE
+	libc_mqueue_main();
 #endif
+
+#ifdef CONFIG_TC_KERNEL_LIBC_PTHREAD
 	libc_pthread_main();
 #endif
 
@@ -152,9 +150,6 @@ int kernel_tc_main(int argc, char *argv[])
 #endif
 
 #ifdef CONFIG_TC_KERNEL_PTHREAD
-#if (!defined CONFIG_PTHREAD_MUTEX_TYPES)
-#error CONFIG_PTHREAD_MUTEX_TYPES is needed for testing PTHREAD TC
-#endif
 	pthread_main();
 #endif
 
@@ -198,11 +193,47 @@ int kernel_tc_main(int argc, char *argv[])
 #ifdef CONFIG_TC_KERNEL_UMM_HEAP
 	umm_heap_main();
 #endif
-	printf("\n=== TINYARA Kernel TC COMPLETE ===\n");
-	printf("\t\tTotal pass : %d\n\t\tTotal fail : %d\n", total_pass, total_fail);
 
-	working_tc--;
-	sem_post(&tc_sem);
+#ifdef CONFIG_TC_KERNEL_WORK_QUEUE
+	wqueue_main();
+#endif
+
+#ifdef CONFIG_ITC_KERNEL_ENVIRON
+	itc_environ_main();
+#endif
+
+#ifdef CONFIG_ITC_KERNEL_LIBC_PTHREAD
+	itc_libc_pthread_main();
+#endif
+
+#ifdef CONFIG_ITC_KERNEL_LIBC_SEMAPHORE
+	itc_libc_semaphore_main();
+#endif
+
+#ifdef CONFIG_ITC_KERNEL_SEMAPHORE
+	itc_semaphore_main();
+#endif
+
+#ifdef CONFIG_ITC_KERNEL_SCHED
+#if (!defined CONFIG_SCHED_HAVE_PARENT)
+	/* #error CONFIG_SCHED_HAVE_PARENT is needed for testing SCHED TC */
+#endif
+	itc_sched_main();
+#endif
+
+#ifdef CONFIG_ITC_KERNEL_TIMER
+	itc_timer_main();
+#endif
+
+#ifdef CONFIG_ITC_KERNEL_LIBC_SPAWN
+	itc_libc_spawn_main();
+#endif
+
+#ifdef CONFIG_ITC_KERNEL_PTHREAD
+	itc_pthread_main();
+#endif
+
+	(void)tc_handler(TC_END, "Kernel TC");
 
 	return 0;
 }

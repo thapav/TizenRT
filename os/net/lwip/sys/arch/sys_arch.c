@@ -30,6 +30,7 @@
 #include <tinyara/arch.h>
 #include <tinyara/cancelpt.h>
 #include <tinyara/kthread.h>
+#include <tinyara/semaphore.h>
 #include <sys/types.h>
 
 /* lwIP includes. */
@@ -50,7 +51,7 @@
 #define SYS_THREAD_MAX 6
 
 static u16_t s_nextthread = 0;
-
+static u32_t g_mbox_id = 0;
 /*---------------------------------------------------------------------------*
  * Routine:  sys_mbox_new
  *---------------------------------------------------------------------------*
@@ -64,10 +65,9 @@ static u16_t s_nextthread = 0;
  *---------------------------------------------------------------------------*/
 err_t sys_mbox_new(sys_mbox_t *mbox, int queue_sz)
 {
-
 	err_t err = ERR_OK;
 	mbox->is_valid = 1;
-	mbox->id = lwip_stats.sys.mbox.used + 1;
+	mbox->id = g_mbox_id++;
 	mbox->queue_size = queue_sz;
 	mbox->wait_send = 0;
 	mbox->wait_fetch = 0;
@@ -151,8 +151,6 @@ void sys_mbox_post(sys_mbox_t *mbox, void *msg)
 		}
 	}
 
-	mbox->msgs[mbox->rear] = msg;
-	LWIP_DEBUGF(SYS_DEBUG, ("Post SUCCESS\n"));
 	if (mbox->rear == mbox->front) {
 		first_msg = 1;
 	} else {
@@ -160,6 +158,8 @@ void sys_mbox_post(sys_mbox_t *mbox, void *msg)
 	}
 
 	mbox->rear = tmp;
+	mbox->msgs[mbox->rear] = msg;
+	LWIP_DEBUGF(SYS_DEBUG, ("Post SUCCESS\n"));
 
 	/* If msg was posted to an empty queue, Release semaphore for
 	   some fetch api blocked on this sem due to Empty queue. */
@@ -200,8 +200,6 @@ err_t sys_mbox_trypost(sys_mbox_t *mbox, void *msg)
 		goto errout_with_mutex;
 	}
 
-	mbox->msgs[mbox->rear] = msg;
-	LWIP_DEBUGF(SYS_DEBUG, ("Post SUCCESS\n"));
 	if (mbox->rear == mbox->front) {
 		first_msg = 1;
 	} else {
@@ -209,6 +207,8 @@ err_t sys_mbox_trypost(sys_mbox_t *mbox, void *msg)
 	}
 
 	mbox->rear = tmp;
+	mbox->msgs[mbox->rear] = msg;
+	LWIP_DEBUGF(SYS_DEBUG, ("Post SUCCESS\n"));
 
 	/* If msg was posted to an empty queue, Release semaphore for
 	   some fetch api blocked on this sem due to Empty queue. */
@@ -284,17 +284,16 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
 		mbox->wait_fetch--;
 		if (status == SYS_ARCH_CANCELED) {
 			return SYS_ARCH_CANCELED;
-		}		
+		}
 	}
 
+	mbox->front = (mbox->front + 1) % mbox->queue_size;
 	if (msg != NULL) {
 		*msg = mbox->msgs[mbox->front];
 		LWIP_DEBUGF(SYS_DEBUG, (" mbox %p msg %p\n", (void *)mbox, *msg));
 	} else {
 		LWIP_DEBUGF(SYS_DEBUG, (" mbox %p, null msg\n", (void *)mbox));
 	}
-
-	mbox->front = (mbox->front + 1) % mbox->queue_size;
 
 	/* We just fetched a msg, Release semaphore for
 	   some post api blocked on this sem due to queue full. */
@@ -335,14 +334,13 @@ u32_t sys_arch_mbox_tryfetch(sys_mbox_t *mbox, void **msg)
 		goto errout_with_mutex;
 	}
 
+	mbox->front = (mbox->front + 1) % mbox->queue_size;
 	if (msg != NULL) {
 		LWIP_DEBUGF(SYS_DEBUG, ("mbox %p msg %p\n", (void *)mbox, *msg));
 		*msg = mbox->msgs[mbox->front];
 	} else {
 		LWIP_DEBUGF(SYS_DEBUG, ("mbox %p, null msg\n", (void *)mbox));
 	}
-
-	mbox->front = (mbox->front + 1) % mbox->queue_size;
 
 	/* We just fetched a msg, Release semaphore for
 	   some post api blocked on this sem due to queue full. */
@@ -657,7 +655,7 @@ sys_thread_t sys_thread_new(const char *name, lwip_thread_fn entry_function, voi
 
 	if (s_nextthread < SYS_THREAD_MAX) {
 		sys_thread_t new_thread;
-		new_thread = task_create(name, priority, stacksize, (main_t)entry_function, (char * const *)NULL);
+		new_thread = kernel_thread(name, priority, stacksize, (main_t)entry_function, (char * const *)NULL);
 		if (new_thread < 0) {
 			int errval = errno;
 			LWIP_DEBUGF(SYS_DEBUG, ("Failed to create new_thread: %d", errval));

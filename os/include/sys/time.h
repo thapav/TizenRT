@@ -86,8 +86,10 @@ extern "C" {
 #define EXTERN extern
 #endif
 /**
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @brief get the date and time
+ * @details @b #include <sys/time.h> \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v1.0
  */
 EXTERN int gettimeofday(struct timeval *tv, FAR struct timezone *tz);
 
@@ -98,4 +100,5 @@ EXTERN int gettimeofday(struct timeval *tv, FAR struct timezone *tz);
 
 #endif							/* __INCLUDE_SYS_TIME_H */
 /**
-		  * @} *///end for TIME_KERNEL
+ * @}
+ */

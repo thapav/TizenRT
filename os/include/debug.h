@@ -135,24 +135,23 @@
 Once LOGM is approved, each module should have its own index
 */
 #define LOGM_IDX (0)
-#define LOGM_PRI (1)
-#define LOGM_EN  (2)
 
 #ifdef CONFIG_DEBUG_ERROR
 #ifdef CONFIG_LOGM
 #define dbg(format, ...) \
-	logm(LOGM_EN, LOGM_IDX, LOGM_PRI, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
+	logm(LOGM_NORMAL, LOGM_IDX, LOGM_ERR, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
 
 #define dbg_noarg(format, ...) \
-	logm(LOGM_EN, LOGM_IDX, LOGM_PRI, format, ##__VA_ARGS__)
+	logm(LOGM_NORMAL, LOGM_IDX, LOGM_ERR, format, ##__VA_ARGS__)
 
 #define lldbg(format, ...) \
-	logm(LOGM_EN, LOGM_IDX, LOGM_PRI, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
+	logm(LOGM_LOWPUT, LOGM_IDX, LOGM_ERR, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
 
 #else
 /**
  * @brief  Error debug
- * @since Tizen RT v1.0
+ * @details @b #include <debug.h>
+ * @since TizenRT v1.0
  */
 #define dbg(format, ...) \
 	syslog(LOG_ERR, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
@@ -162,7 +161,8 @@ Once LOGM is approved, each module should have its own index
 #ifdef CONFIG_ARCH_LOWPUTC
 /**
  * @brief  Error debug for low-level
- * @since Tizen RT v1.0
+ * @details @b #include <debug.h>
+ * @since TizenRT v1.0
  */
 #define lldbg(format, ...) \
 	lowsyslog(LOG_ERR, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
@@ -179,15 +179,16 @@ Once LOGM is approved, each module should have its own index
 #ifdef CONFIG_DEBUG_WARN
 #ifdef CONFIG_LOGM
 #define wdbg(format, ...) \
-	logm(LOGM_EN, LOGM_IDX, LOGM_PRI, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
+	logm(LOGM_NORMAL, LOGM_IDX, LOGM_WRN, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
 
 #define llwdbg(format, ...) \
-	logm(LOGM_EN, LOGM_IDX, LOGM_PRI, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
+	logm(LOGM_LOWPUT, LOGM_IDX, LOGM_WRN, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
 
 #else
 /**
  * @brief  Warning debug
- * @since Tizen RT v1.0
+ * @details @b #include <debug.h>
+ * @since TizenRT v1.0
  */
 #define wdbg(format, ...) \
 	syslog(LOG_WARNING, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
@@ -195,7 +196,8 @@ Once LOGM is approved, each module should have its own index
 #ifdef CONFIG_ARCH_LOWPUTC
 /**
  * @brief  Warning debug for low-level
- * @since Tizen RT v1.0
+ * @details @b #include <debug.h>
+ * @since TizenRT v1.0
  */
 #define llwdbg(format, ...) \
 	lowsyslog(LOG_WARNING, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
@@ -212,15 +214,16 @@ Once LOGM is approved, each module should have its own index
 #ifdef CONFIG_DEBUG_VERBOSE
 #ifdef CONFIG_LOGM
 #define vdbg(format, ...) \
-	logm(LOGM_EN, LOGM_IDX, LOGM_PRI, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
+	logm(LOGM_NORMAL, LOGM_IDX, LOGM_INF, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
 
 #define llvdbg(format, ...) \
-	logm(LOGM_EN, LOGM_IDX, LOGM_PRI, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
+	logm(LOGM_LOWPUT, LOGM_IDX, LOGM_INF, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
 
 #else
 /**
  * @brief  Informational(Verbose) debug
- * @since Tizen RT v1.0
+ * @details @b #include <debug.h>
+ * @since TizenRT v1.0
  */
 #define vdbg(format, ...) \
 	syslog(LOG_INFO, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
@@ -228,7 +231,8 @@ Once LOGM is approved, each module should have its own index
 #ifdef CONFIG_ARCH_LOWPUTC
 /**
  * @brief  Informational(Verbose) debug for low-level
- * @since Tizen RT v1.0
+ * @details @b #include <debug.h>
+ * @since TizenRT v1.0
  */
 #define llvdbg(format, ...) \
 	lowsyslog(LOG_INFO, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
@@ -594,6 +598,79 @@ Once LOGM is approved, each module should have its own index
 #define lllvdbg(x...)
 #endif
 
+#ifdef CONFIG_DEBUG_AUDIO_ERROR
+#define auddbg(format, ...)    dbg(format, ##__VA_ARGS__)
+#define audlldbg(format, ...)  lldbg(format, ##__VA_ARGS__)
+#else
+#define auddbg(x...)
+#define audlldbg(x...)
+#endif
+
+#ifdef CONFIG_DEBUG_AUDIO_WARN
+#define audwdbg(format, ...)    wdbg(format, ##__VA_ARGS__)
+#define audllwdbg(format, ...)  llwdbg(format, ##__VA_ARGS__)
+#else
+#define audwdbg(x...)
+#define audllwdbg(x...)
+#endif
+
+#ifdef CONFIG_DEBUG_AUDIO_INFO
+#define audvdbg(format, ...)   vdbg(format, ##__VA_ARGS__)
+#define audllvdbg(format, ...) llvdbg(format, ##__VA_ARGS__)
+#else
+#define audvdbg(x...)
+#define audllvdbg(x...)
+#endif
+
+#ifdef CONFIG_DEBUG_I2C_ERROR
+#define i2cerr(format, ...)    dbg(format, ##__VA_ARGS__)
+#define i2clldbg(format, ...)  lldbg(format, ##__VA_ARGS__)
+#else
+#define i2cerr(x...)
+#define i2clldbg(x...)
+#endif
+
+#ifdef CONFIG_DEBUG_I2C_WARN
+#define i2cwarn(format, ...)    wdbg(format, ##__VA_ARGS__)
+#define i2cllwdbg(format, ...)  llwdbg(format, ##__VA_ARGS__)
+#else
+#define i2cwarn(x...)
+#define i2cllwdbg(x...)
+#endif
+
+#ifdef CONFIG_DEBUG_I2C_INFO
+#define i2cinfo(format, ...)   vdbg(format, ##__VA_ARGS__)
+#define i2cllvdbg(format, ...) llvdbg(format, ##__VA_ARGS__)
+#else
+#define i2cinfo(x...)
+#define i2cllvdbg(x...)
+#endif
+
+#ifdef CONFIG_DEBUG_I2S_ERROR
+#define i2serr(format, ...)    dbg(format, ##__VA_ARGS__)
+#define i2slldbg(format, ...)  lldbg(format, ##__VA_ARGS__)
+#else
+#define i2serr(x...)
+#define i2slldbg(x...)
+#endif
+
+#ifdef CONFIG_DEBUG_I2S_WARN
+#define i2swarn(format, ...)    wdbg(format, ##__VA_ARGS__)
+#define i2sllwdbg(format, ...)  llwdbg(format, ##__VA_ARGS__)
+#else
+#define i2swarn(x...)
+#define i2sllwdbg(x...)
+#endif
+
+#ifdef CONFIG_DEBUG_I2S_INFO
+#define i2sinfo(format, ...)   vdbg(format, ##__VA_ARGS__)
+#define i2sllvdbg(format, ...) llvdbg(format, ##__VA_ARGS__)
+#else
+#define i2sinfo(x...)
+#define i2sllvdbg(x...)
+#endif
+
+
 #ifdef CONFIG_NET_LWIP_DEBUG
 #define lwipdbg(format, ...)    dbg(format, ##__VA_ARGS__)
 #define lwiplldbg(format, ...)  lldbg(format, ##__VA_ARGS__)
@@ -936,6 +1013,29 @@ Once LOGM is approved, each module should have its own index
 #define lllvdbg     (void)
 #endif
 
+#ifdef CONFIG_DEBUG_AUDIO_ERROR
+#define auddbg		dbg
+#define audlldbg	lldbg
+#else
+#define auddbg		(void)
+#define audlldbg	(void)
+#endif
+
+#ifdef CONFIG_DEBUG_AUDIO_WARN
+#define audwdbg		wdbg
+#define audllwdbg	llwdbg
+#else
+#define audwdbg		(void)
+#define audllwdbg	(void)
+#endif
+
+#ifdef CONFIG_DEBUG_AUDIO_INFO
+#define audvdbg		vdbg
+#define audllvdbg	llvdbg
+#else
+#define audvdbg		(void)
+#define audllvdbg	(void)
+#endif
 #endif							/* CONFIG_CPP_HAVE_VARARGS */
 
 /* Buffer dumping macros do not depend on varargs */
@@ -1060,17 +1160,19 @@ Once LOGM is approved, each module should have its own index
 extern "C" {
 #endif
 
-/* Dump a buffer of data */
 /**
- * @cond
- * @internal
+ * @ingroup DEBUG_KERNEL
+ * @brief  Dump a buffer of data
+ *
+ * @details @b #include <debug.h>
+ * @param[in] msg message for buffer dump
+ * @param[in] buffer buffer
+ * @param[in] buflen length for buffer
+ * @return void
+ * @since TizenRT v1.1
  */
 
 void lib_dumpbuffer(FAR const char *msg, FAR const uint8_t *buffer, unsigned int buflen);
-
-/**
- * @endcond
- */
 
 /* The system logging interfaces are normally accessed via the macros
  * provided above.  If the cross-compiler's C pre-processor supports a
@@ -1115,4 +1217,6 @@ int llvdbg(const char *format, ...);
 }
 #endif
 #endif							/* __INCLUDE_DEBUG_H */
-/** @} *///end of DEBUG_KERNEL
+/**
+ * @}
+ */

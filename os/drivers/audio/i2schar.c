@@ -98,7 +98,7 @@
 
 struct i2schar_dev_s {
 	FAR struct i2s_dev_s *i2s;	/* The lower half i2s driver */
-	sem_t exclsem;			/* Assures mutually exclusive access */
+	sem_t exclsem;				/* Assures mutually exclusive access */
 };
 
 /****************************************************************************
@@ -119,14 +119,14 @@ static ssize_t i2schar_write(FAR struct file *filep, FAR const char *buffer, siz
  ****************************************************************************/
 
 static const struct file_operations i2schar_fops = {
-	NULL,					/* open  */
-	NULL,					/* close */
+	NULL,						/* open  */
+	NULL,						/* close */
 	i2schar_read,				/* read  */
 	i2schar_write,				/* write */
-	NULL,					/* seek  */
-	NULL,					/* ioctl */
+	NULL,						/* seek  */
+	NULL,						/* ioctl */
 #ifndef CONFIG_DISABLE_POLL
-	NULL,					/* poll  */
+	NULL,						/* poll  */
 #endif
 };
 
@@ -156,7 +156,7 @@ static void i2schar_rxcallback(FAR struct i2s_dev_s *dev, FAR struct ap_buffer_s
 	FAR struct i2schar_dev_s *priv = (FAR struct i2schar_dev_s *)arg;
 
 	DEBUGASSERT(priv && apb);
-	i2sinfo("apb=%p nbytes=%d result=%d\n", apb, apb->nbytes, result);
+	llvdbg("apb=%p nbytes=%d result=%d\n", apb, apb->nbytes, result);
 
 	/* REVISIT: If you want this to actually do something other than
 	 * test I2S data transfer, then this is the point where you would
@@ -167,7 +167,7 @@ static void i2schar_rxcallback(FAR struct i2s_dev_s *dev, FAR struct ap_buffer_s
 	 * now.
 	 */
 
-	i2sinfo("Freeing apb=%p crefs=%d\n", apb, apb->crefs);
+	llvdbg("Freeing apb=%p crefs=%d\n", apb, apb->crefs);
 	apb_free(apb);
 }
 
@@ -189,7 +189,7 @@ static void i2schar_txcallback(FAR struct i2s_dev_s *dev, FAR struct ap_buffer_s
 	FAR struct i2schar_dev_s *priv = (FAR struct i2schar_dev_s *)arg;
 
 	DEBUGASSERT(priv && apb);
-	i2sinfo("apb=%p nbytes=%d result=%d\n", apb, apb->nbytes, result);
+	llvdbg("apb=%p nbytes=%d result=%d\n", apb, apb->nbytes, result);
 
 	/* REVISIT: If you want this to actually do something other than
 	 * test I2S data transfer, then this is the point where you would
@@ -200,7 +200,7 @@ static void i2schar_txcallback(FAR struct i2s_dev_s *dev, FAR struct ap_buffer_s
 	 * now.
 	 */
 
-	i2sinfo("Freeing apb=%p crefs=%d\n", apb, apb->crefs);
+	llvdbg("Freeing apb=%p crefs=%d\n", apb, apb->crefs);
 	apb_free(apb);
 }
 
@@ -220,7 +220,7 @@ static ssize_t i2schar_read(FAR struct file *filep, FAR char *buffer, size_t buf
 	size_t nbytes;
 	int ret;
 
-	i2sinfo("buffer=%p buflen=%d\n", buffer, (int)buflen);
+	llvdbg("buffer=%p buflen=%d\n", buffer, (int)buflen);
 
 	/* Get our private data structure */
 
@@ -244,34 +244,24 @@ static ssize_t i2schar_read(FAR struct file *filep, FAR char *buffer, size_t buf
 
 	apb_reference(apb);
 
-	/* Get exclusive access to i2c character driver */
-
-	ret = sem_wait(&priv->exclsem);
-	if (ret < 0) {
-		ret = -errno;
-		DEBUGASSERT(ret < 0);
-		i2serr("ERROR: sem_wait returned: %d\n", ret);
-		goto errout_with_reference;
-	}
+	/* Exclusive access will be provided by I2S driver */
 
 	/* Give the buffer to the I2S driver */
 
 	ret = I2S_RECEIVE(priv->i2s, apb, i2schar_rxcallback, priv, CONFIG_AUDIO_I2SCHAR_RXTIMEOUT);
 	if (ret < 0) {
-		i2serr("ERROR: I2S_RECEIVE returned: %d\n", ret);
+		lldbg("ERROR: I2S_RECEIVE returned: %d\n", ret);
 		goto errout_with_reference;
 	}
 
 	/* Lie to the caller and tell them that all of the bytes have been
-	 * received
+	 * received. Actually it will be receiver in callback function.
 	 */
 
-	sem_post(&priv->exclsem);
 	return sizeof(struct ap_buffer_s) + nbytes;
 
 errout_with_reference:
 	apb_free(apb);
-	sem_post(&priv->exclsem);
 	return ret;
 }
 
@@ -291,7 +281,7 @@ static ssize_t i2schar_write(FAR struct file *filep, FAR const char *buffer, siz
 	size_t nbytes;
 	int ret;
 
-	i2sinfo("buffer=%p buflen=%d\n", buffer, (int)buflen);
+	llvdbg("buffer=%p buflen=%d\n", buffer, (int)buflen);
 
 	/* Get our private data structure */
 
@@ -315,34 +305,24 @@ static ssize_t i2schar_write(FAR struct file *filep, FAR const char *buffer, siz
 
 	apb_reference(apb);
 
-	/* Get exclusive access to i2c character driver */
-
-	ret = sem_wait(&priv->exclsem);
-	if (ret < 0) {
-		ret = -errno;
-		DEBUGASSERT(ret < 0);
-		i2serr("ERROR: sem_wait returned: %d\n", ret);
-		goto errout_with_reference;
-	}
+	/* Exclusive access will be provided by I2S driver */
 
 	/* Give the audio buffer to the I2S driver */
 
 	ret = I2S_SEND(priv->i2s, apb, i2schar_txcallback, priv, CONFIG_AUDIO_I2SCHAR_TXTIMEOUT);
 	if (ret < 0) {
-		i2serr("ERROR: I2S_SEND returned: %d\n", ret);
+		lldbg("ERROR: I2S_SEND returned: %d\n", ret);
 		goto errout_with_reference;
 	}
 
 	/* Lie to the caller and tell them that all of the bytes have been
-	 * sent.
+	 * sent. Actual transfer completion will be in callback function.
 	 */
 
-	sem_post(&priv->exclsem);
 	return sizeof(struct ap_buffer_s) + nbytes;
 
 errout_with_reference:
 	apb_free(apb);
-	sem_post(&priv->exclsem);
 	return ret;
 }
 
@@ -386,28 +366,27 @@ int i2schar_register(FAR struct i2s_dev_s *i2s, int minor)
 	/* Allocate a I2S character device structure */
 
 	priv = (FAR struct i2schar_dev_s *)kmm_zalloc(sizeof(struct i2schar_dev_s));
-	if (priv) {
-		/* Initialize the I2S character device structure */
-
-		priv->i2s = i2s;
-		sem_init(&priv->exclsem, 0, 1);
-
-		/* Create the character device name */
-
-		snprintf(devname, DEVNAME_FMTLEN, DEVNAME_FMT, minor);
-		ret = register_driver(devname, &i2schar_fops, 0666, priv);
-		if (ret < 0) {
-			/* Free the device structure if we failed to create the character
-			 * device.
-			 */
-
-			kmm_free(priv);
-		}
-
-		/* Return the result of the registration */
-
-		return OK;
+	if (priv == NULL) {
+		return -ENOMEM;
 	}
 
-	return -ENOMEM;
+	/* Initialize the I2S character device structure */
+
+	priv->i2s = i2s;
+
+	/* Create the character device name */
+
+	snprintf(devname, DEVNAME_FMTLEN, DEVNAME_FMT, minor);
+	ret = register_driver(devname, &i2schar_fops, 0666, priv);
+	if (ret < 0) {
+		/* Free the device structure if we failed to create the character
+		 * device.
+		 */
+
+		kmm_free(priv);
+	}
+
+	/* Return the result of the registration */
+
+	return OK;
 }

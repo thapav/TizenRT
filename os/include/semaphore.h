@@ -78,7 +78,7 @@
 
 #define PRIOINHERIT_FLAGS_DISABLE (1 << 0) /* Bit 0: Priority inheritance
 					    * is disabled for this semaphore */
-
+#define FLAGS_INITIALIZED         (1 << 1) /* Bit 1: This semaphore initialized */
 /****************************************************************************
  * Public Type Declarations
  ****************************************************************************/
@@ -117,8 +117,8 @@ struct sem_s {
 	 * tasks hold references to the semaphore.
 	 */
 
+	uint8_t flags;			/* See definitions for the struct sem_s flags */
 #ifdef CONFIG_PRIORITY_INHERITANCE
-	uint8_t flags;			/* See PRIOINHERIT_FLAGS_* definitions */
 #if CONFIG_SEM_PREALLOCHOLDERS > 0
 	FAR struct semholder_s *hhead;	/* List of holders of semaphore counts */
 #else
@@ -136,12 +136,12 @@ typedef struct sem_s sem_t;
  */
 #ifdef CONFIG_PRIORITY_INHERITANCE
 #if CONFIG_SEM_PREALLOCHOLDERS > 0
-#define SEM_INITIALIZER(c) {(c), 0, NULL} /* semcount, flags, hhead */
+#define SEM_INITIALIZER(c) {(c), FLAGS_INITIALIZED, NULL} /* semcount, flags, hhead */
 #else
-#define SEM_INITIALIZER(c) {(c), 0, SEMHOLDER_INITIALIZER} /* semcount, flags, holder */
+#define SEM_INITIALIZER(c) {(c), FLAGS_INITIALIZED, SEMHOLDER_INITIALIZER} /* semcount, flags, holder */
 #endif
 #else
-#define SEM_INITIALIZER(c) {(c)}	/* semcount */
+#define SEM_INITIALIZER(c) {(c), FLAGS_INITIALIZED}	/* semcount, flags */
 #endif
 
 /****************************************************************************
@@ -166,50 +166,64 @@ struct timespec;				/* Defined in time.h */
 /* Counting Semaphore Interfaces (based on POSIX APIs) */
 /**
  * @ingroup SEMAPHORE_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @brief initialize an unnamed semaphore
+ * @details @b #include <semaphore.h> \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v1.0
  */
 int sem_init(FAR sem_t *sem, int pshared, unsigned int value);
 
 /**
  * @ingroup SEMAPHORE_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @details [SYSTEM CALL API]
- * @since Tizen RT v1.0
+ * @brief destroy an unnamed semaphore
+ * @details @b #include <semaphore.h> \n
+ * SYSTEM CALL API \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v1.0
  */
 int sem_destroy(FAR sem_t *sem);
 /**
  * @ingroup SEMAPHORE_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @details [SYSTEM CALL API]
- * @since Tizen RT v1.0
+ * @brief lock a semaphore
+ * @details @b #include <semaphore.h> \n
+ * SYSTEM CALL API \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v1.0
  */
 int sem_wait(FAR sem_t *sem);
 /**
  * @ingroup SEMAPHORE_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @details [SYSTEM CALL API]
- * @since Tizen RT v1.0
+ * @brief lock a semaphore
+ * @details @b #include <semaphore.h> \n
+ * SYSTEM CALL API \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v1.0
  */
 int sem_timedwait(FAR sem_t *sem, FAR const struct timespec *abstime);
 /**
  * @ingroup SEMAPHORE_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @details [SYSTEM CALL API]
- * @since Tizen RT v1.0
+ * @brief lock a semaphore
+ * @details @b #include <semaphore.h> \n
+ * SYSTEM CALL API \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v1.0
  */
 int sem_trywait(FAR sem_t *sem);
 /**
  * @ingroup SEMAPHORE_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @details [SYSTEM CALL API]
- * @since Tizen RT v1.0
+ * @brief unlock a semaphore
+ * @details @b #include <semaphore.h> \n
+ * SYSTEM CALL API \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v1.0
  */
 int sem_post(FAR sem_t *sem);
 /**
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
  * @ingroup SEMAPHORE_KERNEL
- * @since Tizen RT v1.0
+ * @brief get the value of a semaphore
+ * @details @b #include <semaphore.h> \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v1.0
  */
 int sem_getvalue(FAR sem_t *sem, FAR int *sval);
 

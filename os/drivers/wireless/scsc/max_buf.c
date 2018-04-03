@@ -1,341 +1,245 @@
-/******************************************************************************
+/*****************************************************************************
  *
- * Copyright (c) 2012 - 2016 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright 2017 Samsung Electronics All Rights Reserved.
  *
- *****************************************************************************/
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific
+ * language governing permissions and limitations under the License.
+ *
+ ****************************************************************************/
 #include "utils_misc.h"
 #include "utils_scsc.h"
 #include "max_buf.h"
 #include "debug_scsc.h"
 
-/**
- *	mbuf_panic
- *	@mbuf:	buffer
- *	@sz:	size
- *	@addr:	address
- *	@msg:	mbuf_over_panic or mbuf_under_panic
- *
- *	Out-of-line support for mbuf_put() and mbuf_push().
- *	Called via the wrapper mbuf_over_panic() or mbuf_under_panic().
- */
-static void mbuf_panic(struct max_buff *mbuf, unsigned int sz, void *addr, const char msg[])
-{
-	SLSI_WARN_NODEV("%s: text:%p len:%d put:%d head:%p data:%p tail:%#lx end:%#lx \n", msg, addr, mbuf->len, sz, mbuf->head, mbuf->data, (unsigned long)mbuf->tail, (unsigned long)mbuf->end);
-}
-
-static void mbuf_over_panic(struct max_buff *mbuf, unsigned int sz, void *addr)
-{
-	mbuf_panic(mbuf, sz, addr, __func__);
-}
-
-static void mbuf_under_panic(struct max_buff *mbuf, unsigned int sz, void *addr)
-{
-	mbuf_panic(mbuf, sz, addr, __func__);
-}
-
+/* This function resets all the members of the max_buff */
 void mbuf_reset(struct max_buff *mbuf)
 {
-	unsigned char *head;
-	unsigned char *end;
+	u8 *buffer;
+	u32 buffer_len;
 
 	if (mbuf == NULL) {
 		return;
 	}
 
-	head = mbuf->head;
-	end = mbuf->end;
+	buffer = mbuf->buffer;
+	buffer_len = mbuf->buffer_len;
 
 	memset(mbuf, 0, sizeof(struct max_buff));
-	mbuf->head = mbuf->data = mbuf->tail = head;
-	mbuf->end = end;
-	mbuf->mac_header = (typeof(mbuf->mac_header)) ~ 0U;
+
+	mbuf->buffer = buffer;
+	mbuf->buffer_len = buffer_len;
 }
 
-/**
- *	__alloc_mbuf	-	allocate a maxwell buffer
- *	@size: size to allocate
- *
- *	Allocate a new &max_buff. The returned buffer has no headroom and a
- *	tail room of at least size bytes with reference count of one.
- *
- */
-struct max_buff *__alloc_mbuf(unsigned int size)
+/* This function allocates a max_buff. This function retuns NULL if the memory allocation fails. */
+struct max_buff *mbuf_alloc(unsigned int size)
 {
-	struct max_buff *mbuf = NULL;
-	u8 *data;
+	struct max_buff *mbuf;
 
-	/* Get the HEAD */
+	/* Allocate the max_buff structure */
 	mbuf = kmm_malloc(sizeof(struct max_buff));
 	if (!mbuf) {
 		goto out;
 	}
 
-	data = kmm_malloc(size);
-
-	if (!data) {
-		goto nodata;
-	}
-
 	memset(mbuf, 0, sizeof(struct max_buff));
 
-	mbuf->head = data;
-	mbuf->data = data;
-	mbuf->tail = mbuf->data;
-	mbuf->end = mbuf->tail + size;
-	mbuf->mac_header = (typeof(mbuf->mac_header)) ~ 0U;
+	/* Allocate the buffer for max_buff */
+	mbuf->buffer = kmm_malloc(size);
+	if (!mbuf->buffer) {
+		kmm_free(mbuf);
+		mbuf = NULL;
+		goto  out;
+	}
 
+	mbuf->buffer_len = size;
 out:
 	return mbuf;
-nodata:
-	kmm_free(mbuf);
-	mbuf = NULL;
-	goto out;
 }
 
-/**
- *	kfree_mbuf - free an max_buff
- *	@mbuf: buffer to free
- *
- *	Drop a reference to the buffer and free it if the usage count has
- *	hit zero.
- */
-void kfree_mbuf(struct max_buff *mbuf)
+/* This function releases memory allocated for the max_buff */
+void mbuf_free(struct max_buff *mbuf)
 {
 	if (!mbuf) {
 		return;
 	}
 
-	/* Free the data: mbuf->head and mbuf->data are same */
-	if (mbuf->head) {
-		kmm_free(mbuf->head);
+	/* Free the buffer */
+	if (mbuf->buffer) {
+		kmm_free(mbuf->buffer);
 	}
 
 	kmm_free(mbuf);
 }
 
 /**
- *	mbuf_put - add data to a buffer
- *	@mbuf:  buffer  pointer
- *	@len: lenght of data to add
- *
- *	This function writes the data at the end of the data and updates length appropriately.
- *	If it exceeds the total buffer size then panic will be raised. A pointer to the
- *	first byte of the extra data is returned.
+ * This function increases the actual data area of the max_buff by given number of bytes.
+ * If it exceeds the total buffer size then error message will be printed.
+ * A pointer to the first byte of the extra data is returned.
  */
 unsigned char *mbuf_put(struct max_buff *mbuf, unsigned int len)
 {
-	unsigned char *tmp = mbuf->tail;
+	unsigned char *tail = &mbuf->buffer[mbuf->data_offset + mbuf->data_len];
 
-	mbuf->tail += len;
-	mbuf->len += len;
-	if (mbuf->tail > mbuf->end) {
-		mbuf_over_panic(mbuf, len, __builtin_return_address(0));
+	if ((mbuf->data_offset + mbuf->data_len + len) > mbuf->buffer_len) {
+		SLSI_WARN_NODEV("Not enough room at tail: mbuf->data_len:%d len:%d mbuf->buffer:%p, mbuf->data_offset: %d\n",
+			mbuf->data_len, len, mbuf->buffer, mbuf->data_offset);
+		return NULL;
 	}
-	return tmp;
+
+	mbuf->data_len += len;
+
+	return tail;
 }
 
 /**
- *	mbuf_push - add data at the start of a buffer
- *	@mbuf: buffer pointer
- *	@len: length of data to add
- *
- *	This function moves the data area of the buffer at the buffer
- *	start. If this would exceed the total headroom then panic will be raised.
- *    A pointer to the first byte of the extra data is returned.
+ * This function moves the data area of the buffer at the start of the buffer.
+ * If it exceeds the total headroom then error message will be printed.
+ * A pointer to the first byte of the extra data is returned.
  */
 unsigned char *mbuf_push(struct max_buff *mbuf, unsigned int len)
 {
-	mbuf->data -= len;
-	mbuf->len += len;
-	if (mbuf->data < mbuf->head) {
-		mbuf_under_panic(mbuf, len, __builtin_return_address(0));
+	if (mbuf->data_offset < len) {
+		SLSI_WARN_NODEV("Not enough room at head: mbuf->data_len:%d len:%d mbuf->buffer:%p mbuf->data_offset: %d\n",
+			mbuf->data_len, len, mbuf->buffer, mbuf->data_offset);
+		return NULL;
 	}
-	return mbuf->data;
+
+	mbuf->data_offset -= len;
+	mbuf->data_len += len;
+
+	return slsi_mbuf_get_data(mbuf);
 }
 
 /**
- *	mbuf_pull - remove data from the start of a buffer
- *	@mbuf: buffer pointer
- *	@len: amount of data to remove
- *
- *	This function removes data from the start of a buffer, returning
- *	the memory to the headroom. A pointer to the next data in the buffer
- *	is returned. Once the data has been pulled future pushes will overwrite
- *	the old data.
+ * This function removes given number of bytes from the actual data
+ * A pointer to the next data in the buffer is returned.
  */
 unsigned char *mbuf_pull(struct max_buff *mbuf, unsigned int len)
 {
-	return mbuf_pull_inline(mbuf, len);
+	if (len > mbuf->data_len)
+		return NULL;
+
+	mbuf->data_offset += len;
+	mbuf->data_len -= len;
+
+	return slsi_mbuf_get_data(mbuf);
 }
 
 /**
- *	mbuf_copy	-	create private copy of an max_buff
- *	@mbuf: buffer to copy
- *	@gfp_mask: allocation priority
- *
- *	Make a copy of both an &max_buff and its data. This is used when the
- *	caller wishes to modify the data and needs a private copy of the
- *	data to alter. Returns %NULL on failure or the pointer to the buffer
- *	on success. The returned buffer has a reference count of 1.
- *
- *	As by-product this function converts non-linear &max_buff to linear
- *	one, so that &max_buff becomes completely private and caller is allowed
- *	to modify all the data of returned buffer. This means that this
- *	function is not recommended for use in circumstances when only
- *	header is going to be modified. Use pmbuf_copy() instead.
+ * This function copies the max_buff header and it's buffer
+ * Returns NULL if memory allocation fails else pointer to new max_buff
  */
 struct max_buff *mbuf_copy(const struct max_buff *mbuf)
 {
-	int headerlen = mbuf_headroom(mbuf);
-	unsigned int size = mbuf_end_offset(mbuf) + mbuf->data_len;
-	struct max_buff *n = __alloc_mbuf(size);
+	struct max_buff *new_mbuf = mbuf_alloc(mbuf->buffer_len);
 
-	if (!n) {
+	if (!new_mbuf) {
 		return NULL;
 	}
 
 	/* Set the data pointer */
-	mbuf_reserve(n, headerlen);
+	mbuf_reserve_headroom(new_mbuf, mbuf_headroom(mbuf));
+
 	/* Set the tail pointer and length */
-	mbuf_put(n, mbuf->len);
+	mbuf_put(new_mbuf, mbuf->data_len);
 
-	return n;
+	/* Copy the max_buff header */
+	memcpy(&new_mbuf->fapi, &mbuf->fapi, sizeof(struct slsi_mbuf_fapi));
+	new_mbuf->colour = mbuf->colour;
+	new_mbuf->ac_queue = mbuf->ac_queue;
+	new_mbuf->user_priority = mbuf->user_priority;
+	new_mbuf->mac_header = mbuf->mac_header;
+
+	/* Copy the mbuf data */
+	memcpy(slsi_mbuf_get_data(new_mbuf), slsi_mbuf_get_data(mbuf), mbuf->data_len);
+
+	return new_mbuf;
 }
 
 /**
- *	__mbuf_queue_after - queue a buffer at the list head
- *	@list: list to use
- *	@prev: place after this buffer
- *	@newsk: buffer to queue
- *
- *	Queue a buffer int the middle of a list. This function takes no locks
- *	and you must therefore hold required locks before calling it.
- *
- *	A buffer cannot be placed on two lists at the same time.
- */
-static inline void __mbuf_queue_after(struct max_buff_head *list, struct max_buff *prev, struct max_buff *newsk)
-{
-	__mbuf_insert(newsk, prev, prev->next, list);
-}
-
-static inline void __mbuf_queue_before(struct max_buff_head *list, struct max_buff *next, struct max_buff *newsk)
-{
-	__mbuf_insert(newsk, next->prev, next, list);
-}
-
-static inline struct max_buff *__mbuf_dequeue(struct max_buff_head *list)
-{
-	struct max_buff *mbuf = mbuf_peek(list);
-
-	if (mbuf) {
-		__mbuf_unlink(mbuf, list);
-	}
-	return mbuf;
-}
-
-/**
- *	mbuf_dequeue - remove from the head of the queue
- *	@list: list to dequeue from
- *
- *	Remove the head of the list. The list lock is taken so the function
- *	may be used safely with other locking list functions. The head item is
- *	returned or %NULL if the list is empty.
+ * This function returns the mbuf that is at the head of the list. This operation
+ * is protected by list->lock. This function returns NULL if the list is empty.
  */
 struct max_buff *mbuf_dequeue(struct max_buff_head *list)
 {
-	struct max_buff *result;
+	struct max_buff *mbuf;
+	struct max_buff *prev;
+	struct max_buff *next;
+
+	if (!list) {
+		return NULL;
+	}
 
 	SLSI_MUTEX_LOCK(list->lock);
-	result = __mbuf_dequeue(list);
-	SLSI_MUTEX_UNLOCK(list->lock);
-	return result;
-}
 
-/**
- *	__mbuf_dequeue_tail - remove from the tail of the queue
- *	@list: list to dequeue from
- *
- *	Remove the tail of the list. This function does not take any locks
- *	so must be used with appropriate locks held only. The tail item is
- *	returned or %NULL if the list is empty.
- */
-static inline struct max_buff *__mbuf_dequeue_tail(struct max_buff_head *list)
-{
-	struct max_buff *mbuf = mbuf_peek_tail(list);
-
-	if (mbuf) {
-		__mbuf_unlink(mbuf, list);
+	/* Check if the list is empty */
+	if (list->next == (struct max_buff *)list) {
+		SLSI_MUTEX_UNLOCK(list->lock);
+		return NULL;
 	}
+
+	mbuf = list->next;
+	next = mbuf->next;
+	prev = mbuf->prev;
+	mbuf->next = mbuf->prev = NULL;
+	next->prev = prev;
+	prev->next = next;
+	list->queue_len--;
+	SLSI_MUTEX_UNLOCK(list->lock);
+
 	return mbuf;
 }
 
-/**
- *	mbuf_dequeue_tail - remove from the tail of the queue
- *	@list: list to dequeue from
- *
- *	Remove the tail of the list. The list lock is taken so the function
- *	may be used safely with other locking list functions. The tail item is
- *	returned or %NULL if the list is empty.
- */
-struct max_buff *mbuf_dequeue_tail(struct max_buff_head *list)
-{
-	struct max_buff *result;
-
-	SLSI_MUTEX_LOCK(list->lock);
-	result = __mbuf_dequeue_tail(list);
-	SLSI_MUTEX_UNLOCK(list->lock);
-	return result;
-}
-
-/**
- *	mbuf_queue_purge - empty a list
- *	@list: list to empty
- *
- *	Delete all buffers on an &max_buff list. Each buffer is removed from
- *	the list and one reference dropped. This function takes the list
- *	lock and is atomic with respect to other list locking functions.
- */
+/* Delete all buffers on an max_buff_head list. This operation is protected by list->lock */
 void mbuf_queue_purge(struct max_buff_head *list)
 {
-	struct max_buff *mbuf;
+	struct max_buff *mbuf = mbuf_dequeue(list);
 
-	while ((mbuf = mbuf_dequeue(list)) != NULL) {
-		kfree_mbuf(mbuf);
+	while (mbuf != NULL) {
+		mbuf_free(mbuf);
+		mbuf = mbuf_dequeue(list);
 	}
 }
 
-/**
- *	mbuf_queue_head - queue a buffer at the list head
- *	@list: list to use
- *	@newsk: buffer to queue
- *
- *	Queue a buffer at the start of the list. This function takes the
- *	list lock and can be used safely with other locking &max_buff functions
- *	safely.
- *
- *	A buffer cannot be placed on two lists at the same time.
- */
-void mbuf_queue_head(struct max_buff_head *list, struct max_buff *newsk)
+/* Queue a buffer at the start of the list */
+void mbuf_queue_head(struct max_buff_head *list, struct max_buff *mbuf)
 {
+	struct max_buff *prev;
+	struct max_buff *next;
+
 	SLSI_MUTEX_LOCK(list->lock);
-	__mbuf_queue_after(list, (struct max_buff *)list, newsk);
+	prev = (struct max_buff *)list;
+	next = list->next;
+
+	mbuf->next = next;
+	mbuf->prev = prev;
+	next->prev  = prev->next = mbuf;
+	list->queue_len++;
 	SLSI_MUTEX_UNLOCK(list->lock);
 }
 
-/**
- *	mbuf_queue_tail - queue a buffer at the list tail
- *	@list: list to use
- *	@newsk: buffer to queue
- *
- *	Queue a buffer at the tail of the list. This function takes the
- *	list lock and can be used safely with other locking &max_buff functions
- *	safely.
- *
- *	A buffer cannot be placed on two lists at the same time.
- */
-void mbuf_queue_tail(struct max_buff_head *list, struct max_buff *newsk)
+/* Queue a buffer at the tail of the list. */
+void mbuf_queue_tail(struct max_buff_head *list, struct max_buff *mbuf)
 {
+	struct max_buff *prev;
+	struct max_buff *next;
+
 	SLSI_MUTEX_LOCK(list->lock);
-	__mbuf_queue_before(list, (struct max_buff *)list, newsk);
+	prev = list->prev;
+	next = (struct max_buff *)list;
+
+	mbuf->next = next;
+	mbuf->prev = prev;
+	next->prev  = prev->next = mbuf;
+	list->queue_len++;
 	SLSI_MUTEX_UNLOCK(list->lock);
 }

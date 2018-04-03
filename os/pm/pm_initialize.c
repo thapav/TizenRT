@@ -16,7 +16,7 @@
  *
  ****************************************************************************/
 /****************************************************************************
- * drivers/power/pm_initialize.c
+ * pm/pm_initialize.c
  *
  *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -131,6 +131,19 @@ void pm_initialize(void)
 		/* Add the initial state change node to the head of the history queue */
 
 		sq_addlast((&initnode->entry), &g_pmglobals.domain[domain_indx].history);
+#endif
+
+#ifdef CONFIG_IDLE_PM
+		struct pm_idle_state_info p_soc;
+
+		/* Procure the number of idle sleep states from SOC */
+
+		sleep_states_count = get_pm_idle_table_size();
+
+		/* Map the SOC states to the power framework threshold values*/
+
+		pm_initialize_idle_data(p_soc);
+
 #endif
 	}
 	pmtest_init();

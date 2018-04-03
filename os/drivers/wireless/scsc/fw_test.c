@@ -1,8 +1,20 @@
 /*****************************************************************************
  *
- * Copyright (c) 2016 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright 2017 Samsung Electronics All Rights Reserved.
  *
- *****************************************************************************/
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific
+ * language governing permissions and limitations under the License.
+ *
+ ****************************************************************************/
 #include "dev.h"
 #include "fapi.h"
 #include "fw_test.h"
@@ -89,8 +101,8 @@ int slsi_fw_test_signal(struct slsi_dev *sdev, struct slsi_fw_test *fwtest, stru
 
 int slsi_fw_test_signal_with_udi_header(struct slsi_dev *sdev, struct slsi_fw_test *fwtest, struct max_buff *mbuf)
 {
-	struct udi_msg_t *udi_msg = (struct udi_msg_t *)mbuf->data;
-	struct fapi_vif_signal_header *fapi_header = (struct fapi_vif_signal_header *)(mbuf->data + sizeof(struct udi_msg_t));
+	struct udi_msg_t *udi_msg = (struct udi_msg_t *)slsi_mbuf_get_data(mbuf);
+	struct fapi_vif_signal_header *fapi_header = (struct fapi_vif_signal_header *)(slsi_mbuf_get_data(mbuf) + sizeof(struct udi_msg_t));
 
 	if (!fwtest->fw_test_enabled) {
 		return 0;

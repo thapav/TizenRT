@@ -87,7 +87,8 @@ static int prv_getRegistrationQuery(lwm2m_context_t * contextP,
         index += res;
     }
 
-    if (contextP->protocol == COAP_TCP)
+    if (contextP->protocol == COAP_TCP
+     || contextP->protocol == COAP_TCP_TLS)
     {
         /*
          * We need to append the token to the parameters list
@@ -100,6 +101,7 @@ static int prv_getRegistrationQuery(lwm2m_context_t * contextP,
         {
             int size = 1;
             lwm2m_data_t * dataP = lwm2m_data_new(size);
+            if (dataP == NULL) return 0;
             dataP->id = LWM2M_SECURITY_SECRET_KEY_ID;
 
             obj->readFunc(0, &size, &dataP, obj);
@@ -129,6 +131,7 @@ static int prv_getRegistrationQuery(lwm2m_context_t * contextP,
                 index += res;
                 lwm2m_free(secret);
             }
+            lwm2m_data_free(size, dataP);
         }
     }
 
@@ -406,7 +409,7 @@ uint8_t registration_start(lwm2m_context_t * contextP)
     uint8_t result;
 
     LOG_ARG("State: %s", STR_STATE(contextP->state));
-	
+
     result = COAP_NO_ERROR;
 
     targetP = contextP->serverList;
@@ -785,7 +788,7 @@ static int prv_getId(uint8_t * data,
     {
         data += 1;
         length -= 2;
-    } 
+    }
     else
     {
         return 0;
@@ -1035,6 +1038,10 @@ coap_status_t registration_handleRequest(lwm2m_context_t * contextP,
                 lwm2m_free(name);
                 if (msisdn != NULL) lwm2m_free(msisdn);
                 return COAP_412_PRECONDITION_FAILED;
+            }
+            if (version != NULL)
+            {
+                lwm2m_free(version);
             }
 
             if (lifetime == 0)

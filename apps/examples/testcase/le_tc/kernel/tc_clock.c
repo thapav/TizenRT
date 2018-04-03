@@ -33,6 +33,7 @@
 const long double l_day = 86400;
 extern struct timespec g_basetime;
 
+#define CLOCK_ERR 2
 #define SEC_PER_MIN ((time_t)60)
 #define SEC_PER_HOUR ((time_t)60 * SEC_PER_MIN)
 #define SEC_PER_DAY ((time_t)24 * SEC_PER_HOUR)
@@ -64,6 +65,9 @@ static void tc_clock_clock_getres(void)
 	TC_ASSERT_EQ("clock_getres", st_res.tv_sec, 0);
 	TC_ASSERT_EQ("clock_getres", st_res.tv_nsec, NSEC_PER_TICK);
 
+	ret_chk = clock_getres(33 , &st_res);
+	TC_ASSERT_EQ("clock_getres", ret_chk, ERROR);
+
 	TC_SUCCESS_RESULT();
 }
 
@@ -81,6 +85,10 @@ static void tc_clock_clock_set_get_time(void)
 	int ret_chk;
 	struct timespec stime;
 	struct timespec gtime;
+
+	ret_chk = clock_gettime(CLOCK_ERR, &stime);
+	TC_ASSERT_EQ("clock_gettime", ret_chk, ERROR);
+	TC_ASSERT_EQ("clock_gettime", errno, EINVAL);
 
 	ret_chk = clock_gettime(CLOCK_REALTIME, &stime);
 	TC_ASSERT_EQ("clock_gettime", ret_chk, OK);
@@ -101,6 +109,10 @@ static void tc_clock_clock_set_get_time(void)
 	}
 
 	stime.tv_sec -= l_day;		/* Setting original time to system */
+
+	ret_chk = clock_settime(CLOCK_ERR, &stime);
+	TC_ASSERT_EQ("clock_settime", ret_chk, ERROR);
+	TC_ASSERT_EQ("clock_settime", errno, EINVAL);
 
 	ret_chk = clock_settime(CLOCK_REALTIME, &stime);
 	TC_ASSERT_EQ("clock_setime", ret_chk, OK);
@@ -135,6 +147,10 @@ static void tc_clock_clock_gettimeofday(void)
 	if (tv2.tv_sec == tv1.tv_sec + SEC_2) {
 		TC_ASSERT_GEQ("gettimeofday", tv2.tv_usec, tv1.tv_usec);
 	}
+#ifdef CONFIG_DEBUG
+	ret_chk = gettimeofday(NULL, NULL);
+	TC_ASSERT_EQ("gettimeofday", ret_chk, ERROR);
+#endif
 
 	TC_SUCCESS_RESULT();
 }

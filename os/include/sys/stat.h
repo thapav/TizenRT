@@ -58,7 +58,7 @@
  * @{
  */
 
-/// @file stat.h
+/// @file sys/stat.h
 /// @brief Status APIs
 
 #ifndef __INCLUDE_SYS_STAT_H
@@ -156,23 +156,26 @@ extern "C" {
 
 /**
  * @ingroup STAT_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @details [SYSTEM CALL API]
- * @since Tizen RT v1.0
+ * @brief  POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @details @b #include <sys/stat.h> \n
+ * SYSTEM CALL API
+ * @since TizenRT v1.0
  */
 int mkdir(FAR const char *pathname, mode_t mode);
 /**
  * @ingroup STAT_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @details [SYSTEM CALL API]
- * @since Tizen RT v1.0
+ * @brief  POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @details @b #include <sys/stat.h> \n
+ * SYSTEM CALL API
+ * @since TizenRT v1.0
  */
 int mkfifo(FAR const char *pathname, mode_t mode);
 /**
  * @ingroup STAT_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @details [SYSTEM CALL API]
- * @since Tizen RT v1.0
+ * @brief  POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @details @b #include <sys/stat.h> \n
+ * SYSTEM CALL API
+ * @since TizenRT v1.0
  */
 int stat(const char *path, FAR struct stat *buf);
 /**
@@ -190,4 +193,5 @@ int fstat(int fd, FAR struct stat *buf);
 
 #endif							/* __INCLUDE_SYS_STAT_H */
 /**
- * @} */
+ * @}
+ */

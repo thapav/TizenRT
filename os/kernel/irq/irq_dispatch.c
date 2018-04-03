@@ -62,6 +62,10 @@
 
 #include "irq/irq.h"
 
+#ifdef CONFIG_IRQ_SCHED_HISTORY
+#include <tinyara/debug/sysdbg.h>
+#endif
+
 /****************************************************************************
  * Definitions
  ****************************************************************************/
@@ -109,10 +113,17 @@ void irq_dispatch(int irq, FAR void *context)
 	} else {
 		vector = g_irqvector[irq].handler;
 		arg    = g_irqvector[irq].arg;
+#ifdef CONFIG_DEBUG_IRQ_INFO
+		g_irqvector[irq].count++;
+#endif
 	}
 #else
 	vector = irq_unexpected_isr;
 	arg    = NULL;
+#endif
+
+#ifdef CONFIG_IRQ_SCHED_HISTORY
+	save_irq_scheduling_status(irq, (void *)vector);
 #endif
 
 	/* Then dispatch to the interrupt handler */

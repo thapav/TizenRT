@@ -127,14 +127,13 @@ typedef struct fscmd_redirection redirection_t;
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
-
 static void fscmd_free(FAR char *path)
 {
 	if (path) {
 		free(path);
 	}
 }
-
+#ifndef CONFIG_DISABLE_ENVIRON
 /****************************************************************************
  * Name: tash_cat
  *
@@ -172,13 +171,13 @@ static int tash_cat(int argc, char **args)
 	}
 
 	if (argc < 2) {
-		FSCMD_OUTPUT(MISSING_ARGS, " : [> or >>] [file] [contents]\n", args[0]);
+		FSCMD_OUTPUT(MISSING_ARGS " : [> or >>] [file] [contents]\n", args[0]);
 
 		return 0;
 	} else if (argc == 2) {
 		/* Below is basic case, cat <filepath> */
 		if (direction.mode != FSCMD_NONE) {
-			FSCMD_OUTPUT(INVALID_ARGS, " : [> or >>] [file] [contents]\n", args[0]);
+			FSCMD_OUTPUT(INVALID_ARGS " : [> or >>] [file] [contents]\n", args[0]);
 			return 0;
 		}
 
@@ -239,7 +238,7 @@ static int tash_cat(int argc, char **args)
 			/* copy contents from source file to target file
 			 * cat <source filepath> <redirection> <target filepath> */
 			if (strcmp(args[1], args[3]) == 0) {
-				FSCMD_OUTPUT(INVALID_ARGS, "Same File name", args[1]);
+				FSCMD_OUTPUT(INVALID_ARGS "Same File name", args[1]);
 				return 0;
 			}
 
@@ -279,12 +278,12 @@ static int tash_cat(int argc, char **args)
 			close(fd);
 			close(destfd);
 		} else {
-			FSCMD_OUTPUT(INVALID_ARGS, " : [> or >>] [file] [contents]\n", args[0]);
+			FSCMD_OUTPUT(INVALID_ARGS " : [> or >>] [file] [contents]\n", args[0]);
 			return 0;
 		}
 	} else {
 		/* Wrong case */
-		FSCMD_OUTPUT(INVALID_ARGS, " : [> or >>] [file] [contents]\n", args[0]);
+		FSCMD_OUTPUT(INVALID_ARGS " : [> or >>] [file] [contents]\n", args[0]);
 
 		return 0;
 	}
@@ -295,7 +294,8 @@ error:
 
 	return 0;
 }
-
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 /****************************************************************************
  * Name: tash_cd
  *
@@ -333,7 +333,8 @@ static int tash_cd(int argc, char **args)
 
 	return ret;
 }
-
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 /****************************************************************************
  * Name: foreach_direntry
  *
@@ -583,7 +584,7 @@ static int tash_ls(int argc, char **args)
 		}
 	}
 	if (badarg) {
-		FSCMD_OUTPUT(INVALID_ARGS, " : [-lRs] <dir-path>\n", args[0]);
+		FSCMD_OUTPUT(INVALID_ARGS " : [-lRs] <dir-path>\n", args[0]);
 		return 0;
 	}
 
@@ -626,7 +627,8 @@ static int tash_ls(int argc, char **args)
 
 	return ret;
 }
-
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 /****************************************************************************
  * Name: tash_mkdir
  *
@@ -652,7 +654,7 @@ static int tash_mkdir(int argc, char **args)
 
 	return ret;
 }
-
+#endif
 #ifndef CONFIG_DISABLE_MOUNTPOINT
 #ifdef CONFIG_RAMDISK
 /****************************************************************************
@@ -778,10 +780,12 @@ errout_with_fmt:
 static int tash_mksmartfs(int argc, char **args)
 {
 	const char *src;
+	const char *fmt;
 	bool force = false;
 	int option;
-	int badarg = false;
-
+#ifdef CONFIG_SMARTFS_MULTI_ROOT_DIRS
+	int nrootdirs = 1;
+#endif
 	optind = -1;
 	while ((option = getopt(argc, args, "f")) != ERROR) {
 		switch (option) {
@@ -790,29 +794,50 @@ static int tash_mksmartfs(int argc, char **args)
 			break;
 		case '?':
 		default:
-			badarg = true;
-			break;
+			fmt = INVALID_ARGS;
+			goto errout_with_fmt;
 		}
 	}
-	if (badarg) {
-		FSCMD_OUTPUT(INVALID_ARGS, " : [-f] <source>\n", args[0]);
-		return ERROR;
+
+	if (optind >= argc) {
+		fmt = MISSING_ARGS;
+		goto errout_with_fmt;
 	}
+
+	/* Set path for registered block driver */
+	src = args[optind];
 
 	if (optind + 1 < argc) {
-		FSCMD_OUTPUT(TOO_MANY_ARGS, args[0]);
+#ifdef CONFIG_SMARTFS_MULTI_ROOT_DIRS
+		nrootdirs = atoi(args[optind++]);
+	}
+	if (nrootdirs > 8 || nrootdirs < 1) {
+		FSCMD_OUTPUT(INVALID_ARGS "Invalid number of root directories specified\n", args[0]);
 		return ERROR;
-	} else if (optind >= argc) {
-		FSCMD_OUTPUT(INVALID_ARGS, " : [-f] <source>\n", args[0]);
-		return ERROR;
-	} else {
-		src = args[optind];
+	}
+	if (optind + 1 < argc) {
+#endif
+		fmt = TOO_MANY_ARGS;
+		goto errout_with_fmt;
 	}
 
+#ifdef CONFIG_SMARTFS_MULTI_ROOT_DIRS
+	return mksmartfs(src, nrootdirs, force);
+#else
 	return mksmartfs(src, force);
+#endif
+
+errout_with_fmt:
+#ifdef CONFIG_SMARTFS_MULTI_ROOT_DIRS
+	FSCMD_OUTPUT(fmt, " : [-f] <source> [<nrootdir>]\n", args[0]);
+#else
+	FSCMD_OUTPUT(fmt, " : [-f] <source>\n", args[0]);
+#endif
+	return ERROR;
 }
 #endif							/* END OF CONFIG FS_SMARTFS */
 
+#ifndef CONFIG_DISABLE_ENVIRON
 static int mount_handler(FAR const char *mountpoint, FAR struct statfs *statbuf, FAR void *arg)
 {
 	char *fstype;
@@ -887,7 +912,7 @@ static int tash_mount(int argc, char **args)
 	}
 
 	if (badarg) {
-		FSCMD_OUTPUT(INVALID_ARGS, " : [-t] <fs_type> <source> <target>\n", args[0]);
+		FSCMD_OUTPUT(INVALID_ARGS " : [-t] <fs_type> <source> <target>\n", args[0]);
 
 		return 0;
 	}
@@ -940,12 +965,13 @@ errout:
 
 	return ret;
 }
-
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 /****************************************************************************
  * Name: tash_umount
  *
  * Description:
- *   Unount specific file system.
+ *   Unmount specific file system.
  *
  * Usage:
  *   umount <mounted directory>
@@ -965,8 +991,10 @@ static int tash_umount(int argc, char **args)
 
 	return ret;
 }
+#endif
 #endif							/* END OF CONFIG_DISABLE_MOUNTPOINT */
 
+#ifndef CONFIG_DISABLE_ENVIRON
 /****************************************************************************
  * Name: tash_pwd
  *
@@ -982,7 +1010,8 @@ static int tash_pwd(int argc, char **args)
 
 	return 0;
 }
-
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 /****************************************************************************
  * Name: tash_rm
  *
@@ -1008,7 +1037,8 @@ static int tash_rm(int argc, char **args)
 
 	return ret;
 }
-
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 /****************************************************************************
  * Name: tash_rmdir
  *
@@ -1034,14 +1064,13 @@ static int tash_rmdir(int argc, char **args)
 
 	return ret;
 }
-
+#endif
 static int df_handler(FAR const char *mountpoint, FAR struct statfs *statbuf, FAR void *arg)
 {
 	printf("%6ld %8ld %8ld  %8ld %s\n", statbuf->f_bsize, statbuf->f_blocks, statbuf->f_blocks - statbuf->f_bavail, statbuf->f_bavail, mountpoint);
 
 	return OK;
 }
-
 static const char *get_fstype(FAR struct statfs *statbuf)
 {
 	FAR const char *fstype;
@@ -1171,6 +1200,7 @@ static int df_man_readable_handler(FAR const char *mountpoint, FAR struct statfs
  * Name: tash_df
  ****************************************************************************/
 
+#ifndef CONFIG_DISABLE_MOUNTPOINT
 static int tash_df(int argc, char **args)
 {
 	if (argc > 1 && strcmp(args[1], "-h") == 0) {
@@ -1184,12 +1214,21 @@ static int tash_df(int argc, char **args)
 
 	return 0;
 }
+#endif
 
 const static tash_cmdlist_t fs_utilcmds[] = {
+#ifndef CONFIG_DISABLE_ENVIRON
 	{"cat",       tash_cat,       TASH_EXECMD_SYNC},
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 	{"cd",        tash_cd,        TASH_EXECMD_SYNC},
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 	{"ls",        tash_ls,        TASH_EXECMD_SYNC},
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 	{"mkdir",     tash_mkdir,     TASH_EXECMD_SYNC},
+#endif
 #ifndef CONFIG_DISABLE_MOUNTPOINT
 #ifdef CONFIG_RAMDISK
 	{"mkrd",      tash_mkrd,      TASH_EXECMD_SYNC},
@@ -1197,13 +1236,25 @@ const static tash_cmdlist_t fs_utilcmds[] = {
 #ifdef CONFIG_FS_SMARTFS
 	{"mksmartfs", tash_mksmartfs, TASH_EXECMD_SYNC},
 #endif
+#ifndef CONFIG_DISABLE_ENVIRON
 	{"mount",     tash_mount,     TASH_EXECMD_SYNC},
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 	{"umount",    tash_umount,    TASH_EXECMD_SYNC},
 #endif
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 	{"pwd",       tash_pwd,       TASH_EXECMD_SYNC},
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 	{"rm",        tash_rm,        TASH_EXECMD_SYNC},
+#endif
+#ifndef CONFIG_DISABLE_ENVIRON
 	{"rmdir",     tash_rmdir,     TASH_EXECMD_SYNC},
+#endif
+#ifndef CONFIG_DISABLE_MOUNTPOINT
 	{"df",        tash_df,        TASH_EXECMD_SYNC},
+#endif
 	{NULL,        NULL,           0}
 };
 

@@ -64,13 +64,13 @@
 #include <debug.h>
 
 #include <tinyara/arch.h>
+#include <tinyara/ttrace.h>
 
 #include "sched/sched.h"
 #include "pthread/pthread.h"
 #include "group/group.h"
 #include "task/task.h"
 #include "clock/clock.h"
-#include <ttrace.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -144,11 +144,18 @@ static int task_assignpid(FAR struct tcb_s *tcb)
 		next_pid = ++g_lastpid;
 
 		/* Verify that the next_pid is in the valid range */
-
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+		/* Last two values(INT16_MAX and INT16_MAX - 1) are used for heapinfo. So pid can be smaller than (INT16_MAX - 1). */
+		if (next_pid == (INT16_MAX - 1)) {
+			g_lastpid = 1;
+			next_pid = 1;
+		}
+#else
 		if (next_pid <= 0) {
 			g_lastpid = 1;
 			next_pid = 1;
 		}
+#endif
 
 		/* Get the hash_ndx associated with the next_pid */
 

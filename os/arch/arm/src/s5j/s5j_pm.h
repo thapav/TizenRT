@@ -79,25 +79,24 @@ extern "C" {
  * Public Function Prototypes
  ****************************************************************************/
 
+#ifndef CONFIG_IDLE_PM
+/****************************************************************************
+ * Name: s5j_pmnormal
+ *
+ * Description:
+ *   Enter NORMAL mode.
+ *
+ ****************************************************************************/
+int s5j_pmnormal(void);
+
 /****************************************************************************
  * Name: s5j_pmstop
  *
  * Description:
  *   Enter STOP mode.
  *
- * Input Parameters:
- *   lpds - true: To further reduce power consumption in Stop mode, put the
- *          internal voltage regulator in low-power mode using the LPDS bit
- *          of the Power control register (PWR_CR).
- *
- * Returned Value:
- *   Zero means that the STOP was successfully entered and the system has
- *   been re-awakened.  The internal voltage regulator is back to its
- *   original state.  Otherwise, STOP mode did not occur and a negated
- *   errno value is returned to indicate the cause of the failure.
- *
  ****************************************************************************/
-int s5j_pmstop(bool lpds);
+void s5j_pmstop(void);
 
 /****************************************************************************
  * Name: s5j_pmstandby
@@ -108,14 +107,8 @@ int s5j_pmstop(bool lpds);
  * Input Parameters:
  *   None
  *
- * Returned Value.
- *   On success, this function will not return (STANDBY mode can only be
- *   terminated with a reset event).  Otherwise, STANDBY mode did not occur
- *   and a negated errno value is returned to indicate the cause of the
- *   failure.
- *
  ****************************************************************************/
-int s5j_pmstandby(void);
+void s5j_pmstandby(void);
 
 /****************************************************************************
  * Name: s3e_pmsleep
@@ -129,14 +122,41 @@ int s5j_pmstandby(void);
  *                        exits the lowest priority ISR.
  *               - false: SLEEPONEXIT bit is cleared, the MCU enters Sleep
  *                        mode as soon as WFI or WFE instruction is executed.
- * Returned Value:
- *   Zero means that the STOP was successfully entered and the system has
- *   been re-awakened.  The internal voltage regulator is back to its
- *   original state.  Otherwise, STOP mode did not occur and a negated
- *   errno value is returned to indicate the cause of the failure.
  *
  ****************************************************************************/
 void s5j_pmsleep(bool sleeponexit);
+
+#else
+/****************************************************************************
+ * Name: s5j_idle_pmnormal
+ *
+ * Description:
+ *   Enter NORMAL mode.
+ *
+ ****************************************************************************/
+static void s5j_idle_pmnormal(void);
+
+/****************************************************************************
+ * Name: s5j_idle_pmstop
+ *
+ * Description:
+ *   Enter STOP mode.
+ *
+ ****************************************************************************/
+static void s5j_idle_pmstop(void);
+
+/****************************************************************************
+ * Name: s5j_idle_pmstandby
+ *
+ * Description:
+ *   Enter STANDBY mode.
+ *
+ * Input Parameters:
+ *   None
+ *
+ ****************************************************************************/
+static void s5j_idle_pmstandby(void);
+#endif
 
 #undef EXTERN
 #ifdef __cplusplus

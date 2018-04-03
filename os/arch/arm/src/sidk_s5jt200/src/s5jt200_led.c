@@ -60,20 +60,21 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <tinyara/pwm.h>
+#include <tinyara/kthread.h>
 
 #include <tinyara/board.h>
 #include <arch/board/board.h>
 
-pid_t g_rgbled_tid;
 FAR struct pwm_lowerhalf_s    *ledr;
 FAR struct pwm_lowerhalf_s    *ledg;
 FAR struct pwm_lowerhalf_s    *ledb;
 
-int s5jt200_rgbled_state_task(void)
+int s5jt200_rgbled_state_task(int argc, char *argv[])
 {
 	char freq;
 	struct pwm_info_s info;
-
+	UNUSED(argv);
+	UNUSED(argc);
 	info.duty = 30;
 
 	while (1) {
@@ -171,14 +172,15 @@ int s5jt200_rgbled_setup(void)
 
 int s5j_ledinitialize(void)
 {
+	pid_t rgbled_tid;
+
 	/* RGB LED controlled by S8300 LED DRIVER ID with PWM */
 	s5jt200_rgbled_setup();
 
-	g_rgbled_tid = task_create("s5jt200 rgbstate", 100, 1024,
-					s5jt200_rgbled_state_task, NULL);
-	lldbg("Create rgbled task..\n");
+	lldbg("Creating rgbled task..\n");
+	rgbled_tid = kernel_thread("s5jt200 rgbstate", 100, 1024, (main_t)s5jt200_rgbled_state_task, (FAR char *const *)NULL);
 
-	if (!g_rgbled_tid) {
+	if (!rgbled_tid) {
 		lldbg("Failed to run rgbled task..\n");
 		return -ESRCH;
 	}

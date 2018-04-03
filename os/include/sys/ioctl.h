@@ -57,7 +57,7 @@
  * @{
  */
 
-/// @file ioctl.h
+/// @file sys/ioctl.h
 /// @brief I/O control APIs
 
 #ifndef __INCLUDE_SYS_IOCTL_H
@@ -128,9 +128,11 @@ extern "C" {
 
 /**
  * @ingroup IOCTL_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @details [SYSTEM CALL API]
- * @since Tizen RT v1.0
+ * @brief control a STREAMS device
+ * @details @b #include <sys/ioctl.h> \n
+ * SYSTEM CALL API \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v1.0
  */
 #ifdef CONFIG_LIBC_IOCTL_VARIADIC
 int ioctl(int fd, int req, ...);

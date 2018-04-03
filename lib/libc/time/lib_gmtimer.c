@@ -331,7 +331,7 @@ FAR struct tm *gmtime_r(FAR const time_t *timer, FAR struct tm *result)
 	/* Get the seconds since the EPOCH */
 
 	epoch = *timer;
-	sdbg("timer=%d\n", (int)epoch);
+	svdbg("timer=%d\n", (int)epoch);
 
 	/* Convert to days, hours, minutes, and seconds since the EPOCH */
 
@@ -346,13 +346,13 @@ FAR struct tm *gmtime_r(FAR const time_t *timer, FAR struct tm *result)
 
 	sec = epoch;
 
-	sdbg("hour=%d min=%d sec=%d\n", (int)hour, (int)min, (int)sec);
+	svdbg("hour=%d min=%d sec=%d\n", (int)hour, (int)min, (int)sec);
 
 	/* Convert the days since the EPOCH to calendar day */
 
 	clock_utc2calendar(jdn, &year, &month, &day);
 
-	sdbg("jdn=%d year=%d month=%d day=%d\n", (int)jdn, (int)year, (int)month, (int)day);
+	svdbg("jdn=%d year=%d month=%d day=%d\n", (int)jdn, (int)year, (int)month, (int)day);
 
 	/* Then return the struct tm contents */
 
@@ -362,8 +362,7 @@ FAR struct tm *gmtime_r(FAR const time_t *timer, FAR struct tm *result)
 	result->tm_hour = (int)hour;
 	result->tm_min = (int)min;
 	result->tm_sec = (int)sec;
-
-#if defined(CONFIG_TIME_EXTENDED)
+#if defined(CONFIG_LIBC_LOCALTIME) || defined(CONFIG_TIME_EXTENDED)
 	result->tm_wday = clock_dayoftheweek(day, month, year);
 	result->tm_yday = day + clock_daysbeforemonth(result->tm_mon, clock_isleapyear(year));
 	result->tm_isdst = 0;

@@ -82,9 +82,11 @@ struct tash_cmd_info_s {
 
 static int tash_help(int argc, char **args);
 static int tash_exit(int argc, char **args);
+#if defined(CONFIG_BOARDCTL_RESET)
 static int tash_reboot(int argc, char **argv);
+#endif
 
-extern tash_taskinfo_t tash_taskinfo_list[];
+extern const tash_taskinfo_t tash_taskinfo_list[];
 /****************************************************************************
  * Private Variables
  ****************************************************************************/
@@ -95,7 +97,9 @@ static struct tash_cmd_info_s tash_cmds_info = {PTHREAD_MUTEX_INITIALIZER};
 const static tash_cmdlist_t tash_basic_cmds[] = {
 	{"exit",  tash_exit,   TASH_EXECMD_SYNC},
 	{"help",  tash_help,   TASH_EXECMD_SYNC},
+#ifdef CONFIG_TASH_SCRIPT
 	{"sh",    tash_script, TASH_EXECMD_SYNC},
+#endif
 #ifndef CONFIG_DISABLE_SIGNALS
 	{"sleep", tash_sleep,  TASH_EXECMD_SYNC},
 #endif
@@ -277,8 +281,12 @@ int tash_execute_cmd(char **args, int argc)
 int tash_cmd_install(const char *str, TASH_CMD_CALLBACK cb, int thread_exec)
 {
 	int cmd_idx;
+	static int fail_cmd_count = 0;
 
 	if (TASH_MAX_COMMANDS == tash_cmds_info.count) {
+		printf("Allowed Max tash cmds: %d and Current tash cmd count: %d\n",
+				TASH_MAX_COMMANDS, tash_cmds_info.count + ++fail_cmd_count);
+		printf("Couldn't install cmd: (%s), Refer CONFIG_TASH_MAX_COMMANDS\n", str);
 		return -1;				/* MAX cmd count reached */
 	}
 
@@ -332,7 +340,7 @@ void tash_register_basic_cmds(void)
 	tash_cmdlist_install(tash_basic_cmds);
 }
 
-#if defined(CONFIG_TASH_TELNET_INTERFACE)
+#if defined(CONFIG_TASH_COMMAND_INTERFACE)
 /** @name tash_get_cmdscount
  * @brief API to get the number of registered tash commands.
  * In protected build, it returns the count of user context commands only.

@@ -63,10 +63,10 @@
 #include <debug.h>
 
 #include <tinyara/sched.h>
+#include <tinyara/ttrace.h>
 
 #include "sched/sched.h"
 #include "task/task.h"
-#include <ttrace.h>
 
 /************************************************************************
  * Private Functions
@@ -149,6 +149,9 @@ int prctl(int option, ...)
 
 			strncpy(tcb->name, name, CONFIG_TASK_NAME_SIZE);
 			tcb->name[CONFIG_TASK_NAME_SIZE] = '\0';
+#ifdef CONFIG_HEAPINFO_GROUP
+			heapinfo_check_group_list(tcb->pid, tcb->name);
+#endif
 		} else {
 			/* The returned value will be null-terminated, truncating if necessary */
 

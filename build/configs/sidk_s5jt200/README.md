@@ -2,11 +2,24 @@
 
 Samsung IoT Development Kit for S5JT200 chipset.
 
+## Contents
+
+> [Information](#information)  
+> [Environment Set-up](#environment-set-up)  
+> [How to program a binary](#how-to-program-a-binary)  
+> [ROMFS](#romfs)  
+> [Using GDB](#using-gdb)  
+> [Configuration Sets](#configuration-sets)  
+> [Board Configuration](#board-configuration)
+
 ## Information
 
 will be updated
 
 ## Environment Set-up
+This section covers board-specific environment set-up.  
+Please set TizenRT common environment, [quick start](https://github.com/Samsung/TizenRT#quick-start), first before doing below.
+
 ### On Chip Debugger installation
 
 on Ubuntu 13.10 ~ 14.xx version
@@ -55,7 +68,7 @@ sudo ln -s /usr/local/lib/libftdi.so.1.19.0 libftdi.so.1
 
 ### FT2232 interface driver installation
 
-Get the package, [libftd2xxx1.0.4](https://github.com/psi46/HDItest/tree/master/FTDI-1.0.4/libftd2xx1.0.4)
+Get the package, [libftd2xxx1.0.4](https://github.com/psi46/HDItest/blob/master/FTDI-1.0.4/libftd2xx1.0.4.tar.gz)
 
 Untar the downloaded package
 ```bash
@@ -77,14 +90,74 @@ cd /usr/lib
 sudo ln -s /usr/local/lib/libftd2xx.so.1.0.4 libftd2xx.so
 ```
 
+### Add USB device Rules
+
+This is an optional environment.  
+But as this board is connected through USB, some operation like programming of binary can't be worked without this configuration.
+
+1. Make a file named 99-\<anyname\>.rules.
+2. Add below contents at above file.
+```
+SUBSYSTEMS=="usb",ATTRS{idVendor}=="0403",ATTRS{idProduct}=="6010",MODE="0666" RUN+="/sbin/modprobe ftdi_sio" RUN+="/bin/sh -c 'echo 0403 6010 > /sys/bus/usb-serial/drivers/ftdi_sio/new_id'"
+```
+3. Place the above file in /etc/udev/rules.d folder with sudo permission.
+4. Reboot your system.
+
 ## How to program a binary
 
-After buiding a Tizen RT, execute below at $TIZENRT_BASEDIR/os folder.
-
-TIZENRT_BASEDIR was set at [[Getting the sources]](../../../README.md#getting-the-sources) tab of Quick Start.
+After buiding a TizenRT, execute below at $TIZENRT_BASEDIR/os folder.  
+See [[Getting the sources]](https://github.com/Samsung/TizenRT#getting-the-sources) for how to set *TIZENRT_BASEDIR*.
 ```bash
 make download ALL
 ```
+
+## ROMFS
+
+Before executing below steps, execute [generic steps](../../../tools/fs/README_ROMFS.md), step 1 and step 2.
+
+3. Modify partition configs.  
+    Below steps creates ROMFS partition with size 256KB at the end,  
+    where romfs device is a ftl mtd block device and romfs filesystem will be mounted on ftl mtd device "/dev/mtdblockX"
+    1. Split last partition size to (256, 256) in SIDK_S5JT200_FLASH_PART_LIST
+        ```bash
+        Hardware Configuration -> Board Selection -> change values at Flash partition size list (in KBytes)
+        ```
+    2. Append "romfs," at end to SIDK_S5JT200_FLASH_PART_TYPE
+        ```bash
+        Hardware Configuration -> Board Selection -> append string at Flash partition type list
+        ```
+    3. Append "rom," at end to SIDK_S5JT200_FLASH_PART_NAME
+        ```bash
+        Hardware Configuration -> Board Selection -> append string at FLash partition name list
+        ```
+4. Enable auto-mount config.
+    ```bash
+    Hardware Configuration -> Board Selection -> Automount partitions -> Automount ROM read only partition to y
+    ```
+
+After above two steps, build TizenRT and program a TizenRT binary through above [method](#how-to-program-a-binary).
+
+## Using GDB
+1. Build TizenRT and program a TizenRT binary through above [method](#how-to-program-a-binary)
+
+2. Run GDB server by running openocd with gdb cfg
+    ```bash
+    cd $TIZENRT_BASEDIR/build/configs/sidk_s5jt200/tools/openocd/
+    ./linux64/openocd -f s5jt200_attach_gdb.cfg
+    ```
+3. Run GDB client from another terminal
+    ```bash
+    cd $TIZENRT_BASEDIR/os/
+    arm-none-eabi-gdb -ex "target remote :3333" $TIZENRT_BASEDIR/build/output/bin/tinyara
+    ```
+    1. To run tinyara from beginning, set entrypoint to pc register in gdb.
+    ```bash
+    (gdb) set $pc = entry_addr
+    ```
+    2. entry_addr can be obtained by
+    ```bash
+    arm-none-eabi-readelf -h $TIZENRT_BASEDIR/build/output/bin/tinyara
+    ```
 
 ## Configuration Sets
 

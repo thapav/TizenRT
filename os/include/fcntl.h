@@ -195,16 +195,20 @@ extern "C" {
 /* POSIX-like File System Interfaces */
 /**
  * @ingroup FCNTL_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @details [SYSTEM CALL API]
- * @since Tizen RT v1.0
+ * @brief open file
+ * @details @b #include <fcntl.h> \n
+ * SYSTEM CALL API \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v1.0
  */
 int open(const char *path, int oflag, ...);
 /**
  * @ingroup FCNTL_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @details [SYSTEM CALL API]
- * @since Tizen RT v1.0
+ * @brief file control
+ * @details @b #include <fcntl.h> \n
+ * SYSTEM CALL API \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v1.0
  */
 int fcntl(int fd, int cmd, ...);
 
@@ -215,4 +219,5 @@ int fcntl(int fd, int cmd, ...);
 
 #endif							/* __INCLUDE_FCNTL_H */
 /**
- * @} */
+ * @}
+ */

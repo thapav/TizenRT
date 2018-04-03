@@ -30,16 +30,16 @@
 #include <tinyara/config.h>
 #include <apps/shell/tash.h>
 
-#include <apps/netutils/dhcpc.h>
-#include <apps/netutils/netlib.h>
-#include <apps/netutils/webclient.h>
+#include <protocols/dhcpc.h>
+#include <netutils/netlib.h>
+#include <protocols/webclient.h>
 
 #include <net/if.h>
 
 #include <dm/dm_error.h>
 #include <dm/dm_connectivity.h>
 
-#include <apps/netutils/wifi/slsi_wifi_api.h>
+#include <slsi_wifi/slsi_wifi_api.h>
 
 /****************************************************************************
  * Definitions
@@ -279,7 +279,7 @@ static int wifiAutoConnectInit()
 	/*
 	 * Check WifiIsConnected or not
 	 */
-	if (WifiIsConnected(&result, NULL) != SLSI_STATUS_SUCCESS) {
+	if (WiFiIsConnected(&result, NULL) != SLSI_STATUS_SUCCESS) {
 		/* Error : failed to WifiIsConnected */
 		printf("failed to WifiIsConnected\n");
 		return -1;
@@ -295,8 +295,8 @@ static int wifiAutoConnectInit()
 	if (ret == SLSI_STATUS_SUCCESS) {
 		printf("[AutoConnect]STA mode started\n");
 		ret = WiFiNetworkJoin((uint8_t*)CONFIG_AP_SSID, strlen(CONFIG_AP_SSID), NULL,
-				(const slsi_security_config_t *)get_security_config(
-						CONFIG_AP_SECURITY, CONFIG_AP_PASS));
+				(const slsi_security_config_t *)getSecurityConfig(
+						CONFIG_AP_SECURITY, CONFIG_AP_PASS, SLSI_WIFI_STATION_IF));
 		sleep(1);
 		if (ret == SLSI_STATUS_SUCCESS) {
 			printf("[AutoConnect]Start to Join with SSID %s\n", CONFIG_AP_SSID);
@@ -747,8 +747,7 @@ int send_data_to_artik(int *data)
 		if (ret < 0) {
 			/* ERROR: Connection Failed */
 			ndbg("ERROR: connect failed: %d\n", ret);
-			free(client_tls);
-			return ERROR;
+			goto error_fd_tls;
 		}
 
 		client_tls->client_fd = sockfd;
@@ -756,12 +755,12 @@ int send_data_to_artik(int *data)
 		if (webclient_tls_init(client_tls, &ssl_config)) {
 			/* ERROR: Fail to client tls init */
 			ndbg("Fail to client tls init\n");
-			return ERROR;
+			goto error_fd_tls;
 		} else {
 			if (wget_tls_handshake(client_tls)) {
 				/* ERROR: Fail to client tls handshake */
 				ndbg("Fail to client tls handshake\n");
-				return ERROR;
+				goto error_fd_tls;
 			}
 		}
 
@@ -880,6 +879,13 @@ int send_data_to_artik(int *data)
 	free(client_tls);
 
 	return 0;
+
+	/* Release memory and close socket if error */
+error_fd_tls:
+	close(sockfd);
+	free(client_tls);
+
+	return ERROR;
 
 	/* Handle Exception */
 errout:

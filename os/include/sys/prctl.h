@@ -113,8 +113,9 @@ extern "C" {
  *   values PR_* defined above) and with additional arguments depending on
  *   the specific command.
  *
- * param[in] options for what to do
- * return The returned value may depend on the specific commnand.  For PR_SET_NAME
+ * @details @b #include <sys/prctl.h>
+ * @param[in] option options for what to do
+ * @return The returned value may depend on the specific commnand.  For PR_SET_NAME
  *   and PR_GET_NAME, the returned value of 0 indicates successful operation.
  *   On any failure, -1 is retruend and the errno value is set appropriately.
  *
@@ -122,7 +123,7 @@ extern "C" {
  *     EFAULT optional arg1 is not a valid address.
  *     ESRCH  No task/thread can be found corresponding to that specified
  *       by optional arg1.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int prctl(int option, ...);
 

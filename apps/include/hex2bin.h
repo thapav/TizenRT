@@ -50,8 +50,8 @@
  *
  ****************************************************************************/
 
-#ifndef __APPS_INCLUDE_INIFILE_H
-#define __APPS_INCLUDE_INIFILE_H
+#ifndef __APPS_INCLUDE_HEX2BIN_H
+#define __APPS_INCLUDE_HEX2BIN_H
 
 /****************************************************************************
  * Included Files
@@ -244,7 +244,7 @@ int fhex2mem(FAR FILE * instream, uint32_t baseaddr, uint32_t endpaddr, enum hex
  * Name: hex2bin_main
  *
  * Description:
- *   Main entry point when hex2bin is built as an NSH built-in task.
+ *   Main entry point when hex2bin is built as an TASH built-in task.
  *
  * Input Parameters:
  *   Standard task inputs
@@ -262,7 +262,7 @@ int hex2bin_main(int argc, char **argv);
  * Name: hex2mem_main
  *
  * Description:
- *   Main entry point when hex2mem is built as an NSH built-in task.
+ *   Main entry point when hex2mem is built as an TASH built-in task.
  *
  * Input Parameters:
  *   Standard task inputs
@@ -284,4 +284,4 @@ int hex2mem_main(int argc, char **argv);
 #endif
 
 #endif							/* CONFIG_SYSTEM_HEX2BIN */
-#endif							/* __APPS_INCLUDE_INIFILE_H */
+#endif							/* __APPS_INCLUDE_HEX2BIN_H */

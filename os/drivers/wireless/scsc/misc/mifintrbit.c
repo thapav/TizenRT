@@ -1,6 +1,18 @@
-/****************************************************************************
+/*****************************************************************************
  *
- * Copyright (c) 2014 - 2016 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright 2017 Samsung Electronics All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific
+ * language governing permissions and limitations under the License.
  *
  ****************************************************************************/
 
@@ -40,8 +52,8 @@ static void mifiintrman_isr(int irq, void *data)
 	do {
 		spin_lock_irqsave(&intr->spinlock, flags);
 		while ((irq_reg[0] = intr->mif->irq_get(intr->mif)) != 0) {
-			for_each_set_bit(bit, (unsigned long int *)irq_reg, MIFINTRBIT_NUM_INT) {
-				if (intr->mifintrbit_irq_handler[bit] != mifintrbit_default_handler) {
+			for (bit = 0; bit < MIFINTRBIT_NUM_INT; bit++) {
+				if ((irq_reg[0] & (1 << bit)) && (intr->mifintrbit_irq_handler[bit] != mifintrbit_default_handler)) {
 					intr->mifintrbit_irq_handler[bit](bit, intr->irq_data[bit]);
 				}
 			}
@@ -51,8 +63,8 @@ static void mifiintrman_isr(int irq, void *data)
 #else
 	spin_lock_irqsave(&intr->spinlock, flags);
 	irq_reg[0] = intr->mif->irq_get(intr->mif);
-	for_each_set_bit(bit, (unsigned long int *)irq_reg, MIFINTRBIT_NUM_INT) {
-		if (intr->mifintrbit_irq_handler[bit] != mifintrbit_default_handler) {
+	for (bit = 0; bit < MIFINTRBIT_NUM_INT; bit++) {
+		if ((irq_reg[0] & (1 << bit)) && (intr->mifintrbit_irq_handler[bit] != mifintrbit_default_handler)) {
 			intr->mifintrbit_irq_handler[bit](bit, intr->irq_data[bit]);
 		}
 	}

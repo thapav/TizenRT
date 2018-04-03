@@ -24,28 +24,26 @@
  */
 
 /**
- * @file iotbus_gpio.h
+ * @file iotbus/iotbus_gpio.h
  * @brief Iotbus APIs for GPIO
  */
 
 #ifndef IOTBUS_GPIO_H_
 #define IOTBUS_GPIO_H_
 
+#include <tinyara/config.h>
 /**
  * @brief Enumeration of Gpio output mode
  * @details
  * Enumeration Details:\n
- * IOTBUS_GPIO_DRIVE_NONE = 0, No set any state\n
- * IOTBUS_GPIO_DRIVE_PULLUP = 1, Resistive High\n
- * IOTBUS_GPIO_DRIVE_PULLDOWN = 2, Resistive Low\n
- * IOTBUS_GPIO_DRIVE_FLOAT = 3, Float\n
- * IOTBUS_GPIO_DRIVE_PUSHPULL = 4, Push Pull\n
+ * IOTBUS_GPIO_DRIVE_PULLUP = 0, Resistive High\n
+ * IOTBUS_GPIO_DRIVE_PULLDOWN = 1, Resistive Low\n
+ * IOTBUS_GPIO_DRIVE_FLOAT = 2, Float\n
  */
 typedef enum {
-	IOTBUS_GPIO_DRIVE_NONE = 0, /* No set any state */
-	IOTBUS_GPIO_DRIVE_PULLUP = 1, /* Resistive High */
-	IOTBUS_GPIO_DRIVE_PULLDOWN = 2, /* Resistive Low */
-	IOTBUS_GPIO_DRIVE_FLOAT = 3, IOTBUS_GPIO_DRIVE_PUSHPULL = 4,
+	IOTBUS_GPIO_DRIVE_PULLUP   = 0, /* Resistive High */
+	IOTBUS_GPIO_DRIVE_PULLDOWN = 1, /* Resistive Low */
+	IOTBUS_GPIO_DRIVE_FLOAT    = 2,
 } iotbus_gpio_drive_e;
 
 /**
@@ -57,8 +55,9 @@ typedef enum {
  * IOTBUS_GPIO_DIRECTION_IN = 2, Input Direction\n
  */
 typedef enum {
-	IOTBUS_GPIO_DIRECTION_NONE = 0, IOTBUS_GPIO_DIRECTION_OUT = 1, /* Output. A Mode can also be set */
-	IOTBUS_GPIO_DIRECTION_IN = 2, /* Input */
+	IOTBUS_GPIO_DIRECTION_NONE = 0,
+	IOTBUS_GPIO_DIRECTION_OUT  = 1,  /* Output. A Mode can also be set */
+	IOTBUS_GPIO_DIRECTION_IN   = 2,  /* Input */
 } iotbus_gpio_direction_e;
 
 /**
@@ -71,22 +70,21 @@ typedef enum {
  * IOTBUS_GPIO_EDGE_FALLING = 3, Interrupt on falling edge only\n
  */
 typedef enum {
-	IOTBUS_GPIO_EDGE_NONE = 0, /* No interrupt on Gpio */
-	IOTBUS_GPIO_EDGE_BOTH = 1, /* Interrupt on rising & falling */
-	IOTBUS_GPIO_EDGE_RISING = 2, /* Interrupt on rising only */
-	IOTBUS_GPIO_EDGE_FALLING = 3 /* Interrupt on falling only */
+	IOTBUS_GPIO_EDGE_NONE    = 0, /* No interrupt on Gpio */
+	IOTBUS_GPIO_EDGE_BOTH    = 1, /* Interrupt on rising & falling */
+	IOTBUS_GPIO_EDGE_RISING  = 2, /* Interrupt on rising only */
+	IOTBUS_GPIO_EDGE_FALLING = 3  /* Interrupt on falling only */
 } iotbus_gpio_edge_e;
 
 struct _iotbus_gpio_s;
 
 /**
- * @brief Pointer definition to the internal struct iotbus_gpio_s
+ * @brief Pointer definition to the internal struct _iotbus_gpio_wrapper_s
  */
-typedef struct _iotbus_gpio_s *iotbus_gpio_context_h;
+typedef struct _iotbus_gpio_wrapper_s *iotbus_gpio_context_h;
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 typedef void (*gpio_isr_cb)(void *user_data);
@@ -94,54 +92,60 @@ typedef void (*gpio_isr_cb)(void *user_data);
 /**
  * @brief initializes gpio_context based on gpio pin.
  *
+ * @details @b #include <iotbus/iotbus_gpio.h>
  * @param[in] gpiopin gpio pin number
  * @return On success, handle of gpio_context is returned. On failure, NULL is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 iotbus_gpio_context_h iotbus_gpio_open(int gpiopin);
 
 /**
  * @brief closes the gpio_context.
  *
+ * @details @b #include <iotbus/iotbus_gpio.h>
  * @param[in] dev handle of gpio_context
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_gpio_close(iotbus_gpio_context_h dev);
 
 /**
  * @brief sets gpio direction.
  *
+ * @details @b #include <iotbus/iotbus_gpio.h>
  * @param[in] dev handle of gpio_context
  * @param[in] dir gpio direction type
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_gpio_set_direction(iotbus_gpio_context_h dev, iotbus_gpio_direction_e dir);
 
 /**
  * @brief sets the edge mode on the gpio.
  *
+ * @details @b #include <iotbus/iotbus_gpio.h>
  * @param[in] dev handle of gpio_context
  * @param[in] edge gpio edge type
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_gpio_set_edge_mode(iotbus_gpio_context_h dev, iotbus_gpio_edge_e edge);
 
 /**
  * @brief sets gpio output mode.
  *
+ * @details @b #include <iotbus/iotbus_gpio.h>
  * @param[in] dev handle of gpio_context
  * @param[in] drive gpio drive type
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_gpio_set_drive_mode(iotbus_gpio_context_h dev, iotbus_gpio_drive_e drive);
 
 /**
  * @brief registers event handler callback for interrupt.
- * @details
+ *
+ * @details @b #include <iotbus/iotbus_gpio.h>\n
  * isr_cb is called when following situation occured.\n
  * the gpio value is changed from 0 to 1 on IOTBUS_GPIO_EDGE_RISING mode.\n
  * the gpio value is changed from 1 to 0 on IOTBUS_GPIO_EDGE_FALLING mode.
@@ -151,77 +155,97 @@ int iotbus_gpio_set_drive_mode(iotbus_gpio_context_h dev, iotbus_gpio_drive_e dr
  * @param[in] isr_cb the pointer of isr callback function
  * @param[in] user_data isr function parameter
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_gpio_register_cb(iotbus_gpio_context_h dev, iotbus_gpio_edge_e edge, gpio_isr_cb isr_cb, void *user_data);
 
 /**
  * @brief unregisters event handler callback for interrupt.
  *
+ * @details @b #include <iotbus/iotbus_gpio.h>
  * @param[in] dev handle of gpio_context
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_gpio_unregister_cb(iotbus_gpio_context_h dev);
 
 /**
  * @brief reads the gpio value.
  *
+ * @details @b #include <iotbus/iotbus_gpio.h>
  * @param[in] dev handle of gpio_context
  * @return On success, 0 or 1 is returned. (0: signal low, 1: signal high)
  *             On failure, a nagative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_gpio_read(iotbus_gpio_context_h dev);
 
 /**
  * @brief writes to the gpio value.
  *
+ * @details @b #include <iotbus/iotbus_gpio.h>
  * @param[in] dev handle of gpio_context
  * @param[in] value signal value
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_gpio_write(iotbus_gpio_context_h dev, int value);
 
 /**
  * @brief gets a direction of the gpio.
  *
+ * @details @b #include <iotbus/iotbus_gpio.h>
  * @param[in] dev handle of gpio_context
  * @param[out] dir current gpio direction
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_gpio_get_direction(iotbus_gpio_context_h dev, iotbus_gpio_direction_e *dir);
 
 /**
  * @brief gets a pin number of the gpio.
  *
+ * @details @b #include <iotbus/iotbus_gpio.h>
  * @param[in] dev handle of gpio_context
  * @return On success, gpio pin number is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_gpio_get_pin(iotbus_gpio_context_h dev);
 
 /**
  * @brief gets a edge mode of the gpio.
  *
+ * @details @b #include <iotbus/iotbus_gpio.h>
  * @param[in] dev handle of gpio_context
  * @param[out] edge current gpio edge type
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_gpio_get_edge_mode(iotbus_gpio_context_h dev, iotbus_gpio_edge_e *edge);
 
 /**
  * @brief gets a drive mode of the gpio.
  *
+ * @details @b #include <iotbus/iotbus_gpio.h>
  * @param[in] dev handle of gpio_context
  * @param[out] drive current drive type
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_gpio_get_drive_mode(iotbus_gpio_context_h dev, iotbus_gpio_drive_e *drive);
+
+/**
+ * @brief registers a signal for current on rising or falling edge of gpio
+ *
+ * @details @b #include <iotbus/iotbus_gpio.h>
+ * @param[in] dev handle of gpio_context
+ * @param[in] edge gpio edge type
+ * @return On success, 0 is returned. On failure, a negative value is returned.
+ * @since TizenRT v1.x
+ */
+#ifndef CONFIG_DISABLE_SIGNALS
+int iotbus_gpio_register_signal(iotbus_gpio_context_h dev, iotbus_gpio_edge_e edge);
+#endif
 
 #ifdef __cplusplus
 }

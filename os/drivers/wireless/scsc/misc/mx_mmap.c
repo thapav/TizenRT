@@ -1,6 +1,18 @@
-/****************************************************************************
+/*****************************************************************************
  *
- * Copyright (c) 2014 - 2016 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright 2017 Samsung Electronics All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific
+ * language governing permissions and limitations under the License.
  *
  ****************************************************************************/
 
@@ -328,8 +340,6 @@ void gdb_read_callback(const void *message, size_t len, void *data)
 		return;
 	}
 
-	/* Commented this as gdb framework is not required and black duck shows matches with Nuttx and GPL code. */
-	/* GDB framework removal requires more changes across driver and platform bring up procedure */
 	DEBUGASSERT(up_interrupt_context() == false);
 
 	if (mx_dev->filp) {
@@ -546,12 +556,9 @@ int mx_gdb_close(struct file *filp)
 	}
 
 	sem_post(&mx_dev->data_wait);
-	return OK;
-
 	filp->f_priv = NULL;
 	mx_dev->filp = NULL;
-
-	return 0;
+	return OK;
 }
 
 static const struct file_operations mx_gdb_fops = {

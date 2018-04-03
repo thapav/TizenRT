@@ -117,24 +117,27 @@
 /**
  * @brief Assert if the condition is not true
  *
- * @param[in] assertion condition which shall have a scalar type
+ * @details @b #include <assert.h>
+ * @param[in] f assertion condition which shall have a scalar type
  * @return none
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #define ASSERT(f)        { if (!(f)) up_assert(); }
 /**
  * @brief Assert if a function returns a negative value
  *
- * @param[in] assertion condition which shall have a scalar type
+ * @details @b #include <assert.h>
+ * @param[in] f assertion condition which shall have a scalar type
  * @return none
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #define VERIFY(f)        { if ((f) < 0) up_assert(); }
 /**
  * @brief Unconditional abort
  *
+ * @details @b #include <assert.h>
  * @return none
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #define PANIC()          up_assert()
 
@@ -143,24 +146,27 @@
 /**
  * @brief Like ASSERT, but only if CONFIG_DEBUG is defined
  *
- * @param[in] assertion condition which shall have a scalar type
+ * @details @b #include <assert.h>
+ * @param[in] f assertion condition which shall have a scalar type
  * @return none
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #define DEBUGASSERT(f) { if (!(f)) up_assert(); }
 /**
  * @brief Like VERIFY, but only if CONFIG_DEBUG is defined
  *
- * @param[in] assertion condition which shall have a scalar type
+ * @details @b #include <assert.h>
+ * @param[in] f assertion condition which shall have a scalar type
  * @return none
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #define DEBUGVERIFY(f) { if ((f) < 0) up_assert(); }
 /**
  * @brief Like PANIC, but only if CONFIG_DEBUG is defined
  *
+ * @details @b #include <assert.h>
  * @return none
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #define DEBUGPANIC()   up_assert()
 
@@ -207,6 +213,17 @@ void up_assert(FAR const uint8_t *filename, int linenum) noreturn_function;
 void up_assert(void) noreturn_function;
 #endif
 
+#ifdef CONFIG_FRAME_POINTER
+/*****************************************************************************
+ * dump_stack : Dumps the call stack of the calling Task/Thread
+ *****************************************************************************/
+void dump_stack(void);
+
+/*****************************************************************************
+ * dump_all_stack : Dumps the call stack of all the tasks/threads in system
+ *****************************************************************************/
+void dump_all_stack(void);
+#endif
 /**
  * @}
  * @endcond
@@ -218,4 +235,6 @@ void up_assert(void) noreturn_function;
 
 #endif							/* __INCLUDE_ASSERT_H */
 
-/** @} *///end of ASSERT_KERNEL
+/**
+ * @}
+ */

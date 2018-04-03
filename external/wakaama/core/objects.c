@@ -17,7 +17,7 @@
  *    Benjamin Cabé - Please refer to git log
  *    Bosch Software Innovations GmbH - Please refer to git log
  *    Pascal Rieux - Please refer to git log
- *    
+ *
  *******************************************************************************/
 
 /*
@@ -366,6 +366,10 @@ coap_status_t object_delete(lwm2m_context_t * contextP,
     if (LWM2M_URI_IS_SET_INSTANCE(uriP))
     {
         result = objectP->deleteFunc(uriP->instanceId, objectP);
+        if (result == COAP_202_DELETED)
+        {
+             observe_clear(contextP, uriP);
+        }
     }
     else
     {
@@ -377,6 +381,13 @@ coap_status_t object_delete(lwm2m_context_t * contextP,
             && result == COAP_202_DELETED)
         {
             result = objectP->deleteFunc(instanceP->id, objectP);
+            if (result == COAP_202_DELETED)
+            {
+                uriP->flag |= LWM2M_URI_FLAG_INSTANCE_ID;
+                uriP->instanceId = instanceP->id;
+                observe_clear(contextP, uriP);
+                uriP->flag &= ~LWM2M_URI_FLAG_INSTANCE_ID;
+            }
             instanceP = objectP->instanceList;
         }
     }
@@ -798,7 +809,7 @@ coap_status_t object_createInstance(lwm2m_context_t * contextP,
     targetP = (lwm2m_object_t *)LWM2M_LIST_FIND(contextP->objectList, uriP->objectId);
     if (NULL == targetP) return COAP_404_NOT_FOUND;
 
-    if (NULL == targetP->createFunc) 
+    if (NULL == targetP->createFunc)
     {
         return COAP_405_METHOD_NOT_ALLOWED;
     }
@@ -816,7 +827,7 @@ coap_status_t object_writeInstance(lwm2m_context_t * contextP,
     targetP = (lwm2m_object_t *)LWM2M_LIST_FIND(contextP->objectList, uriP->objectId);
     if (NULL == targetP) return COAP_404_NOT_FOUND;
 
-    if (NULL == targetP->writeFunc) 
+    if (NULL == targetP->writeFunc)
     {
         return COAP_405_METHOD_NOT_ALLOWED;
     }

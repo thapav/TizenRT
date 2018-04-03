@@ -162,8 +162,9 @@ static int tash_open_console(void)
 		if (ret > 0) {
 			break;
 		}
-
+#ifndef CONFIG_DISABLE_SIGNALS
 		usleep(20);
+#endif
 		if (cnt == TASH_TRY_MAXCNT) {
 			shdbg("TASH: can not open uart, tried (%d) times\n", cnt);
 			ret = ERROR;
@@ -199,13 +200,15 @@ static int tash_main(int argc, char *argv[])
 		nbytes = write(fd, tash_prompt, sizeof(tash_prompt));
 		if (nbytes <= 0) {
 			shdbg("TASH: prompt is not displayed (errno = %d)\n", get_errno());
+#ifndef CONFIG_DISABLE_SIGNALS
 			usleep(20);
+#endif
 			continue;
 		}
 		line_buff = tash_read_input_line(fd);
 		shvdbg("TASH: input string (%s)\n", line_buff);
 
-		ret = tash_execute_cmdline(line_buff);
+		tash_execute_cmdline(line_buff);
 
 		tash_free(line_buff);
 	} while (tash_running);
@@ -217,10 +220,13 @@ static int tash_main(int argc, char *argv[])
 int tash_start(void)
 {
 	int pid;
+	int errcode;
 
 	pid = task_create("tash", TASH_TASK_PRIORITY, TASH_TASK_STACKSIZE, tash_main, (FAR char *const *)NULL);
 	if (pid < 0) {
-		printf("TASH is not started, error code = %d\n", pid);
+		errcode = errno;
+		DEBUGASSERT(errcode > 0);
+		return -errcode;
 	}
 
 	return pid;

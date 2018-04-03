@@ -68,30 +68,26 @@ struct kdbg_sig_s {
 };
 
 static const struct kdbg_sig_s kdbg_sig[] = {
-#ifdef SIGUSR1
+#ifndef CONFIG_DISABLE_SIGNALS
 	{"SIGUSR1",         SIGUSR1},
-#endif
-#ifdef SIGUSR2
 	{"SIGUSR2",         SIGUSR2},
-#endif
-#ifdef SIGALRM
 	{"SIGALRM",         SIGALRM},
-#endif
 #ifdef SIGCHLD
 	{"SIGCHLD",         SIGCHLD},
 #endif
 #ifdef SIGPOLL
 	{"SIGPOLL",         SIGPOLL},
 #endif
-#ifdef SIGKILL
+#endif /* CONFIG_DISABLE_SIGNALS */
 	{"SIGKILL",         SIGKILL},
-#endif
+#ifndef CONFIG_DISABLE_SIGNALS
 #ifdef SIGCONDTIMEDOUT
 	{"SIGCONDTIMEDOUT", SIGCONDTIMEDOUT},
 #endif
 #ifdef SIGWORK
 	{"SIGWORK",         SIGWORK},
 #endif
+#endif /* CONFIG_DISABLE_SIGNALS */
 	{NULL,              0}
 };
 
@@ -140,7 +136,7 @@ static int find_signal(char *ptr)
 
 static int send_signal(pid_t pid, int signo)
 {
-	int ret = OK;
+	int ret = ERROR;
 	FAR struct tcb_s *tcb;
 
 	/* Send the signal.  Kill return values:
@@ -164,19 +160,24 @@ static int send_signal(pid_t pid, int signo)
 				/* tasks and kernel threads has to use this interface */
 				ret = task_delete(pid) == OK ? OK : ERROR;
 				break;
+#ifndef CONFIG_DISABLE_PTHREAD
 			case TCB_FLAG_TTYPE_PTHREAD:
 				ret = pthread_cancel(pid) == OK ? OK : ERROR;
 				pthread_join(pid, NULL);
 				break;
+#endif
 			default:
 				set_errno(EINVAL);
 				ret = ERROR;
 				break;
 			}
 		}
-	} else if (kill(pid, signo) != OK) {
+	}
+#ifndef CONFIG_DISABLE_SIGNALS
+	else if (kill(pid, signo) != OK) {
 		ret = ERROR;
 	}
+#endif
 
 	if (ret == ERROR) {
 		printf("send_signal failed. errno : %d\n", get_errno());
@@ -203,7 +204,7 @@ int kdbg_kill(int argc, char **args)
 		goto usage;
 	}
 
-	if (!strcmp(args[1], "--help")) {
+	if (!strncmp(args[1], "--help", strlen("--help") + 1)) {
 		goto usage;
 	}
 
@@ -211,7 +212,7 @@ int kdbg_kill(int argc, char **args)
 		/* For a case that no signal is specified or '-l' option */
 		/* 'kill PID' or 'kill -l' */
 		ptr = args[1];
-		if (!strcmp(ptr, "-l")) {
+		if (!strncmp(ptr, "-l", strlen("-l") + 1)) {
 			/* List signal numbers and it's name */
 			for (sigidx = 0; kdbg_sig[sigidx].signame != NULL; sigidx++) {
 				printf("%2d) %-15s\n", kdbg_sig[sigidx].signo, kdbg_sig[sigidx].signame);
@@ -254,7 +255,7 @@ usage:
 	printf("If no signal is specified, SIGKILL is sent because we don't support SIGTERM\n");
 	printf("* Caution: SIGKILL terminates task/thread without any operations\n");
 	printf("\nOptions:\n");
-	printf(" -l 		  List all signal names\n");
+	printf(" -l		List all signal names\n");
 
 	return ERROR;
 }
@@ -285,7 +286,7 @@ int kdbg_killall(int argc, char **args)
 		goto usage;
 	}
 
-	if (!strcmp(args[1], "--help")) {
+	if (!strncmp(args[1], "--help", strlen("--help") + 1)) {
 		goto usage;
 	}
 
@@ -293,7 +294,7 @@ int kdbg_killall(int argc, char **args)
 		/* For a case that no signal is specified or '-l' option */
 		/* 'killall NAME' or 'killall -l' */
 		ptr = args[1];
-		if (!strcmp(ptr, "-l")) {
+		if (!strncmp(ptr, "-l", strlen("-l") + 1)) {
 			/* List signal numbers and it's name */
 			for (sigidx = 0; kdbg_sig[sigidx].signame != NULL; sigidx++) {
 				printf("%2d) %-15s\n", kdbg_sig[sigidx].signo, kdbg_sig[sigidx].signame);

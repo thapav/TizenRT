@@ -25,9 +25,7 @@
 #include <tinyara/config.h>
 #include <stdio.h>
 #include <time.h>
-#include <ttrace.h>
-#include <semaphore.h>
-#include <apps/shell/tash.h>
+#include <tinyara/ttrace.h>
 #include "tc_common.h"
 
 /****************************************************************************
@@ -37,8 +35,6 @@
 /****************************************************************************
  * Global Variables
  ****************************************************************************/
-extern sem_t tc_sem;
-extern int working_tc;
 
 /**
 * @testcase         tc_libc_trace_begin
@@ -59,20 +55,20 @@ static void tc_libc_trace_begin(void)
 }
 
 /**
-* @testcase         tc_libc_trace_begin_u
+* @testcase         tc_libc_trace_begin_uid
 * @brief            Record Tracepoint's unique id and begin time
 * @scenario         Generates a dummy Tracepoint
-* @apicovered       trace_begin_u
+* @apicovered       trace_begin_uid
 * @precondition     NA
 * @postcondition    NA
 */
-static void tc_libc_trace_begin_u(void)
+static void tc_libc_trace_begin_uid(void)
 {
 	int ret;
 	const int unique_id = 1;
 
-	ret = trace_begin_u(TTRACE_TAG_APPS, unique_id);
-	TC_ASSERT_GEQ("trace_begin_u", ret, 0)
+	ret = trace_begin_uid(TTRACE_TAG_APPS, unique_id);
+	TC_ASSERT_GEQ("trace_begin_uid", ret, 0)
 	TC_SUCCESS_RESULT();
 }
 
@@ -94,19 +90,19 @@ static void tc_libc_trace_end(void)
 }
 
 /**
-* @testcase         tc_libc_trace_end_u
+* @testcase         tc_libc_trace_end_uid
 * @brief            Record Tracepoint's end time
 * @scenario         Generates a dummy Tracepoint
-* @apicovered       trace_end_u
+* @apicovered       trace_end_uid
 * @precondition     NA
 * @postcondition    NA
 */
-static void tc_libc_trace_end_u(void)
+static void tc_libc_trace_end_uid(void)
 {
 	int ret;
 
-	ret = trace_end_u(TTRACE_TAG_APPS);
-	TC_ASSERT_GEQ("trace_end_u", ret, 0)
+	ret = trace_end_uid(TTRACE_TAG_APPS);
+	TC_ASSERT_GEQ("trace_end_uid", ret, 0)
 	TC_SUCCESS_RESULT();
 }
 
@@ -139,39 +135,23 @@ static void tc_libc_trace_sched(void)
 	TC_SUCCESS_RESULT();
 }
 
-static int ttrace_tc_launcher(int argc, char **args)
-{
-	total_pass = 0;
-	total_fail = 0;
-	tc_libc_trace_begin();
-	tc_libc_trace_begin_u();
-	tc_libc_trace_end();
-	tc_libc_trace_end_u();
-	tc_libc_trace_sched();
-	printf("#########################################\n");
-	printf("           FS TC Result               \n");
-	printf("           PASS : %d FAIL : %d        \n", total_pass, total_fail);
-	printf("#########################################\n");
-	return total_pass;
-}
-
 #ifdef CONFIG_BUILD_KERNEL
 int main(int argc, FAR char *argv[])
 #else
-int ttrace_tc_main(int argc, char *argv[])
+int tc_ttrace_main(int argc, char *argv[])
 #endif
 {
-	sem_wait(&tc_sem);
-	working_tc++;
+	if (tc_handler(TC_START, "TTRACE TC") == ERROR) {
+		return ERROR;
+	}
 
-#ifdef CONFIG_TASH
-	tash_cmd_install("ttrace_tc_main", ttrace_tc_launcher, TASH_EXECMD_SYNC);
-#else
-	ttrace_tc_launcher(argc, argv);
-#endif
+	tc_libc_trace_begin();
+	tc_libc_trace_begin_uid();
+	tc_libc_trace_end();
+	tc_libc_trace_end_uid();
+	tc_libc_trace_sched();
 
-	working_tc--;
-	sem_post(&tc_sem);
+	(void)tc_handler(TC_END, "TTRACE TC");
 
 	return 0;
 }

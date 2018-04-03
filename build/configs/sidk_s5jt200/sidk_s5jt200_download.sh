@@ -33,6 +33,8 @@ OUTPUT_BIN_PATH=${BUILD_DIR_PATH}/output/bin
 BOARD_DIR_PATH=${BUILD_DIR_PATH}/configs/${BOARD_NAME}
 OPENOCD_DIR_PATH=${BOARD_DIR_PATH}/tools/openocd
 FW_DIR_PATH=${BOARD_DIR_PATH}/boot_bin
+FSTOOLS_DIR_PATH=${OS_DIR_PATH}/../tools/fs
+RESOURCE_DIR_PATH=${FSTOOLS_DIR_PATH}/contents
 
 SYSTEM_TYPE=`getconf LONG_BIT`
 if [ "$SYSTEM_TYPE" = "64" ]; then
@@ -40,6 +42,18 @@ if [ "$SYSTEM_TYPE" = "64" ]; then
 else
 	OPENOCD_BIN_PATH=${OPENOCD_DIR_PATH}/linux32
 fi
+
+# ROMFS
+prepare_resource()
+{
+	if [ -d "${RESOURCE_DIR_PATH}" ]; then
+		echo "Packing resources into romfs.img ..."
+
+		# create romfs.img
+		sh ${FSTOOLS_DIR_PATH}/mkromfsimg.sh
+	fi
+}
+
 
 # MAIN
 main()
@@ -70,9 +84,22 @@ main()
 				exit 1
 			fi
 
+			if [ "${CONFIG_FS_ROMFS}" == "y" ]; then
+				prepare_resource
+				if [ ! -f "${OUTPUT_BIN_PATH}/romfs.img" ]; then
+					echo "ROMFS image is not present"
+					exit 1
+				fi
+			fi
+
+			# Generate Partition Map
+			if [ -f "${OPENOCD_DIR_PATH}/partition_gen.sh" ]; then
+				${OPENOCD_DIR_PATH}/partition_gen.sh
+			fi
+
 			# download all binaries using openocd script
 			pushd ${OPENOCD_DIR_PATH}
-			${OPENOCD_BIN_PATH}/openocd -f s5jt200_silicon_evt0_fusing_flash_all.cfg
+			${OPENOCD_BIN_PATH}/openocd -f s5jt200_silicon_evt0_fusing_flash_all.cfg || exit 1
 			popd
 			;;
 

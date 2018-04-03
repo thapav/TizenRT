@@ -16,7 +16,7 @@
  *
  ****************************************************************************/
 /****************************************************************************
- * drivers/power/pm_checkstate.c
+ * pm/pm_checkstate.c
  *
  *   Copyright (C) 2011-2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -99,7 +99,11 @@
  *
  ****************************************************************************/
 
+#ifdef CONFIG_IDLE_PM
+int pm_checkstate(int domain)
+#else
 enum pm_state_e pm_checkstate(int domain)
+#endif
 {
 	FAR struct pm_domain_s *pdom;
 	systime_t now;

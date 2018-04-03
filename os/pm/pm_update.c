@@ -16,7 +16,7 @@
  *
  ****************************************************************************/
 /****************************************************************************
- * drivers/power/pm_update.c
+ * pm/pm_update.c
  *
  *   Copyright (C) 2011-2012, 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -55,6 +55,7 @@
  ****************************************************************************/
 
 #include <tinyara/config.h>
+#include <debug.h>
 #include <stdint.h>
 #include <assert.h>
 #include <tinyara/pm/pm.h>
@@ -283,7 +284,11 @@ void pm_worker(FAR void *arg)
 	 * surprised to be executing!).
 	 */
 
-	if (pdom->state < PM_SLEEP) {
+#ifdef CONFIG_IDLE_PM
+	if (pdom->state < sleep_states_count) {
+#else
+      if (pdom->state < PM_SLEEP) {
+#endif
 		unsigned int nextstate;
 
 		/* Get the next state and the table index for the next state (which will
@@ -311,7 +316,11 @@ void pm_worker(FAR void *arg)
 			 * for a state transition?
 			 */
 
+#ifndef CONFIG_IDLE_PM
 			if (++pdom->thrcnt >= g_pmcount[index]) {
+#else
+			if (++pdom->thrcnt >= pm_idle_table[index].sleep_state_enter_count ){
+#endif
 				/* Yes, recommend the new state and set up for the next
 				 * transition.
 				 */

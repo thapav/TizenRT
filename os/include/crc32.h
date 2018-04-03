@@ -80,11 +80,12 @@ extern "C" {
 /**
  * @brief  Continue CRC calculation on a part of the buffer.
  *
- * @param[in] source number for crc32
- * @param[in] length for calculation
- * @param[in] value for calculation
+ * @details @b #include <crc32.h>
+ * @param[in] src source number for crc32
+ * @param[in] len length for calculation
+ * @param[in] crc32val value for calculation
  * @return On success, calculated 32-bit CRC is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 
 uint32_t crc32part(FAR const uint8_t *src, size_t len, uint32_t crc32val);
@@ -92,10 +93,11 @@ uint32_t crc32part(FAR const uint8_t *src, size_t len, uint32_t crc32val);
 /**
  * @brief  Return a 32-bit CRC of the contents of the 'src' buffer, length 'len'
  *
- * @param[in] source number for crc32
- * @param[in] length for calculation
+ * @details @b #include <crc32.h>
+ * @param[in] src source number for crc32
+ * @param[in] len length for calculation
  * @return On success, calculated 16-bit CRC is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 
 uint32_t crc32(FAR const uint8_t *src, size_t len);
@@ -107,4 +109,6 @@ uint32_t crc32(FAR const uint8_t *src, size_t len);
 
 #endif							/* __INCLUDE_CRC32_H */
 
-/** @} *///end of CRC_KERNEL
+/**
+ * @}
+ */

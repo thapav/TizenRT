@@ -57,7 +57,7 @@
  * @{
  */
 
-/// @file select.h
+/// @file sys/select.h
 /// @brief synchronous I/O multiplexing APIs
 
 #ifndef __INCLUDE_SYS_SELECT_H
@@ -143,9 +143,11 @@ extern "C" {
 
 /**
  * @ingroup SELECT_KERNEL
- * @brief  POSIX APIs (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @details [SYSTEM CALL API]
- * @since Tizen RT v1.0
+ * @brief synchronous I/O multiplexing
+ * @details @b #include <sys/select.h> \n
+ * SYSTEM CALL API \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v1.0
  */
 EXTERN int select(int nfds, FAR fd_set *readfds, FAR fd_set *writefds, FAR fd_set *exceptfds, FAR struct timeval *timeout);
 

@@ -299,6 +299,14 @@ bool transaction_handleResponse(lwm2m_context_t * contextP,
             	        reset = COAP_TYPE_RST == message->type;
             	    }
                 }
+                // Because there is no ACK type message (with TCP/TLS), we should set
+                // transacP->ack_received, if we received CON type message from our peer.
+                else if (message->type == COAP_TYPE_CON &&
+                         (proto == COAP_TCP || proto == COAP_TCP_TLS))
+                {
+                    found = true;
+                    transacP->ack_received = true;
+                }
             }
 
             if (reset || prv_checkFinished(transacP, message))
@@ -314,14 +322,14 @@ bool transaction_handleResponse(lwm2m_context_t * contextP,
                         coap_init_message(response, proto, COAP_TYPE_ACK, 0, message->mid);
                         message_send(contextP, response, fromSessionH);
                     }
-                
+
 	                if ((COAP_401_UNAUTHORIZED == message->code) && (COAP_MAX_RETRANSMIT > transacP->retrans_counter))
     	            {
         	            transacP->ack_received = false;
             	        transacP->retrans_time += COAP_RESPONSE_TIMEOUT;
                 	    return true;
                 	}
-				}       
+				}
                 if (transacP->callback != NULL)
                 {
                     transacP->callback(transacP, message);
@@ -359,16 +367,44 @@ int transaction_send(lwm2m_context_t * contextP,
 {
     bool maxRetriesReached = false;
 
+	coap_protocol_t proto = contextP->protocol;
+
     LOG("Entering");
     if (transacP->buffer == NULL)
     {
-        transacP->buffer_len = coap_serialize_get_size(transacP->message);
+		switch (proto) {
+		case COAP_UDP:
+		case COAP_UDP_DTLS:
+			transacP->buffer_len = coap_serialize_get_size(transacP->message);
+			break;
+		case COAP_TCP:
+		case COAP_TCP_TLS:
+			transacP->buffer_len = coap_serialize_get_size_tcp(transacP->message);
+			break;
+		default:
+			break;
+		}
+		LOG_ARG("get transaction message size %d, (protocol %d)", transacP->buffer_len, proto);
+
         if (transacP->buffer_len == 0) return COAP_500_INTERNAL_SERVER_ERROR;
 
         transacP->buffer = (uint8_t*)lwm2m_malloc(transacP->buffer_len);
         if (transacP->buffer == NULL) return COAP_500_INTERNAL_SERVER_ERROR;
 
-        transacP->buffer_len = coap_serialize_message(transacP->message, transacP->buffer);
+		switch (proto) {
+		case COAP_UDP:\
+		case COAP_UDP_DTLS:
+			transacP->buffer_len = coap_serialize_message(transacP->message, transacP->buffer);
+			break;
+		case COAP_TCP:
+		case COAP_TCP_TLS:
+			transacP->buffer_len = coap_serialize_message_tcp(transacP->message, transacP->buffer);
+			break;
+		default:
+			break;
+		}
+		LOG_ARG("transaction buffer len %d, (protocol %d)", transacP->buffer_len, proto);
+
         if (transacP->buffer_len == 0)
         {
             lwm2m_free(transacP->buffer);

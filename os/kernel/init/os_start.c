@@ -68,6 +68,9 @@
 #include  <tinyara/lib.h>
 #include  <tinyara/mm/mm.h>
 #include  <tinyara/mm/shm.h>
+#ifdef  CONFIG_IDLE_PM
+#include  <tinyara/pm/pm.h>
+#endif
 #include  <tinyara/kmalloc.h>
 #include  <tinyara/init.h>
 
@@ -88,6 +91,9 @@
 #include  "group/group.h"
 #endif
 #include  "init/init.h"
+#ifdef CONFIG_DEBUG_SYSTEM
+#include <tinyara/debug/sysdbg.h>
+#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -431,6 +437,12 @@ void os_start(void)
 		wd_initialize();
 	}
 
+#if CONFIG_NFILE_DESCRIPTORS > 0
+	/* Initialize the file system (needed to support device drivers) */
+
+	fs_initialize();
+#endif
+
 	/* Initialize the POSIX timer facility (if included in the link) */
 
 #ifdef CONFIG_HAVE_WEAKFUNCTIONS
@@ -481,12 +493,6 @@ void os_start(void)
 	}
 #endif
 
-#if CONFIG_NFILE_DESCRIPTORS > 0
-	/* Initialize the file system (needed to support device drivers) */
-
-	fs_initialize();
-#endif
-
 #ifdef CONFIG_NET
 	/* Initialize the networking system.  Network initialization is
 	 * performed in two steps:  (1) net_setup() initializes static
@@ -507,6 +513,14 @@ void os_start(void)
 	 */
 
 	up_initialize();
+
+#ifdef CONFIG_KERNEL_TEST_DRV
+	test_drv_register();
+#endif
+
+#if defined(CONFIG_DEBUG_SYSTEM)
+	sysdbg_init();
+#endif
 
 #if defined(CONFIG_TTRACE)
 	ttrace_init();
@@ -585,6 +599,10 @@ void os_start(void)
 
 		/* Perform any processor-specific idle state operations */
 
+#ifndef  CONFIG_IDLE_PM
 		up_idle();
+#else
+		up_idle_pm();
+#endif
 	}
 }

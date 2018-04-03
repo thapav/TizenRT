@@ -18,8 +18,8 @@
 /****************************************************************************
  * drivers/i2c/i2c_uio.c
  *
- *   Copyright (C) 2016 SAMSUNG ELECTRONICS CO., LTD. All rights reserved.
- *   Author: ByoungTae Cho <bt.cho@samsung.com>
+ *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -97,7 +97,7 @@ static const struct file_operations g_i2cops = {
 
 static int i2c_uio_open(FAR struct file *filep)
 {
-	FAR struct inode *inode = filep->f_inode;
+	FAR struct inode *inode;
 	FAR struct i2c_dev_s *dev;
 //  int ret;
 
@@ -134,7 +134,7 @@ static int i2c_uio_open(FAR struct file *filep)
 
 static int i2c_uio_close(FAR struct file *filep)
 {
-	FAR struct inode *inode = filep->f_inode;
+	FAR struct inode *inode;
 	FAR struct i2c_dev_s *dev;
 //  int ret;
 

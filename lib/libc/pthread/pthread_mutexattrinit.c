@@ -104,7 +104,7 @@ int pthread_mutexattr_init(FAR pthread_mutexattr_t *attr)
 {
 	int ret = OK;
 
-	sdbg("attr=0x%p\n", attr);
+	svdbg("attr=0x%p\n", attr);
 
 	if (!attr) {
 		ret = EINVAL;
@@ -121,13 +121,13 @@ int pthread_mutexattr_init(FAR pthread_mutexattr_t *attr)
 
 #ifdef CONFIG_PTHREAD_MUTEX_BOTH
 #ifdef CONFIG_PTHREAD_MUTEX_DEFAULT_UNSAFE
-	attr->robust  = PTHREAD_MUTEX_STALLED;
+		attr->robust  = PTHREAD_MUTEX_STALLED;
 #else
-	attr->robust  = PTHREAD_MUTEX_ROBUST;
+		attr->robust  = PTHREAD_MUTEX_ROBUST;
 #endif
 #endif
 	}
 
-	sdbg("Returning %d\n", ret);
+	svdbg("Returning %d\n", ret);
 	return ret;
 }

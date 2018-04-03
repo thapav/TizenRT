@@ -13,7 +13,7 @@
  * Contributors:
  *    David Navarro, Intel Corporation - initial API and implementation
  *    Toby Jaffey - Please refer to git log
- *    
+ *
  *******************************************************************************/
 
 /*
@@ -526,7 +526,7 @@ int utils_intCopy(char * buffer,
 void utils_copyValue(void * dst,
                      const void * src,
                      size_t len)
-{		
+{
 #ifdef LWM2M_BIG_ENDIAN
     memcpy(dst, src, len);
 #else
@@ -745,7 +745,7 @@ static void prv_decodeBlock(uint8_t input[4],
     output[2] = (tmp[2] << 6) | tmp[3];
 }
 
-static size_t prv_getBase64Size(size_t dataLen)
+size_t utils_base64GetSize(size_t dataLen)
 {
     size_t result_len;
 
@@ -756,7 +756,7 @@ static size_t prv_getBase64Size(size_t dataLen)
 }
 
 size_t utils_base64Encode(uint8_t * dataP,
-                          size_t dataLen, 
+                          size_t dataLen,
                           uint8_t * bufferP,
                           size_t bufferLen)
 {
@@ -764,7 +764,7 @@ size_t utils_base64Encode(uint8_t * dataP,
     unsigned int result_index;
     size_t result_len;
 
-    result_len = prv_getBase64Size(dataLen);
+    result_len = utils_base64GetSize(dataLen);
 
     if (result_len > bufferLen) return 0;
 
@@ -807,7 +807,7 @@ size_t utils_opaqueToBase64(uint8_t * dataP,
     size_t buffer_len;
     size_t result_len;
 
-    buffer_len = prv_getBase64Size(dataLen);
+    buffer_len = utils_base64GetSize(dataLen);
 
     *bufferP = (uint8_t *)lwm2m_malloc(buffer_len);
     if (!*bufferP) return 0;
@@ -820,7 +820,7 @@ size_t utils_opaqueToBase64(uint8_t * dataP,
         lwm2m_free(*bufferP);
         *bufferP = NULL;
     }
- 
+
     return result_len;
 }
 

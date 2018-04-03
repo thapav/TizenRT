@@ -6,6 +6,7 @@
 menuconfig PM
 	bool "Power management (PM) driver interfaces"
 	default n
+	depends on SCHED_WORKQUEUE
 	---help---
 		Power management (PM) driver interfaces.  These interfaces are used
 		to manage power usage of a platform by monitoring driver activity
@@ -121,6 +122,12 @@ config PM_COEF5
 		See help associated with CONFIG_PM_MEMORY
 
 		Ignored if CONFIG_PM_MEMORY <= 5
+
+config IDLE_PM
+	bool "TIZENRT IDLE PM framework"
+	default n
+	---help---
+		Used to enable TizenRT IDLE PM framework
 
 config PM_IDLEENTER_THRESH
 	int "PM IDLE enter threshold"

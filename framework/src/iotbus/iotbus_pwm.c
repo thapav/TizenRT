@@ -22,6 +22,7 @@
  */
 
 #include <tinyara/config.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
@@ -30,99 +31,127 @@
 #include <iotbus/iotbus_error.h>
 #include <iotbus/iotbus_pwm.h>
 
-// debugging
-#include <stdio.h>
-#define zdbg printf   // adbg, idbg are already defined
+#include "iotbus_internal.h"
 
 /*
  * private types
  */
 #define DEFAULT_PWM_DEVICE_NUM 0
 #define IOTBUS_PWM_MAX_PERIOD 1000000 // 1s
-#define IOTBUS_USEC_2_SEC 1000000
+#define IOTBUS_PWM_MAX_RESOLUTION 65535 // (b16ONE - 1)
 
 struct _iotbus_pwm_s {
 	int fd;
 	int enabled;
-#ifdef CONFIG_PWM
 	struct pwm_info_s config;
-#endif
 };
 
-//int g_board_init = 0;
+struct _iotbus_pwm_wrapper_s {
+	struct _iotbus_pwm_s *handle;
+};
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifdef CONFIG_PWM
-
 iotbus_pwm_context_h iotbus_pwm_open(int device, int channel)
 {
-	if (device != DEFAULT_PWM_DEVICE_NUM)
-		return NULL;
-
-	char pwm_dev[32] = { 0, };
 	int fd;
+	char pwm_dev[32] = { 0, };
+	struct _iotbus_pwm_s *handle;
+	iotbus_pwm_context_h dev;
 
-	snprintf(pwm_dev, 32, "/dev/pwm%d", channel);
+	if (device != DEFAULT_PWM_DEVICE_NUM) {
+		return NULL;
+	}
+
+	snprintf(pwm_dev, sizeof(pwm_dev), "/dev/pwm%d", channel);
 	fd = open(pwm_dev, O_RDONLY);
 	if (fd < 0) {
-		zdbg("open %s failed: %d\n", pwm_dev, errno);
+		ibdbg("open %s failed: %d\n", pwm_dev, errno);
 		return NULL;
 	}
 
-	struct _iotbus_pwm_s *hnd = (struct _iotbus_pwm_s *)malloc(sizeof(struct _iotbus_pwm_s));
-	if (hnd == NULL) {
-		zdbg("malloc failed\n");
-		close(fd);
-		return NULL;
+	handle = (struct _iotbus_pwm_s *)malloc(sizeof(struct _iotbus_pwm_s));
+	if (!handle) {
+		goto errout_with_close;
 	}
-	memset(hnd, 0x0, sizeof(*hnd));
-	hnd->fd = fd;
-	return hnd;
+
+	dev = (struct _iotbus_pwm_wrapper_s *)malloc(sizeof(struct _iotbus_pwm_wrapper_s));
+	if (!dev) {
+		free(handle);
+		goto errout_with_close;
+	}
+
+	memset(handle, 0, sizeof(*handle));
+	handle->fd = fd;
+	dev->handle = handle;
+
+	return dev;
+
+errout_with_close:
+	close(fd);
+	return NULL;
 }
 
 int iotbus_pwm_close(iotbus_pwm_context_h pwm)
 {
-	if (!pwm)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
+	int fd;
+	int ret = -1;
+	struct _iotbus_pwm_s *handle;
 
-	int fd = pwm->fd, ret;
-	if (pwm->enabled) {
-		ret = ioctl(fd, PWMIOC_STOP, 0);
-		if (ret < 0)
-			zdbg("stop fail\n");
+	if (!pwm || !pwm->handle) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
 	}
 
-	close(fd);
+	handle = (struct _iotbus_pwm_s *)pwm->handle;
+
+	fd = handle->fd;
+
+	if (handle->enabled) {
+		ret = ioctl(fd, PWMIOC_STOP, 0);
+		if (ret < 0) {
+			ibdbg("stop fail\n");
+			return IOTBUS_ERROR_UNKNOWN;
+		}
+	}
+
+	close(handle->fd);
+	free(handle);
+	pwm->handle = NULL;
 	free(pwm);
 
-	return 0;
+	return IOTBUS_ERROR_NONE;
 }
 
-int iotbus_pwm_set_duty_cycle(iotbus_pwm_context_h pwm, uint32_t duty_cycle)
+int iotbus_pwm_set_duty_cycle(iotbus_pwm_context_h pwm, percent_t duty_cycle)
 {
-	if (!pwm)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
-	if (duty_cycle > 100)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
+	int fd;
+	int ret;
+	struct pwm_info_s *info;
+	struct _iotbus_pwm_s *handle;
 
-	int fd = pwm->fd;
+	if (!pwm || !pwm->handle || duty_cycle > 100) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
 
-	struct pwm_info_s *info = &(pwm->config);
-	int ret = ioctl(fd, PWMIOC_GETCHARACTERISTICS, (unsigned long)((uintptr_t)info));
+	handle = (struct _iotbus_pwm_s *)pwm->handle;
+
+	fd = handle->fd;
+	info = &(handle->config);
+	ret = ioctl(fd, PWMIOC_GETCHARACTERISTICS, (unsigned long)((uintptr_t)info));
 	if (ret < 0) {
-		zdbg("ioctl(PWMIOC_GETCHARACTERISTICS) failed: %d\n", errno);
+		ibdbg("ioctl(PWMIOC_GETCHARACTERISTICS) failed: %d\n", errno);
 		return IOTBUS_ERROR_UNKNOWN;
 	}
 
-	info->duty = (duty_cycle * 65536) / 100;
+	info->duty = ((duty_cycle * IOTBUS_PWM_MAX_RESOLUTION) / 100.0) + 0.5;
 	ret = ioctl(fd, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)info));
 	if (ret < 0) {
-		zdbg("ioctl(PWMIOC_SETCHARACTERISTICS) failed: %d\n", errno);
+		ibdbg("ioctl(PWMIOC_SETCHARACTERISTICS) failed: %d\n", errno);
 		return IOTBUS_ERROR_UNKNOWN;
 	}
+
 	return IOTBUS_ERROR_NONE;
 }
 
@@ -130,139 +159,129 @@ int iotbus_pwm_set_duty_cycle(iotbus_pwm_context_h pwm, uint32_t duty_cycle)
 
 int iotbus_pwm_set_period(iotbus_pwm_context_h pwm, uint32_t period)
 {
-	if (!pwm)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
+	int fd;
+	int ret;
+	struct pwm_info_s *info;
+	struct _iotbus_pwm_s *handle;
 
+	if (!pwm || !pwm->handle) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
 	// TBD: check period is valid, get the min and max period in each board.
 
-	int fd = pwm->fd;
-	struct pwm_info_s *info = &(pwm->config);
-	int ret = ioctl(fd, PWMIOC_GETCHARACTERISTICS, (unsigned long)((uintptr_t)info));
+	handle = (struct _iotbus_pwm_s *)pwm->handle;
+
+	fd = handle->fd;
+	info = &(handle->config);
+	ret = ioctl(fd, PWMIOC_GETCHARACTERISTICS, (unsigned long)((uintptr_t)info));
 	if (ret < 0) {
-		zdbg("ioctl(PWMIOC_GETCHARACTERISTICS) failed: %d\n", errno);
+		ibdbg("ioctl(PWMIOC_GETCHARACTERISTICS) failed: %d\n", errno);
 		return IOTBUS_ERROR_UNKNOWN;
 	}
 
-	info->frequency = 1000000 / period;
+	info->frequency = IOTBUS_PWM_MAX_PERIOD / period;
 	ret = ioctl(fd, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)info));
 	if (ret < 0) {
-		zdbg("ioctl(PWMIOC_SETCHARACTERISTICS) failed: %d\n", errno);
+		ibdbg("ioctl(PWMIOC_SETCHARACTERISTICS) failed: %d\n", errno);
 		return IOTBUS_ERROR_UNKNOWN;
 	}
+
 	return IOTBUS_ERROR_NONE;
 }
 
 int iotbus_pwm_set_enabled(iotbus_pwm_context_h pwm, iotbus_pwm_state_e enable)
 {
-	if (!pwm)
+	int fd;
+	int ret;
+	struct _iotbus_pwm_s *handle;
+
+	if (!pwm || !pwm->handle) {
 		return IOTBUS_ERROR_INVALID_PARAMETER;
-	if (!(enable == 0 || enable == 1))
+	}
+
+	if (!(enable == 0 || enable == 1)) {
 		return IOTBUS_ERROR_INVALID_PARAMETER;
-	int fd = pwm->fd, ret;
-	pwm->enabled = enable;
-	if (enable)
+	}
+
+	handle = (struct _iotbus_pwm_s *)pwm->handle;
+
+	fd = handle->fd;
+	handle->enabled = enable;
+
+	if (enable) {
 		ret = ioctl(fd, PWMIOC_START, 0);
-	else
+	} else {
 		ret = ioctl(fd, PWMIOC_STOP, 0);
+	}
 
 	if (ret < 0) {
-		zdbg("ioctl(PWMIOC_START) failed: %d\n", errno);
+		ibdbg("ioctl(PWMIOC_START) failed: %d\n", errno);
 		return IOTBUS_ERROR_UNKNOWN;
 	}
+
 	return IOTBUS_ERROR_NONE;
 }
 
 int iotbus_pwm_is_enabled(iotbus_pwm_context_h pwm)
 {
-	if (!pwm)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
+	struct _iotbus_pwm_s *handle;
 
-	return pwm->enabled;
+	if (!pwm || !pwm->handle) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
+
+	handle = (struct _iotbus_pwm_s *)pwm->handle;
+
+	return handle->enabled;
 }
 
 int iotbus_pwm_get_duty_cycle(iotbus_pwm_context_h pwm)
 {
-	if (!pwm)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
+	int fd;
+	int ret;
+	struct pwm_info_s *info;
+	struct _iotbus_pwm_s *handle;
 
-	struct pwm_info_s *info = &pwm->config;
-	int fd = pwm->fd;
-	int ret = ioctl(fd, PWMIOC_GETCHARACTERISTICS, (unsigned long)((uintptr_t)info));
+	if (!pwm || !pwm->handle) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
+
+	handle = (struct _iotbus_pwm_s *)pwm->handle;
+
+	info = &(handle->config);
+	fd = handle->fd;
+	ret = ioctl(fd, PWMIOC_GETCHARACTERISTICS, (unsigned long)((uintptr_t)info));
 	if (ret < 0) {
-		zdbg("ioctl(PWMIOC_GETCHARACTERISTICS) failed: %d\n", errno);
+		ibdbg("ioctl(PWMIOC_GETCHARACTERISTICS) failed: %d\n", errno);
 		return IOTBUS_ERROR_UNKNOWN;
 	}
 
-	return (int)(info->duty);
+	return (int)((info->duty * 100.0 / IOTBUS_PWM_MAX_RESOLUTION) + 0.5);
 }
 
 int iotbus_pwm_get_period(iotbus_pwm_context_h pwm)
 {
-	if (!pwm)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
+	int fd;
+	int ret;
+	struct pwm_info_s *info;
+	struct _iotbus_pwm_s *handle;
 
-	struct pwm_info_s *info = &(pwm->config);
-	int fd = pwm->fd;
-	int ret = ioctl(fd, PWMIOC_GETCHARACTERISTICS, (unsigned long)((uintptr_t)info));
+	if (!pwm || !pwm->handle) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
+
+	handle = (struct _iotbus_pwm_s *)pwm->handle;
+
+	info = &(handle->config);
+	fd = handle->fd;
+	ret = ioctl(fd, PWMIOC_GETCHARACTERISTICS, (unsigned long)((uintptr_t)info));
 	if (ret < 0) {
-		zdbg("ioctl(PWMIOC_GETCHARACTERISTICS) failed: %d\n", errno);
+		ibdbg("ioctl(PWMIOC_GETCHARACTERISTICS) failed: %d\n", errno);
 		return IOTBUS_ERROR_UNKNOWN;
 	}
 
-	return (int)(1000000 / info->frequency);
+	return (int)(IOTBUS_PWM_MAX_PERIOD / info->frequency);
 }
-
-#else // CONFIG_PWM
-iotbus_pwm_context_h
-iotbus_pwm_open(int device, int channel)
-{
-	zdbg("pwm is not supported\n");
-	return NULL;
-}
-int
-iotbus_pwm_close(iotbus_pwm_context_h pwm)
-{
-	zdbg("pwm is not supported\n");
-	return IOTBUS_ERROR_NOT_SUPPORTED;
-}
-int
-iotbus_pwm_set_duty_cycle(iotbus_pwm_context_h pwm, uint32_t duty_cycle)
-{
-	zdbg("pwm is not supported\n");
-	return IOTBUS_ERROR_NOT_SUPPORTED;
-}
-int
-iotbus_pwm_set_period(iotbus_pwm_context_h pwm, uint32_t period)
-{
-	zdbg("pwm is not supported\n");
-	return IOTBUS_ERROR_NOT_SUPPORTED;
-}
-int
-iotbus_pwm_set_enabled(iotbus_pwm_context_h pwm, iotbus_pwm_state_e enable)
-{
-	zdbg("pwm is not supported\n");
-	return IOTBUS_ERROR_NOT_SUPPORTED;
-}
-int
-iotbus_pwm_is_enabled(iotbus_pwm_context_h pwm)
-{
-	zdbg("pwm is not supported\n");
-	return IOTBUS_ERROR_NOT_SUPPORTED;
-}
-int
-iotbus_pwm_get_duty_cycle(iotbus_pwm_context_h pwm)
-{
-	zdbg("pwm is not supported\n");
-	return IOTBUS_ERROR_NOT_SUPPORTED;
-}
-int
-iotbus_pwm_get_period(iotbus_pwm_context_h pwm)
-{
-	zdbg("pwm is not supported\n");
-	return IOTBUS_ERROR_NOT_SUPPORTED;
-}
-
-#endif // CONFIG_PWM
 
 #ifdef __cplusplus
 }

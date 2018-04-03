@@ -80,11 +80,12 @@ extern "C" {
 /**
  * @brief  Continue CRC calculation on a part of the buffer.
  *
- * @param[in] source number for crc16
- * @param[in] length for calculation
- * @param[in] value for calculation
+ * @details @b #include <crc16.h>
+ * @param[in] src source number for crc16
+ * @param[in] len length for calculation
+ * @param[in] crc16val value for calculation
  * @return On success, calculated 16-bit CRC is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 
 uint16_t crc16part(FAR const uint8_t *src, size_t len, uint16_t crc16val);
@@ -92,10 +93,11 @@ uint16_t crc16part(FAR const uint8_t *src, size_t len, uint16_t crc16val);
 /**
  * @brief  Return a 16-bit CRC of the contents of the 'src' buffer, length 'len'
  *
- * @param[in] source number for crc16
- * @param[in] length for calculation
+ * @details @b #include <crc16.h>
+ * @param[in] src source number for crc16
+ * @param[in] len length for calculation
  * @return On success, calculated 16-bit CRC is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 
 uint16_t crc16(FAR const uint8_t *src, size_t len);
@@ -107,4 +109,6 @@ uint16_t crc16(FAR const uint8_t *src, size_t len);
 
 #endif							/* __INCLUDE_CRC16_H */
 
-/** @} *///end of CRC_KERNEL
+/**
+ * @}
+ */

@@ -64,11 +64,18 @@
 #include <tinyara/arch.h>
 #include <tinyara/kmalloc.h>
 #include <tinyara/kthread.h>
+#include <tinyara/ttrace.h>
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+#include <tinyara/mm/mm.h>
+#ifdef CONFIG_HEAPINFO_GROUP
+#include <tinyara/sched.h>
+#include <string.h>
+#endif
+#endif
 
 #include "sched/sched.h"
 #include "group/group.h"
 #include "task/task.h"
-#include <ttrace.h>
 
 /****************************************************************************
  * Preprocessor Definitions
@@ -133,7 +140,7 @@ static int thread_create(FAR const char *name, uint8_t ttype, int priority, int 
 
 	/* Check whether we are allowed to create new task ? */
 	if (g_alive_taskcount == CONFIG_MAX_TASKS) {
-		sdbg("ERROR: CONFIG_MAX_TASKS(%d) count reached\n",CONFIG_MAX_TASKS);
+		sdbg("ERROR: CONFIG_MAX_TASKS(%d) count reached\n", CONFIG_MAX_TASKS);
 		errcode = EBUSY;
 		goto errout;
 	}
@@ -184,6 +191,13 @@ static int thread_create(FAR const char *name, uint8_t ttype, int priority, int 
 		errcode = get_errno();
 		goto errout_with_tcb;
 	}
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+	/* Update the pid information in stack node */
+	struct mm_allocnode_s *node;
+
+	node = (struct mm_allocnode_s *)(tcb->cmn.stack_alloc_ptr - SIZEOF_MM_ALLOCNODE);
+	node->pid = (-1) * (tcb->cmn.pid);
+#endif
 
 	/* Setup to pass parameters to the new task */
 
@@ -203,17 +217,14 @@ static int thread_create(FAR const char *name, uint8_t ttype, int priority, int 
 
 	pid = (int)tcb->cmn.pid;
 
+#ifdef CONFIG_HEAPINFO_GROUP
+	heapinfo_check_group_list(pid, tcb->cmn.name);
+#endif
+
 	/* Activate the task */
 
-	ret = task_activate((FAR struct tcb_s *)tcb);
-	if (ret < OK) {
-		errcode = get_errno();
+	(void)task_activate((FAR struct tcb_s *)tcb);
 
-		/* The TCB was added to the active task list by task_schedsetup() */
-
-		dq_rem((FAR dq_entry_t *)tcb, (dq_queue_t *)&g_inactivetasks);
-		goto errout_with_tcb;
-	}
 	trace_end(TTRACE_TAG_TASK);
 	return pid;
 

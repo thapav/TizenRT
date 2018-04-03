@@ -62,6 +62,8 @@
 #include <errno.h>
 
 #include <tinyara/sched.h>
+#include <tinyara/ttrace.h>
+
 #include <arch/irq.h>
 
 #include "sched/sched.h"
@@ -69,7 +71,6 @@
 #include "signal/signal.h"
 #endif
 #include "task/task.h"
-#include <ttrace.h>
 
 /****************************************************************************
  * Definitions
@@ -193,12 +194,6 @@ int task_terminate(pid_t pid, bool nonblocking)
 
 	sched_unlock();
 
-	/* Since all tasks pass through this function as the final step in their
-	 * exit sequence, this is an appropriate place to inform any instrumentation
-	 * layer that the task no longer exists.
-	 */
-
-	sched_note_stop(dtcb);
 	trace_end(TTRACE_TAG_TASK);
 
 	/* Deallocate its TCB */

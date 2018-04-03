@@ -66,7 +66,11 @@ config SIDK_S5JT200_FLASH_MINOR
 config SIDK_S5JT200_FLASH_PART
 	bool "Enable partition support on FLASH"
 	default n
+	select MTD
+	select MTD_PARTITION
+	select MTD_PROGMEM
 	depends on S5J_SFLASH
+	depends on NFILE_DESCRIPTORS != 0
 	---help---
 		Enables creation of partitions on the FLASH
 
@@ -96,8 +100,26 @@ config SIDK_S5JT200_AUTOMOUNT
 	bool "Automount partitions"
 	default n
 	depends on SIDK_S5JT200_FLASH_PART
+	depends on !DISABLE_MOUNTPOINT
 	---help---
 		If enabled, mount userrw and sssrw partitions at boot.
+
+config SIDK_S5JT200_AUTOMOUNT_ROMFS
+	bool "Automount ROM read only partiton"
+	default n
+	depends on SIDK_S5JT200_AUTOMOUNT
+	depends on FS_ROMFS
+	---help---
+		If enabled, rom readonly partition will be mounted automatically
+		at boot.
+
+config SIDK_S5JT200_AUTOMOUNT_ROMFS_MOUNTPOINT
+	string "Mountpoint of the partition for rom read only file system"
+	default "/rom"
+	depends on SIDK_S5JT200_AUTOMOUNT_ROMFS
+	---help---
+		Specifies the mount point where rom readonly file system
+		will be mounted at.
 
 config SIDK_S5JT200_AUTOMOUNT_USERFS
 	bool "Automount user r/w partiton"

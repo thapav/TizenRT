@@ -1,6 +1,18 @@
 /****************************************************************************
  *
- * Copyright (c) 2012 - 2016 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright 2017 Samsung Electronics All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific
+ * language governing permissions and limitations under the License.
  *
  ****************************************************************************/
 
@@ -401,7 +413,7 @@ static void __slsi_rx_ba_stop(struct netif *dev, struct slsi_ba_session_rx *ba_s
 		if (ba_session_rx->buffer[i].active) {
 			if (flush) {
 				/* Drop the pending packet if the BA stop is triggered because of disconnection */
-				SLSI_NET_DBG1(dev, SLSI_RX_BA, "Drop pending reorder frame, len = %d\n", ba_session_rx->buffer[i].signal->len);
+				SLSI_NET_DBG1(dev, SLSI_RX_BA, "Drop pending reorder frame, len = %d\n", ba_session_rx->buffer[i].signal->data_len);
 				slsi_kfree_mbuf(ba_session_rx->buffer[i].signal);
 				SLSI_INCR_DATA_PATH_STATS(sdev->dp_stats.rx_drop_ba_stop);
 			} else {

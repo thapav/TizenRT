@@ -58,14 +58,15 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <tinyara/cancelpt.h>
 #include <errno.h>
 #include <debug.h>
+
+#include <tinyara/cancelpt.h>
+#include <tinyara/ttrace.h>
 
 #include "sched/sched.h"
 #include "group/group.h"
 #include "pthread/pthread.h"
-#include <ttrace.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -203,7 +204,7 @@ int pthread_join(pthread_t thread, FAR pthread_addr_t *pexit_value)
 			/* Get the thread exit value from the terminated thread. */
 
 			if (pexit_value) {
-				sdbg("exit_value=0x%p\n", pjoin->exit_value);
+				svdbg("exit_value=0x%p\n", pjoin->exit_value);
 				*pexit_value = pjoin->exit_value;
 			}
 		} else {

@@ -64,10 +64,12 @@ INCDIROPT = -w
 endif
 
 ASRCS =
-ifeq ($(CONFIG_FS_CMDS),y)
-CSRCS = fs_getpath.c
-endif
+CSRCS =
 MAINSRC =
+
+ifneq ($(CONFIG_DISABLE_ENVIRON),y)
+CSRCS += fs_getpath.c
+endif
 
 ifeq ($(CONFIG_TASH),y)
 CSRCS += kernelcmd.c
@@ -82,6 +84,12 @@ endif
 
 ifeq ($(CONFIG_NETUTILS_DHCPD),y)
 CSRCS += netcmd_dhcpd.c
+#CFLAGS += -I$(EXTDIR)/dhcpd/
+CFLAGS += -I../../../external/dhcpd/
+endif
+
+ifeq ($(CONFIG_NETUTILS_TFTPC),y)
+CSRCS += netcmd_tftpc.c
 endif
 
 endif #CONFIG_TASH
@@ -112,12 +120,14 @@ ifeq ($(CONFIG_ENABLE_HEAPINFO),y)
 CSRCS += kdbg_heapinfo.c
 endif
 
-ifneq ($(CONFIG_DISABLE_SIGNALS),y)
+ifeq ($(CONFIG_ENABLE_IRQINFO),y)
+CSRCS += kdbg_irqinfo.c
+endif
+
 ifeq ($(CONFIG_ENABLE_KILL),y)
 CSRCS += kdbg_kill.c
 else ifeq ($(CONFIG_ENABLE_KILLALL),y)
 CSRCS += kdbg_kill.c
-endif
 endif
 
 ifeq ($(CONFIG_ENABLE_PS),y)
@@ -126,6 +136,10 @@ endif
 
 ifeq ($(CONFIG_ENABLE_STACKMONITOR),y)
 CSRCS += kdbg_stackmonitor.c
+endif
+
+ifeq ($(CONFIG_ENABLE_STACKOPT),y)
+CSRCS += kdbg_stackopt.c
 endif
 
 ifeq ($(CONFIG_TTRACE),y)

@@ -29,6 +29,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include "tc_internal.h"
 
@@ -85,7 +86,6 @@ static int delete_task(int argc, char *argv[])
 static int restart_task(int argc, char *argv[])
 {
 	g_callback++;
-	sleep(SEC_1);
 	return OK;
 }
 
@@ -237,9 +237,19 @@ static void tc_task_task_create(void)
 	int pid;
 	const char *task_param[2] = { TEST_STRING, NULL };
 	g_callback = ERROR;
+
+	/* Inavlid priority value check */
+
+	pid = task_create("tc_task_create", SCHED_PRIORITY_MIN - 1, 1024, create_task, (char * const *)task_param);
+	TC_ASSERT_EQ("task_create", pid, ERROR);
+	TC_ASSERT_EQ("task_create", errno, EINVAL);
+
+	/* Regular functionality check */
+
 	pid = task_create("tc_task_create", SCHED_PRIORITY_MAX - 1, 1024, create_task, (char * const *)task_param);
 	TC_ASSERT_GT("task_create", pid, 0);
 	TC_ASSERT_EQ("task_create", g_callback, OK);
+
 	TC_SUCCESS_RESULT();
 }
 
@@ -257,12 +267,14 @@ static void tc_task_task_delete(void)
 	int pid;
 	int ret_chk;
 	g_callback = ERROR;
+
 	pid = task_create("tc_task_del", SCHED_PRIORITY_MAX - 1, 1024, delete_task, (char * const *)NULL);
 	TC_ASSERT_GT("task_create", pid, 0);
 
 	ret_chk = task_delete(pid);
 	TC_ASSERT_LT("task_delete", ret_chk, 0);
 	TC_ASSERT_EQ("task_delete", g_callback, OK);
+
 	TC_SUCCESS_RESULT();
 }
 
@@ -279,25 +291,33 @@ static void tc_task_task_restart(void)
 {
 	int pid;
 	int ret_chk;
-	unsigned int remain;
+
+	/* Check for NULL pid parameter  */
+
+	pid = task_create("tc_task_re", SCHED_PRIORITY_MAX - 1, 1024, restart_task, (char * const *)NULL);
+	TC_ASSERT_GT("task_create", pid, 0);
+
 	g_callback = 0;
+	ret_chk = task_restart(0);
+	TC_ASSERT_EQ("task_restart", ret_chk, ERROR);
+	TC_ASSERT_EQ("task_restart", errno, ENOSYS);
+	TC_ASSERT_EQ("task_restart", g_callback, 0);
+	g_callback = 0;
+
+	/* Check for reinitialization of task using task_restart */
+
 	pid = task_create("tc_task_re", SCHED_PRIORITY_MAX - 1, 1024, restart_task, (char * const *)NULL);
 	TC_ASSERT_GT("task_create", pid, 0);
 
 	ret_chk = task_restart(pid);
 
-	/* wait for terminating restart_task */
-
-	remain = sleep(SEC_2);
-	while (remain > 0) {
-		remain = sleep(remain);
-	}
+	sleep(SEC_1);
 
 	TC_ASSERT_EQ("task_restart", ret_chk, 0);
 
 	/* g_icounter shall be increment when do start and restart operation */
 
-	TC_ASSERT_EQ("task_restart", g_callback, 2);
+	TC_ASSERT_EQ("task_restart", g_callback, 1);
 
 	TC_SUCCESS_RESULT();
 }
@@ -412,11 +432,11 @@ static void tc_task_prctl(void)
 	/* get taskname */
 
 	ret_chk = prctl(PR_GET_NAME, getname, 0, 0, 0);
-	TC_ASSERT_EQ_CLEANUP("prctl", ret_chk, OK, get_errno(), prctl(PR_SET_NAME, oldname, 0, 0, 0));
+	TC_ASSERT_EQ_ERROR_CLEANUP("prctl", ret_chk, OK, get_errno(), prctl(PR_SET_NAME, oldname, 0, 0, 0));
 
 	/* compare getname and setname */
 
-	TC_ASSERT_EQ_CLEANUP("prctl", strncmp(getname, setname, CONFIG_TASK_NAME_SIZE), 0, get_errno(), prctl(PR_SET_NAME, oldname, 0, 0, 0));
+	TC_ASSERT_EQ_ERROR_CLEANUP("prctl", strncmp(getname, setname, CONFIG_TASK_NAME_SIZE), 0, get_errno(), prctl(PR_SET_NAME, oldname, 0, 0, 0));
 
 	prctl(PR_SET_NAME, oldname, 0, 0, 0);
 	TC_SUCCESS_RESULT();
@@ -468,14 +488,14 @@ static void tc_task_vfork(void)
  ****************************************************************************/
 int task_main(void)
 {
+	tc_task_atexit();
+	tc_task_exit();
+	tc_task_getpid();
+	tc_task_on_exit();
+	tc_task_prctl();
 	tc_task_task_create();
 	tc_task_task_delete();
 	tc_task_task_restart();
-	tc_task_exit();
-	tc_task_atexit();
-	tc_task_on_exit();
-	tc_task_prctl();
-	tc_task_getpid();
 #if defined(CONFIG_ARCH_HAVE_VFORK) && defined(CONFIG_SCHED_WAITPID) && !defined(CONFIG_BUILD_PROTECTED)
 	tc_task_vfork();
 #endif

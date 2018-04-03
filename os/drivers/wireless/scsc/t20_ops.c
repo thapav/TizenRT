@@ -1,6 +1,18 @@
-/***************************************************************************
+/*****************************************************************************
  *
- * Copyright (c) 2014 - 2016 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright 2017 Samsung Electronics All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific
+ * language governing permissions and limitations under the License.
  *
  ****************************************************************************/
 
@@ -41,6 +53,8 @@ static uint keep_alive_period = SLSI_P2PGO_KEEP_ALIVE_PERIOD_SEC;
 		.hw_value = (_idx), \
 }
 #endif
+
+struct slsi_cm_ctx cm_ctx;
 
 static struct slsi_80211_channel slsi_2ghz_channels[] = {
 	CHAN2G(2412, 1),
@@ -822,7 +836,7 @@ struct wpa_scan_results *slsi_get_scan_results(void *priv)
 		goto exit_with_lock;
 	}
 
-	num_scan_ind = ndev_vif->scan[scan_id].scan_results.qlen;
+	num_scan_ind = ndev_vif->scan[scan_id].scan_results.queue_len;
 
 	SLSI_NET_DBG3(dev, SLSI_T20_80211, "slsi_get_scan_results(interface:%d, scan_id:%d, num_scan_ind: %d)\n", ndev_vif->ifnum, scan_id, num_scan_ind);
 	if (num_scan_ind == 0) {
@@ -1242,7 +1256,7 @@ int slsi_get_signal_poll(void *priv, struct wpa_signal_info *si)
 	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
 	if (!ndev_vif->activated) {
 		SLSI_ERR_NODEV("STA Not Connected\n");
-		return -EINVAL;
+		res = -EINVAL;
 		goto exit;
 	}
 	memset(si, 0, sizeof(*si));

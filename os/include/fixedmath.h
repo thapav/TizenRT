@@ -50,8 +50,6 @@
  *
  ****************************************************************************/
 /**
- * @cond
- * @internal
  * @defgroup FIXEDMATH_LIBC FIXEDMATH
  * @ingroup KERNEL
  *
@@ -242,80 +240,89 @@ extern "C" {
 #ifndef CONFIG_HAVE_LONG_LONG
 /* Multiplication operators */
 /**
-* @brief multiply two b16 numbers
-* @todo
-* @param[in] first operand
-* @param[in] second operand
-* @return the result of two multiplication
-*/
+ * @brief multiply two b16 numbers
+ * @details @b #include <fixedmath.h>
+ * @param[in] m1 first operand
+ * @param[in] m2 second operand
+ * @return the result of two multiplication
+ * @since TizenRT v1.1
+ */
 b16_t b16mulb16(b16_t m1, b16_t m2);
 /**
-* @brief multiply two unsigned b16 numbers
-* @todo
-* @param[in] first operand
-* @param[in] second operand
-* @return the result of two multiplication
-*/
+ * @brief multiply two unsigned b16 numbers
+ * @details @b #include <fixedmath.h>
+ * @param[in] m1 first operand
+ * @param[in] m2 second operand
+ * @return the result of two multiplication
+ * @since TizenRT v1.1
+ */
 ub16_t ub16mulub16(ub16_t m1, ub16_t m2);
 
 /* Square operators */
 /**
-* @brief square b16 number
-* @todo
-* @param[in] first operand
-* @return the result of square
-*/
+ * @brief square b16 number
+ * @details @b #include <fixedmath.h>
+ * @param[in] a first operand
+ * @return the result of square
+ * @since TizenRT v1.1
+ */
 b16_t b16sqr(b16_t a);
 /**
-* @brief square unsigned b16 number
-* @todo
-* @param[in] first operand
-* @return the result of square
-*/
+ * @brief square unsigned b16 number
+ * @details @b #include <fixedmath.h>
+ * @param[in] a first operand
+ * @return the result of square
+ * @since TizenRT v1.1
+ */
 ub16_t ub16sqr(ub16_t a);
 
 /* Division operators */
 /**
-* @brief divide operation
-* @todo
-* @param[in] a dividend
-* @param[in] a divisor
-* @return the result of divide
-*/
+ * @brief divide operation
+ * @details @b #include <fixedmath.h>
+ * @param[in] num a dividend
+ * @param[in] denom a divisor
+ * @return the result of divide
+ * @since TizenRT v1.1
+ */
 b16_t b16divb16(b16_t num, b16_t denom);
 /**
-* @brief divide operation
-* @todo
-* @param[in] a dividend
-* @param[in] a divisor
-* @return the result of divide
-*/
+ * @brief divide operation
+ * @details @b #include <fixedmath.h>
+ * @param[in] num a dividend
+ * @param[in] denom a divisor
+ * @return the result of divide
+ * @since TizenRT v1.1
+ */
 ub16_t ub16divub16(ub16_t num, ub16_t denom);
 #endif
 
 /* Trigonometric Functions */
 /**
-* @brief Trigonometric sine operation
-* @todo
-* @param[in] a radian value
-* @return the result of sine operation
-*/
+ * @brief Trigonometric sine operation
+ * @details @b #include <fixedmath.h>
+ * @param[in] rad a radian value
+ * @return the result of sine operation
+ * @since TizenRT v1.1
+ */
 b16_t b16sin(b16_t rad);
 /**
-* @brief Trigonometric cosine operation
-* @todo
-* @param[in] a radian value
-* @return the result of cosine operation
-*/
+ * @brief Trigonometric cosine operation
+ * @details @b #include <fixedmath.h>
+ * @param[in] rad a radian value
+ * @return the result of cosine operation
+ * @since TizenRT v1.1
+ */
 b16_t b16cos(b16_t rad);
 /**
-* @brief Trigonometric tangent operation
-* @details calculates the arctangent of y/x
-* @todo
-* @param[in] a radian y value
-* @param[in] a radian x value
-* @return the result of tangent operation
-*/
+ * @brief Trigonometric tangent operation
+ * @details @b #include <fixedmath.h> \n
+ * calculates the arctangent of y/x
+ * @param[in] y a radian y value
+ * @param[in] x a radian x value
+ * @return the result of tangent operation
+ * @since TizenRT v1.1
+ */
 b16_t b16atan2(b16_t y, b16_t x);
 
 #undef EXTERN
@@ -326,5 +333,5 @@ b16_t b16atan2(b16_t y, b16_t x);
 #endif							/* __INCLUDE_FIXEDMATH_H */
 
 /**
- * @endcond
-		  * @} *///end for FIXEDMATH_KERNEL
+ * @}
+ */

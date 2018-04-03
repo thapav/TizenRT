@@ -191,7 +191,6 @@ ssize_t readline_common(FAR struct rl_common_s *vtbl, FAR char *buf, int buflen)
 				/* We are finished with the escape sequence */
 
 				escape = 0;
-				ch = 'a';
 			} else {
 				/* The next character is the end of a 3-byte sequence.
 				 * NOTE:  Some of the <esc>[ sequences are longer than
@@ -247,7 +246,7 @@ ssize_t readline_common(FAR struct rl_common_s *vtbl, FAR char *buf, int buflen)
 		else if (ch == '\n')
 #elif defined(CONFIG_EOL_IS_CR)
 		else if (ch == '\r')
-#elif CONFIG_EOL_IS_EITHER_CRLF
+#elif defined(CONFIG_EOL_IS_EITHER_CRLF)
 		else if (ch == '\n' || ch == '\r')
 #endif
 		{

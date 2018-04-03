@@ -311,38 +311,48 @@ void endservent(void);
 // @endcond
 
 /**
-* @brief getaddrinfo() is a function that returns information on a particular host name (such as its IP address) and loads up a struct sockaddr.
-* @param[in] host can be either a domain name or NULL
-* @param[in] service can be a port number passed as string or a service name
-* @param[in] hints can be either NULL or an addrinfo structure with the type of service requested
-* @param[in] res is a pointer that points to a new addrinfo structure
-* @return On success, 0 is returned. On failure, a negative value is returned
-* @since Tizen RT v1.0
-*/
+ * @brief getaddrinfo() is a function that returns information on a particular host name (such as its IP address) and loads up a struct sockaddr.
+ *
+ * @details @b #include <netdb.h>\n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @param[in] host can be either a domain name or NULL
+ * @param[in] service can be a port number passed as string or a service name
+ * @param[in] hints can be either NULL or an addrinfo structure with the type of service requested
+ * @param[in] res is a pointer that points to a new addrinfo structure
+ * @return On success, 0 is returned. On failure, a negative value is returned
+ * @since TizenRT v1.0
+ */
 int getaddrinfo(const char *host, const char *service, const struct addrinfo *hints, struct addrinfo **res);
 
 /**
-* @brief freeaddrinfo() frees the memory allocated by the getaddrinfo() function.
-* @param[in] ai is the head of the addrinfo list
-* @return void
-* @since Tizen RT v1.0
-*/
+ * @brief freeaddrinfo() frees the memory allocated by the getaddrinfo() function.
+ *
+ * @details @b #include <netdb.h>\n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @param[in] ai is the head of the addrinfo list
+ * @return void
+ * @since TizenRT v1.0
+ */
 void freeaddrinfo(FAR struct addrinfo *ai);
 
 /**
  * @brief gethostbyaddr() is the function returns a corresponding hostname with given IP addresses
+ *
+ * @details @b #include <netdb.h>\n
  * @param[in] *addr host address sending DNS server (e.g., 192.168.0.0)
  * @return On success, hostent, the structure contains hostname of requested IP addresses, returns. On failure, hostname parameters in hostent structure is NULL
- * @since Tizen RT v1.0
-*/
+ * @since TizenRT v1.0
+ */
 FAR struct hostent *gethostbyaddr(FAR const void *addr, socklen_t len, int type);
 
 /**
  * @brief gethostbyname() is the function sending DNS query to DNS server with hostname
+ *
+ * @details @b #include <netdb.h>\n
  * @param[in] *name hostname sending DNS server (e.g., www.samsung.com)
  * @return On success, hostent, the structure contains IP addresses of requested hostname, returns. On failure, IP address parameters in hostent structure is NULL
- * @since Tizen RT v1.0
-*/
+ * @since TizenRT v1.0
+ */
 FAR struct hostent *gethostbyname(FAR const char *name);
 
 #if 0							/* None of these are yet supported */
@@ -382,4 +392,6 @@ int gethostbyname_r(FAR const char *name, FAR struct hostent *host, FAR char *bu
 #endif
 
 #endif							/* __INCLUDE_NETDB_H */
-/** @} */ // end of SOCKET group
+/**
+ * @}
+ */

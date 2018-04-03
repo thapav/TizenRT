@@ -252,6 +252,10 @@ typedef CODE void (*atexitfunc_t)(void);
 typedef CODE void (*onexitfunc_t)(int exitcode, FAR void *arg);
 #endif
 
+#if CONFIG_NPTHREAD_KEYS > 0
+typedef CODE void (*pthread_destructor_t)(void *arg);
+#endif
+
 /* struct child_status_s *********************************************************/
 /** @brief This structure is used to maintin information about child tasks.
  * pthreads work differently, they have join information.  This is
@@ -299,6 +303,14 @@ struct dspace_s {
 	 */
 
 	FAR uint8_t *region;
+};
+#endif
+
+/* struct pthread_key_s **********************************************************/
+#if CONFIG_NPTHREAD_KEYS > 0
+struct pthread_key_s {
+	void *data;
+	pthread_destructor_t destructor;
 };
 #endif
 
@@ -395,7 +407,9 @@ struct task_group_s {
 	sem_t tg_joinsem;			/*   Mutually exclusive access to join data */
 	FAR struct join_s *tg_joinhead;	/*   Head of a list of join data            */
 	FAR struct join_s *tg_jointail;	/*   Tail of a list of join data            */
-	uint8_t tg_nkeys;			/* Number pthread keys allocated            */
+#if CONFIG_NPTHREAD_KEYS > 0
+	uint8_t tg_keys[CONFIG_NPTHREAD_KEYS];	/* Information of pthread keys allocated */
+#endif
 #endif
 
 #ifndef CONFIG_DISABLE_SIGNALS
@@ -632,7 +646,7 @@ struct pthread_tcb_s {
 	/* Robust mutex support *********************************************/
 
 #ifndef CONFIG_PTHREAD_MUTEX_UNSAFE
-  	FAR struct pthread_mutex_s *mhead;	/* List of mutexes held by thread      */
+	FAR struct pthread_mutex_s *mhead;	/* List of mutexes held by thread      */
 #endif
 
 	/* Clean-up stack ***************************************************/
@@ -649,7 +663,7 @@ struct pthread_tcb_s {
 	/* POSIX Thread Specific Data ************************************************ */
 
 #if CONFIG_NPTHREAD_KEYS > 0
-	FAR void *pthread_data[CONFIG_NPTHREAD_KEYS];
+	struct pthread_key_s pthread_data[CONFIG_NPTHREAD_KEYS];
 #endif
 #if defined(CONFIG_BUILD_PROTECTED)
 	struct pthread_region_s *region;
@@ -686,11 +700,12 @@ extern "C" {
  * @ingroup SCHED_KERNEL
  * @brief returns the TCB of the currently running task (i.e., the
  * caller)
- * @details  Basically, this function just wraps the
+ * @details @b #include <tinyara/sched.h> \n
+ *  Basically, this function just wraps the
  *   head of the ready-to-run list and manages access to the TCB from outside
  *   of the sched/ sub-directory.
  * @return TCB structure
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 FAR struct tcb_s *sched_self(void);
 
@@ -702,22 +717,24 @@ FAR struct tcb_s *sched_self(void);
  * or thread to a callback function.  Interrupts will be disabled throughout
  * this enumeration!
  *
- * @param[in] The function to be called with the TCB of each task
- * @param[in] param
+ * @details @b #include <tinyara/sched.h>
+ * @param[in] handler The function to be called with the TCB of each task
+ * @param[in] arg param
  * @return none
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 void sched_foreach(sched_foreach_t handler, FAR void *arg);
 
 /**
  * @ingroup SCHED_KERNEL
  * @brief Give a task ID, look up the corresponding TCB
- * @details  Given a task ID, this function will return
+ * @details @b #include <tinyara/sched.h> \n
+ *   Given a task ID, this function will return
  *   the a pointer to the corresponding TCB (or NULL if there
  *   is no such task ID).
- * @param[in] Pid for tcb
+ * @param[in] pid Pid for tcb
  * @return TCB structure about pid
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 FAR struct tcb_s *sched_gettcb(pid_t pid);
 
@@ -739,8 +756,9 @@ FAR struct filelist *sched_getfiles(void);
 /**
  * @ingroup SCEHD_KERNEL
  * @brief Return a pointer to the streams list for this thread
+ * @details @b #include <tinyara/sched.h>
  * @return A pointer to the errno
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 FAR struct streamlist *sched_getstreams(void);
 #endif							/* CONFIG_NFILE_STREAMS */

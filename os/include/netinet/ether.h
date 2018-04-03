@@ -88,9 +88,11 @@ extern "C" {
 
 /**
 * @brief ether_ntoa() function converts the Ethernet host address addr given in network byte order to a string in standard hex-digits-and-colons notation.
+*
+* @details @b #include <netinet/ether.h>
 * @param[in] addr is the Ethernet host address addr given in network byte order
 * @return the string is returned in a statically allocated buffer
-* @since Tizen RT v1.0
+* @since TizenRT v1.0
 */
 EXTERN FAR char *ether_ntoa(FAR const struct ether_addr *addr);
 
@@ -107,4 +109,6 @@ EXTERN int ether_line(const char *line, struct ether_addr *addr, char *hostname)
 #endif
 
 #endif							/*   __INCLUDE_NETINET_ETHER_H */
-/** @} */ // end of SOCKET group
+/**
+ * @}
+ */

@@ -78,6 +78,9 @@
 #define DNS_CLOCK CLOCK_REALTIME
 #endif
 
+#ifndef CONFIG_NETDB_DNSCLIENT_NAMESIZE
+#define CONFIG_NETDB_DNSCLIENT_NAMESIZE 512
+#endif
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -168,7 +171,7 @@ void dns_save_answer(FAR const char *hostname, FAR const struct sockaddr *addr, 
 #if CONFIG_NETDB_DNSCLIENT_LIFESEC > 0
 	/* Get the current time, using CLOCK_MONOTONIC if possible */
 
-	(void)clock_settime(DNS_CLOCK, &now);
+	(void)clock_gettime(DNS_CLOCK, &now);
 	entry->ctime = (time_t)now.tv_sec;
 #endif
 	assert((hostname != NULL) && (strlen(hostname) < CONFIG_NETDB_DNSCLIENT_NAMESIZE))
@@ -228,7 +231,7 @@ int dns_find_answer(FAR const char *hostname, FAR struct sockaddr *addr, FAR soc
 #if CONFIG_NETDB_DNSCLIENT_LIFESEC > 0
 	/* Get the current time, using CLOCK_MONOTONIC if possible */
 
-	ret = clock_settime(DNS_CLOCK, &now);
+	ret = clock_gettime(DNS_CLOCK, &now);
 #endif
 
 	/* REVISIT: This is not thread safe */
@@ -267,7 +270,7 @@ int dns_find_answer(FAR const char *hostname, FAR struct sockaddr *addr, FAR soc
 			 */
 
 			if (strncmp(hostname, entry->name, CONFIG_NETDB_DNSCLIENT_NAMESIZE) == 0) {
-				socklen_t inlen;
+				socklen_t inlen = 0;
 
 				/* We have a match.  Return the resolved host address */
 
