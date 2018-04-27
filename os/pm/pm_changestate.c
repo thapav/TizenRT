@@ -91,8 +91,7 @@
  *   Interrupts are disabled.
  *
  ****************************************************************************/
-
-static int pm_prepall(int domain, enum pm_state_e newstate)
+static int pm_prepall(int domain, int newstate)
 {
 	FAR sq_entry_t *entry;
 	int ret = OK;
@@ -132,7 +131,7 @@ static int pm_prepall(int domain, enum pm_state_e newstate)
  *
  ****************************************************************************/
 
-static inline void pm_changeall(int domain_indx, enum pm_state_e newstate)
+static inline void pm_changeall(int domain_indx, int newstate)
 {
 	FAR sq_entry_t *entry;
 
@@ -181,12 +180,12 @@ static inline void pm_changeall(int domain_indx, enum pm_state_e newstate)
  *   unless interrupts are disabled throughout the state change.
  *
  ****************************************************************************/
-
-int pm_changestate(int domain_indx, enum pm_state_e newstate)
+int pm_changestate(int domain_indx, int newstate)
 {
 	irqstate_t flags;
 	int ret;
 
+pm_initialize();
 	DEBUGASSERT(domain_indx >= 0 && domain_indx < CONFIG_PM_NDOMAINS);
 
 	/* Disable interrupts throught this operation... changing driver states

@@ -70,6 +70,7 @@
 #include  <tinyara/mm/shm.h>
 #include  <tinyara/kmalloc.h>
 #include  <tinyara/init.h>
+#include  <tinyara/pm/pm.h>
 
 #include  "sched/sched.h"
 #include  "signal/signal.h"

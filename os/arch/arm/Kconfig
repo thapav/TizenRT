@@ -45,6 +45,10 @@ config ARCH_CHIP
 	default "tiva"      if ARCH_CHIP_LM
 	default "bcm4390x"  if ARCH_CHIP_BCM4390X
 
+config ARCH_HAVE_PM
+	bool
+	default n
+
 comment "ARM Options"
 
 config ARCH_CORTEXM3
