@@ -60,7 +60,6 @@
 #include <debug.h>
 #include <tinyara/pm/pm.h>
 #include <time.h>
-#include "pm_test.h"
 #include "pm.h"
 #include "pm_metrics.h"
 
@@ -261,6 +260,5 @@ void pm_initialize(void)
 		pm_thresholds_init();
 #endif
 	}
-	pmtest_init();
 }
 #endif							/* CONFIG_PM */

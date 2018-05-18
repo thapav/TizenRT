@@ -22,6 +22,7 @@
 #include <tinyara/config.h>
 #include <errno.h>
 #include <debug.h>
+#include <../pm/pm_test.h>
 #include <tinyara/fs/fs.h>
 #include <tinyara/testcase_drv.h>
 
@@ -73,6 +74,11 @@ static int testdrv_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
 	case TESTIOC_DRIVER_ANALOG: {
 
+	}
+	break;
+
+	case TESTIOC_DRIVER_PM: {
+		ret = pmtest_init();
 	}
 	break;
 
