@@ -91,8 +91,11 @@
  *   Interrupts are disabled.
  *
  ****************************************************************************/
-
+#ifdef  CONFIG_IDLE_PM
+static int pm_prepall(int domain, int newstate)
+#else
 static int pm_prepall(int domain, enum pm_state_e newstate)
+#endif
 {
 	FAR sq_entry_t *entry;
 	int ret = OK;
@@ -132,7 +135,11 @@ static int pm_prepall(int domain, enum pm_state_e newstate)
  *
  ****************************************************************************/
 
+#ifdef  CONFIG_IDLE_PM
+static inline void pm_changeall(int domain_indx, int newstate)
+#else
 static inline void pm_changeall(int domain_indx, enum pm_state_e newstate)
+#endif
 {
 	FAR sq_entry_t *entry;
 
@@ -181,8 +188,11 @@ static inline void pm_changeall(int domain_indx, enum pm_state_e newstate)
  *   unless interrupts are disabled throughout the state change.
  *
  ****************************************************************************/
-
+#ifdef CONFIG_IDLE_PM
+int pm_changestate(int domain_indx, int newstate)
+#else
 int pm_changestate(int domain_indx, enum pm_state_e newstate)
+#endif
 {
 	irqstate_t flags;
 	int ret;

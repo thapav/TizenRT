@@ -23,6 +23,11 @@ ASRCS =
 CSRCS += pm_activity.c pm_changestate.c pm_checkstate.c pm_initialize.c
 CSRCS += pm_register.c pm_unregister.c pm_update.c pm_procfs.c
 
+ifeq ($(CONFIG_IDLE_PM),y)
+CSRCS += pm_idle.c
+CSRCS += pm_initialize_idle_data.c
+endif
+
 ifeq ($(CONFIG_PM_METRICS),y)
 CSRCS += pm_metrics.c
 endif

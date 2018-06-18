@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- * Copyright 2017 Samsung Electronics All Rights Reserved.
+ * Copyright 2018 Samsung Electronics All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,59 +16,26 @@
  *
  ****************************************************************************/
 /****************************************************************************
- *  arch/arm/src/s5j/s5j_idle.c
- *
- *   Copyright (C) 2011-2012, 2015-2016 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
+ * os/pm/pm_idle.c
  ****************************************************************************/
 
 /****************************************************************************
  * Included Files
  ****************************************************************************/
+
 #include <tinyara/config.h>
 #include <debug.h>
 
-#include <tinyara/arch.h>
 #include <tinyara/board.h>
 #include <tinyara/pm/pm.h>
 
 #include <tinyara/irq.h>
 
-#include "up_internal.h"
-#include "s5j_pm.h"
-
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-#define PM_IDLE_DOMAIN 0 /* Revisit */
+
+#define PM_IDLE_DOMAIN	0
 
 /****************************************************************************
  * Private Functions
@@ -83,15 +50,11 @@
 #ifdef CONFIG_PM
 static void up_idlepm(void)
 {
-#ifdef CONFIG_IDLE_PM
 	static int oldstate = PM_NORMAL;
 	int newstate;
-#else
-	static enum pm_state_e oldstate = PM_NORMAL;
-	enum pm_state_e newstate;
-#endif
 	irqstate_t flags;
 	int ret;
+	struct pm_idle_state_info *pdat = get_pm_idle_data();
 
 	/* Decide, which power saving level can be obtained */
 	newstate = pm_checkstate(PM_IDLE_DOMAIN);
@@ -110,28 +73,12 @@ static void up_idlepm(void)
 			oldstate = newstate;
 		}
 
-#ifndef CONFIG_IDLE_PM
-		/* MCU-specific power management logic */
-		switch (newstate) {
-		case PM_NORMAL:
-			s5j_pmnormal();
-			break;
-
-		case PM_IDLE:
-			break;
-
-		case PM_STANDBY:
-			s5j_pmstop();
-			break;
-
-		case PM_SLEEP:
-			s5j_pmstandby();
-			break;
-
-		default:
-			break;
+		/* SOC-specific power management logic */
+		ret = (pdat + newstate)->state_fptr();
+		if (ret < 0) {
+			/* Staying in same sleep state as SOC returned error */
+			(pdat + newstate - 1)->state_fptr();
 		}
-#endif
 
 		irqrestore(flags);
 	}
@@ -156,8 +103,9 @@ static void up_idlepm(void)
  *   power management operations might be performed.
  *
  ****************************************************************************/
-void up_idle(void)
+void up_idle_pm(void)
 {
+
 #if defined(CONFIG_SUPPRESS_INTERRUPTS) || defined(CONFIG_SUPPRESS_TIMER_INTS)
 	/*
 	 * If the system is idle and there are no timer interrupts, then process
