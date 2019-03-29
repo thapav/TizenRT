@@ -114,10 +114,18 @@ config ARCH_CORTEXR4
 	select ARCH_HAVE_COHERENT_DCACHE if ELF || MODULE
 	select ARCH_HAVE_DABORTSTACK if !ARCH_CHIP_BCM4390X
 
+config ARCH_CORTEXM33
+	bool
+	default n
+	select ARCH_HAVE_IRQPRIO
+	select ARCH_HAVE_RAMVECTORS
+	select ARCH_HAVE_HIPRI_INTERRUPT
+
 config ARCH_FAMILY
 	string
 	default "armv7-m"	if ARCH_CORTEXM3 || ARCH_CORTEXM4 || ARCH_CORTEXM7
 	default "armv7-r"	if ARCH_CORTEXR4
+	default "armv8-m"	if ARCH_CORTEXM33
 
 config ARCH_HAVE_CMNVECTOR
 	bool
@@ -232,6 +240,9 @@ source arch/arm/src/armv7-m/Kconfig
 endif
 if ARCH_CORTEXR4
 source arch/arm/src/armv7-r/Kconfig
+endif
+if ARCH_CORTEXM33
+source arch/arm/src/armv8-m/Kconfig
 endif
 if ARCH_CHIP_LM
 source arch/arm/src/tiva/Kconfig
