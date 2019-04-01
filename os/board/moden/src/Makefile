@@ -1,6 +1,6 @@
 ###########################################################################
 #
-# Copyright 2019 Samsung Electronics All Rights Reserved.
+# Copyright 2018 Samsung Electronics All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,12 +16,20 @@
 #
 ###########################################################################
 -include $(TOPDIR)/Make.defs
-
+DEPPATH = --dep-path .
 CFLAGS		+= -I$(TOPDIR)/sched
 
 ASRCS		=
 AOBJS		= $(ASRCS:.S=$(OBJEXT))
-CSRCS		=
+
+# boardctl support
+ifeq ($(CONFIG_LIB_BOARDCTL),y)
+DEPPATH += --dep-path $(TOPDIR)/arch
+VPATH += :$(TOPDIR)/arch
+CSRCS += boardctl.c
+endif
+
+CSRCS		+= da1469x_boot.c
 
 COBJS		= $(CSRCS:.c=$(OBJEXT))
 
@@ -32,7 +40,7 @@ ARCH_SRCDIR	= $(TOPDIR)/arch/$(CONFIG_ARCH)/src
 ifeq ($(WINTOOL),y)
   CFLAGS	+= -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
 		   -I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
-		   -I "${shell cygpath -w $(ARCH_SRCDIR)/armv8-m}"
+		   -I "${shell cygpath -w $(ARCH_SRCDIR)/armv8-m}" \
 else
   CFLAGS	+= -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/armv8-m
 endif
@@ -49,7 +57,7 @@ libboard$(LIBEXT): $(OBJS)
 	$(call ARCHIVE, $@, $(OBJS))
 
 .depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
+	$(Q) $(MKDEP) $(DEPPATH) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
 	$(Q) touch $@
 
 depend: .depend

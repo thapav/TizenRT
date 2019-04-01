@@ -3,12 +3,112 @@
 # see kconfig-language at https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt
 #
 
-if ARCH_BOARD_DA1469X
+comment "Moden Dialog DA1469X Configuration Options"
 
-comment "Dialog DA1469x Configuration Options"
+menu "Moden Dialog DA1469X Peripheral Support"
 
-menu "Dialog DA1469x Peripheral Support"
+config DA1469X_UART
+	bool "DA1469X UART Peripheral Support"
+	default n
+
+config DA1469X_UART0
+	bool "UART0"
+	select ARCH_HAVE_UART0
+	select DA1469X_UART
+	select ARCH_HAVE_SERIAL_TERMIOS
+	default n
+
+config DA1469X_UART1
+	bool "UART1"
+	select ARCH_HAVE_UART1
+	select DA1469X_UART
+	select ARCH_HAVE_SERIAL_TERMIOS
+	default n
+
+config DA1469X_UART2
+	bool "UART2"
+	select ARCH_HAVE_UART2
+	select DA1469X_UART
+	select ARCH_HAVE_SERIAL_TERMIOS
+	default n
+
+config DA1469X_SERIAL_DMA
+	bool "USE DMA MODE"
+	default n
+
+config DA1469X_SPI_MASTER
+	bool "DA1469X SPI Master Peripheral Support"
+	default n
+
+config DA1469X_I2C
+	bool
+	default n
+
+config DA1469X_I2C0
+	bool "I2C0"
+	select DA1469X_I2C
+	default n
+
+config DA1469X_I2C1
+	bool "I2C1"
+	select DA1469X_I2C
+	default n
+
+config DA1469X_TIMER
+	bool
+	default n
+
+config DA1469X_TIMER0
+	bool "TIMER0"
+	select DA1469X_TIMER
+	default n
+
+config DA1469X_TIMER1
+	bool "TIMER1"
+	select DA1469X_TIMER
+	default n
+
+config DA1469X_WDT
+	bool "DA1469X Watch Dog Peripheral Support"
+	default n
+
+config DA1469X_WATCHDOG_INT
+	bool "DA1469X Watchdog interrupt enable"
+	default n
+	depends on DA1469X_WDT
+
+#config DA1469X_WATCHDOG_RESET
+#	bool "DA1469X Watchdog reset enable"
+#	default n
+#	depends on DA1469X_WDT
+#
+#config DA1469X_WDT_DEFTIMEOUT
+#	int "DA1469X Watchdog Timeout(in msec)"
+#	default 7000
+#	depends on DA1469X_WDT
+
+config DA1469X_GPIO
+	bool "GPIO" 
+	default y
+	depends on GPIO
+
+config DA1469X_RTC
+	bool "DA1469X RTC Peripheral Support"
+	default n
+	depends on RTC
+
+#choice
+#	prompt "DA1469X OS tick source choose"
+#	default DA1469X_USE_GPT
+#
+#config DA1469X_USE_CM4_SYSTICK
+#	bool "USE CM4 systick as OS tick"
+#	default n
+#
+#config DA1469X_USE_GPT
+#	bool "USE GPT as OS tick"
+#	default n
+#
+#endchoice
 
 endmenu
-
-endif

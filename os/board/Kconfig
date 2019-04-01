@@ -107,6 +107,12 @@ config ARCH_BOARD_IMXRT1050_EVK
 		This is the board configuration for the port of TinyARA to the NXP i.MXRT
 		evaluation kit, MIMXRT1050-EVKB.  This board features the MIMXRT1052DVL6A MCU.
 
+config ARCH_BOARD_DA1469X
+	bool "Moden da1469x board"
+	depends on ARCH_CHIP_DA1469X
+	---help---
+		Moden da1469xx IoT wifi MCU
+
 endchoice
 
 config ARCH_BOARD_ARTIK05X_FAMILY
@@ -128,6 +134,7 @@ config ARCH_BOARD
 	default "esp32_devkit"       if ARCH_BOARD_ESP32_FAMILY
 	default "imxrt1020-evk"      if ARCH_BOARD_IMXRT1020_EVK
 	default "imxrt1050-evk"      if ARCH_BOARD_IMXRT1050_EVK
+	default "moden"              if ARCH_BOARD_DA1469X
 	
 comment "Common Board Options"
 
@@ -282,7 +289,9 @@ endif
 if ARCH_BOARD_IMXRT1050_EVK
 source board/imxrt1050-evk/Kconfig
 endif
-comment "Board-Partition Options"
+if ARCH_BOARD_DA1469X
+source board/moden/Kconfig
+endif
 
 source board/common/Kconfig
 

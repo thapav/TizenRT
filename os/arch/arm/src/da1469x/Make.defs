@@ -1,0 +1,101 @@
+###########################################################################
+#
+# Copyright 2018 Samsung Electronics All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the License.
+#
+############################################################################
+
+
+ifeq ($(CONFIG_ARMV8M_CMNVECTOR),y)
+HEAD_ASRC = startup_da1469x.S
+else
+HEAD_ASRC = startup_da1469x.S
+endif
+
+CMN_UASRCS =
+CMN_UCSRCS =
+
+CMN_ASRCS  = up_saveusercontext.S up_fullcontextrestore.S up_switchcontext.S
+CMN_ASRCS += vfork.S
+
+CMN_CSRCS  = up_assert.c up_blocktask.c up_copyfullstate.c
+CMN_CSRCS += up_createstack.c up_mdelay.c up_udelay.c up_exit.c
+CMN_CSRCS += up_initialize.c up_initialstate.c up_interruptcontext.c
+CMN_CSRCS += up_memfault.c up_modifyreg8.c up_modifyreg16.c up_modifyreg32.c
+CMN_CSRCS += up_releasepending.c up_releasestack.c up_reprioritizertr.c
+CMN_CSRCS += up_schedulesigaction.c up_sigdeliver.c up_stackframe.c
+CMN_CSRCS += up_systemreset.c up_unblocktask.c up_usestack.c up_doirq.c
+CMN_CSRCS += up_hardfault.c up_svcall.c up_vfork.c
+CMN_CSRCS += up_allocateheap.c
+
+ifeq ($(CONFIG_SCHED_YIELD_OPTIMIZATION),y)
+CMN_CSRCS += up_schedyield.c
+endif
+
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
+CMN_CSRCS += up_mpusavecontext.c up_mpurestorecontext.c up_setupregions.c
+endif
+
+ifeq ($(CONFIG_ARMV8M_STACKCHECK),y)
+CMN_CSRCS += up_stackcheck.c
+endif
+
+ifeq ($(CONFIG_ARMV8M_CMNVECTOR),y)
+CMN_ASRCS += up_exception.S
+CMN_CSRCS += up_vectors.c
+endif
+
+ifeq ($(CONFIG_ARCH_RAMVECTORS),y)
+CMN_CSRCS += up_ramvec_initialize.c up_ramvec_attach.c
+endif
+
+ifeq ($(CONFIG_ARCH_MEMCPY),y)
+CMN_ASRCS += up_memcpy.S
+endif
+
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
+CMN_CSRCS += up_mpu.c up_task_start.c up_pthread_start.c
+ifneq ($(CONFIG_DISABLE_SIGNALS),y)
+CMN_CSRCS += up_signal_dispatch.c
+CMN_UASRCS += up_signal_handler.S
+endif
+endif
+
+ifeq ($(CONFIG_STACK_COLORATION),y)
+CMN_CSRCS += up_checkstack.c
+endif
+
+ifeq ($(CONFIG_ELF),y)
+CMN_CSRCS += up_elf.c
+endif
+
+ifeq ($(CONFIG_ARCH_FPU),y)
+CMN_ASRCS += up_fpu.S
+ifneq ($(CONFIG_ARMV8M_CMNVECTOR),y)
+CMN_CSRCS += up_copyarmstate.c
+endif
+endif
+
+CHIP_CSRCS  += system_da1469x.c
+CHIP_CSRCS  += hw_clk_da1469x.c
+CHIP_CSRCS  += hw_dma.c
+CHIP_CSRCS  += hw_timer.c
+CHIP_CSRCS  += hw_gpio.c
+CHIP_CSRCS  += hw_irgen.c
+CHIP_CSRCS  += hw_timer0.c hw_timer1.c hw_timer2.c
+CHIP_CSRCS  += hw_uart.c
+CHIP_CSRCS  += hw_spi.c
+CHIP_CSRCS  += hw_i2c.c
+CHIP_CSRCS  += hw_watchdog.c
+CHIP_CSRCS  += hw_rtc.c

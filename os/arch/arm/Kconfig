@@ -76,6 +76,7 @@ config ARCH_CHIP
 	default "bcm4390x"	if ARCH_CHIP_BCM4390X
 	default "stm32"		if ARCH_CHIP_STM32
 	default "imxrt"		if ARCH_CHIP_IMXRT
+	default "da1469x"	if ARCH_CHIP_DA1469X
 
 comment "ARM Options"
 
