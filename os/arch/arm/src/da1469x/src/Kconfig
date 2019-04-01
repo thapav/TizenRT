@@ -1,0 +1,10 @@
+#
+# For a description of the syntax of this configuration file,
+# see kconfig-language at https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt
+#
+
+comment "Dialog DA1469x Configuration Options"
+
+menu "Dialog DA1469x Peripheral Support"
+
+endmenu

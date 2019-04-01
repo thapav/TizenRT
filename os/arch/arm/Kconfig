@@ -17,6 +17,13 @@ config ARCH_CHIP_LM
 	---help---
 		TI/Luminary Stellaris LMS3 and LM4F architectures (ARM Cortex-M3/4)
 
+config ARCH_CHIP_DA1469X
+	bool "Dialog DA1469X Integrated Chipset"
+	select ARCH_CORTEXM3
+	select ARCH_HAVE_MPU
+	---help---
+		Dialog DA1469X Integrated Chipset.
+
 config ARCH_CHIP_S5J
 	bool "Samsung S5J"
 	select ARCH_CORTEXR4
@@ -228,6 +235,9 @@ source arch/arm/src/armv7-r/Kconfig
 endif
 if ARCH_CHIP_LM
 source arch/arm/src/tiva/Kconfig
+endif
+if ARCH_CHIP_DA1469X
+source arch/arm/src/da1469x/Kconfig
 endif
 if ARCH_CHIP_S5J
 source arch/arm/src/s5j/Kconfig
