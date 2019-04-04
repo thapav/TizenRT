@@ -19,8 +19,9 @@ config ARCH_CHIP_LM
 
 config ARCH_CHIP_DA1469X
 	bool "Dialog DA1469X Integrated Chipset"
-	select ARCH_CORTEXM3
+	select ARCH_CORTEXM33
 	select ARCH_HAVE_MPU
+	select ARMV8M_MPU
 	---help---
 		Dialog DA1469X Integrated Chipset.
 
@@ -190,6 +191,22 @@ config ARMV7M_MPU_NREGIONS
 	default 16 if ARCH_CORTEXM7
 	default 8 if !ARCH_CORTEXM7
 	depends on ARMV7M_MPU
+	---help---
+		This is the number of protection regions supported by the MPU.
+
+config ARMV8M_MPU
+	bool "MPU support"
+	default n
+	depends on ARCH_HAVE_MPU
+	select ARCH_USE_MPU
+	---help---
+		Build in support for the ARM Cortex-M33 Memory Protection Unit (MPU).
+
+config ARMV8M_MPU_NREGIONS
+	int "Number of MPU regions"
+	default 16 if ARCH_CORTEXM33
+	default 8 if !ARCH_CORTEXM33
+	depends on ARMV8M_MPU
 	---help---
 		This is the number of protection regions supported by the MPU.
 

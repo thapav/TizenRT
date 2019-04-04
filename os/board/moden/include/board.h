@@ -18,4 +18,11 @@
 #ifndef __ARCH_ARM_SRC_DA1469X_INCLUDE_BOARD_H__
 #define __ARCH_ARM_SRC_DA1469X_INCLUDE_BOARD_H__
 
+/************************************************************************************
+ * Definitions
+ ************************************************************************************/
+
+#define SYSCLK_FREQUENCY     32000000  /* 32MHz */
+
+
 #endif /* __ARCH_ARM_SRC_DA1469X_INCLUDE_BOARD_H__ */

@@ -21,7 +21,7 @@ config ARMV8M_LAZYFPU
 		There are two forms of the common vector logic.  There are pros and
 		cons to each option:
 
-		1) The standard common vector logic exploits features of the ARMv7-M
+		1) The standard common vector logic exploits features of the ARMv8-M
 		   architecture to save the all of floating registers on entry into
 		   each interrupt and then to restore the floating registers when
 		   the interrupt returns.  The primary advantage to this approach is
@@ -198,7 +198,7 @@ config ARMV8M_ITMSYSLOG
 	select SYSLOG
 	---help---
 		Enable hooks to support ITM syslog output.  This requires additional
-		MCU support in order to be used.  See arch/arm/src/armv7-m/itm_syslog.h
+		MCU support in order to be used.  See arch/arm/src/armv8-m/itm_syslog.h
 		for additional initialization information.
 
 if ARMV8M_ITMSYSLOG

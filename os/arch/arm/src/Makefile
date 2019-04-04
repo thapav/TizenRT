@@ -73,6 +73,7 @@ endif
 endif
 endif
 endif
+endif
 
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
   ARCH_SRCDIR = $(TOPDIR)\arch\$(CONFIG_ARCH)\src

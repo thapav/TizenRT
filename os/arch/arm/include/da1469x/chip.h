@@ -23,14 +23,24 @@
  ******************************************************************************/
 
 #include <tinyara/config.h>
+#include <arch/da1469x/chip.h>
 
-// TODO:: just for Tizen exception_common
-#define ARMV8M_PERIPHERAL_INTERRUPTS NR_IRQS
- 
+#define ARMV8M_PERIPHERAL_INTERRUPTS 32
 
 /*******************************************************************************
  * Pre-processor Definitions
  ******************************************************************************/
+
+#define NVIC_SYSH_PRIORITY_MIN     0xe0	/* Bits [5:7] set in minimum priority */
+#define NVIC_SYSH_PRIORITY_DEFAULT 0x80	/* Midpoint is the default */
+#define NVIC_SYSH_PRIORITY_MAX     0x00	/* Zero is maximum priority */
+#define NVIC_SYSH_PRIORITY_STEP    0x20	/* Three bits of interrupt priority used */
+
+#define NVIC_SYSH_MAXNORMAL_PRIORITY  (NVIC_SYSH_PRIORITY_MAX + NVIC_SYSH_PRIORITY_STEP)
+#define NVIC_SYSH_HIGH_PRIORITY       NVIC_SYSH_PRIORITY_MAX
+#define NVIC_SYSH_DISABLE_PRIORITY    NVIC_SYSH_MAXNORMAL_PRIORITY
+#define NVIC_SYSH_SVCALL_PRIORITY     NVIC_SYSH_PRIORITY_MAX
+
 /*******************************************************************************
  * Public Types
  ******************************************************************************/
