@@ -23,11 +23,10 @@
 #ifndef HW_UART_H_
 #define HW_UART_H_
 
-#if dg_configUSE_HW_UART
-
 #include <stdbool.h>
 #include <stdint.h>
-#include <sdk_defs.h>
+
+#include "sdk_defs.h"
 #include "hw_dma.h"
 
 #ifndef HW_UART_USE_DMA_SUPPORT
@@ -1292,8 +1291,6 @@ void hw_uart_enable_rx_circular_dma(HW_UART_ID uart);
 void hw_uart_copy_rx_circular_dma_buffer(HW_UART_ID uart, uint8_t *buf, uint16_t len);
 
 #endif /* dg_configUART_RX_CIRCULAR_DMA */
-
-#endif /* dg_configUSE_HW_UART */
 
 #endif /* HW_UART_H_ */
 

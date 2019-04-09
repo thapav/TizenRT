@@ -21,19 +21,10 @@
  ****************************************************************************************
  */
 
-#if dg_configUSE_HW_GPADC
-
-
 #include <stdio.h>
 #include <string.h>
-#include <hw_gpadc.h>
 
-#if (dg_configSYSTEMVIEW)
-#  include "SEGGER_SYSVIEW_FreeRTOS.h"
-#else
-#  define SEGGER_SYSTEMVIEW_ISR_ENTER()
-#  define SEGGER_SYSTEMVIEW_ISR_EXIT()
-#endif
+#include "hw_gpadc.h"
 
 static hw_gpadc_interrupt_cb intr_cb = NULL;
 static uint16_t hw_gpadc_apply_correction(uint16_t input);
@@ -178,15 +169,11 @@ void hw_gpadc_offset_calibrate(void)
 
 void ADC_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         if (intr_cb) {
                 intr_cb();
         } else {
                 hw_gpadc_clear_interrupt();
         }
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
 
 void hw_gpadc_test_measurements(void)
@@ -332,7 +319,6 @@ uint16_t hw_gpadc_get_value(void)
         uint16_t adc_raw_res = hw_gpadc_get_raw_value();
         return hw_gpadc_apply_correction(adc_raw_res) >> (6 - MIN(6, hw_gpadc_get_oversampling()));
 }
-#endif /* dg_configUSE_HW_GPADC */
 /**
  * \}
  * \}

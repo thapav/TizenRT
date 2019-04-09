@@ -26,10 +26,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <sdk_defs.h>
-#if defined(SEC_MODEN)
-#include <FreeRTOSConfig.h>
-#endif
+
+#include "sdk_defs.h"
 
 #define HARDFAULT_MAGIC_NUMBER          0xBADC0FFE
 

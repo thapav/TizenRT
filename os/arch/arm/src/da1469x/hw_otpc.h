@@ -23,7 +23,7 @@
 #ifndef HW_OTPC_H_
 #define HW_OTPC_H_
 
-#include <sdk_defs.h>
+#include "sdk_defs.h"
 
 /**
  * \brief System clock frequency in MHz

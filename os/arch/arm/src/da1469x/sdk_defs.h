@@ -41,14 +41,25 @@
 #  endif
 #endif
 
-#if (dg_configUSE_AUTO_CHIP_DETECTION == 1)
-   /* use a register description that is generic enough for our needs */
-#  include "D2522AA.h"
-#else
 # include "D2522AA.h"
-#endif /* dg_configUSE_AUTO_CHIP_DETECTION */
+#include "system_D2522.h"		/* DA1469x System */
 
-        #include "system_D2522.h"                           /* DA1469x System                                                      */
+/************************
+ * Includes from bsp_defaults.h
+ ************************/
+
+#define dg_configDEVICE DEVICE_D2522
+
+#include "custom_config.h"
+
+#ifndef dg_configFAULT_DEBUG_DUMP
+#define dg_configFAULT_DEBUG_DUMP 0
+#endif
+
+/* ------------------------------------------ Common -------------------------------------------- */
+#ifndef CMN_TIMING_DEBUG
+#define CMN_TIMING_DEBUG                        (0)     // Requires GPIO config.
+#endif
 
 /************************
  * Memory map
@@ -233,11 +244,7 @@
 /**
  * \brief Text retained memory attribute
  */
-#if ((dg_configCODE_LOCATION == NON_VOLATILE_IS_FLASH) && (dg_configEXEC_MODE == MODE_IS_CACHED))
-#define __RETAINED_CODE                 __attribute__((section("text_retained"))) __attribute__((noinline)) __attribute__((optimize ("no-tree-switch-conversion")))
-#else
 #define __RETAINED_CODE
-#endif
 
 /**
  * \brief Attribute to tell the compiler to consider a symbol as used

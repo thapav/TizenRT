@@ -21,13 +21,8 @@
  ****************************************************************************************
  */
 #include <stdio.h>
-#include "sw_version.h"
-#ifdef SEC_MODEN
-#include <FreeRTOSConfig.h>
-#include "system.h"
-#include "boot_info.h"
-#endif
 
+#include "sw_version.h"
 #include "hw_watchdog.h"
 #include "hw_sys.h"
 
@@ -95,27 +90,6 @@ void hw_watchdog_unregister_int(void)
 
 __RETAINED_CODE void hw_watchdog_handle_int(unsigned long *exception_args)
 {
-#ifdef SEC_MODEN
-#if defined(CONFIG_WD_MONITOR)
-		check_monitor();
-#endif
-
-        if (dg_configIMAGE_SETUP == DEVELOPMENT_MODE) {
-            printf("\r\n!!!hw_watchdog!!!\r\n");
-            printf("R0  : 0x%08lx\r\n", exception_args[0]);
-            printf("R1  : 0x%08lx\r\n", exception_args[1]);
-            printf("R2  : 0x%08lx\r\n", exception_args[2]);
-            printf("R3  : 0x%08lx\r\n", exception_args[3]);
-            printf("R12 : 0x%08lx\r\n", exception_args[4]);
-            printf("LR  : 0x%08lx\r\n", exception_args[5]);
-            printf("PC  : 0x%08lx\r\n", exception_args[6]);
-            printf("PSR : 0x%08lx\r\n", exception_args[7]);
-        }
-
-
-#endif
-
-
         hw_watchdog_unfreeze();
 
         // Reached this point due to a WDOG timeout
@@ -182,7 +156,7 @@ void NMI_HandlerC(unsigned long *exception_args)
     printf("\r\n!!!NMI_HandlerC!!!\r\n");
 #endif
 
-    sys_set_reset_reason(RESET_REASON_FAULT_WATCHDOG);
+//    sys_set_reset_reason(RESET_REASON_FAULT_WATCHDOG);
 
     if ( 0 /* int_handler */) {
     		printf("[%s %05d]\r\n",__func__,__LINE__);

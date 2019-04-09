@@ -31,6 +31,11 @@
    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
    POSSIBILITY OF SUCH DAMAGE.
    ---------------------------------------------------------------------------*/
+#include <tinyara/config.h>
+
+#include <arch/irq.h>
+
+#include "chip.h"
 
 #define SYS_CTRL_REG                            0x50000024
 #define SYS_CTRL_REG_DEBUGGER_ENABLE_MSK        0x80
@@ -52,20 +57,14 @@
 #define MTB_MASTER_REG                          0xE0043004
 #define MTB_MASTER_REG_ENABLE_MSK               0x80000009
 
+	.file	"startup_da1469x.S"
 	.syntax	unified
-	.arch	armv8-m
-
-#if ( (dg_configSKIP_MAGIC_CHECK_AT_START == 0) && (dg_configIMAGE_SETUP == PRODUCTION_MODE) )
-#error "Building Production image with MAGIC Value check enabled! Possible security risk..."
-#endif
+	.arch	armv7-m
 
 	.equ RESET_STAT_REG, 0x500000BC
 
-#if (dg_configCODE_LOCATION == NON_VOLATILE_IS_NONE)
 	.section .text
-#else
-	.section text_retained
-#endif
+
 	.thumb
 	.thumb_func
 	.align	2
@@ -88,22 +87,31 @@ Wakeup_Reset_Handler:
         ldr     r3, =wakeup_from_deepsleep
         bx      r3
 .cold_reset:
-        ldr     r3, =Reset_Handler
+        ldr     r3, =__start
         bx      r3
         .size	Wakeup_Reset_Handler, . - Wakeup_Reset_Handler
 
-
-        .section text_reset
+        .section .reset_handler
         .thumb
         .thumb_func
         .align  2
-        .globl  Reset_Handler
-        .type   Reset_Handler, %function
-Reset_Handler:
+	.weak   __start
+        .globl  __start
+        .type   __start, %function
+__start:
+	/* set stack pointer */
+	ldr  sp, =(__bss_end__ + CONFIG_IDLETHREAD_STACKSIZE & ~7)
+
+	/* interrupt disable */
+	cpsid i
+
+	/* watch dog disable */
+	/* TO DO*/
+
         ldr     r0, =0x20000004
         ldr     r1, =Wakeup_Reset_Handler
         str     r1, [r0]
-
+#if 0
 #if (dg_configENABLE_MTB)
         ldr     r0, =MTB_POSITION_REG
         ldr     r1, =0
@@ -115,8 +123,7 @@ Reset_Handler:
         ldr     r1, =MTB_MASTER_REG_ENABLE_MSK
         str     r1, [r0]
 #endif
-
-#if (dg_configSKIP_MAGIC_CHECK_AT_START == 0)
+#endif
 
 /* If the Magic Word {0xDEADBEEF, 0xDEADBEEF, 0xDEADBEEF, 0xDEAD10CC} is found at 0x20010000 then the
  * execution will block for a while in order to give time to a debugger to attach. */
@@ -153,10 +160,8 @@ Reset_Handler:
         strh    r6, [r4]
 
 .code_starts:
-#endif
 
 /* RAM projects should disable the cache controller */
-#if (dg_configCODE_LOCATION == NON_VOLATILE_IS_NONE)
         ldr     r4, =SYS_CTRL_REG
         ldrh    r0, [r4]
         movs    r1, #1
@@ -164,7 +169,6 @@ Reset_Handler:
         bics    r0, r0, r1
         /* Update SYS_CTRL_REG. */
         strh    r0, [r4]
-#endif
 
 #ifndef __NO_SYSTEM_INIT
         bl		SystemInitPre
@@ -333,13 +337,15 @@ Reset_Handler:
     bl		SystemInit
 #endif /* __NO_SYSTEM_INIT */
 
+/*
 #ifndef __START
 #define __START _start
 #endif
 	bl	__START
+*/
 
 	.pool
-	.size	Reset_Handler, . - Reset_Handler
+	.size	__start, . - __start
 
     .text
     .align  2
@@ -429,9 +435,6 @@ SVC_Handler:
     def_irq_handler Reserver46_Handler
     def_irq_handler Reserver47_Handler
 
-#if (dg_configCODE_LOCATION == NON_VOLATILE_IS_FLASH)
-        .section text_retained
-#endif
         .align  2
         .thumb
         .thumb_func
@@ -564,7 +567,6 @@ stack_check_range_0x20000000:
         bx      r1 /* Valid SP */
 
 Wrong_SP:
-#if (dg_configIMAGE_SETUP == DEVELOPMENT_MODE)
         /*
         * Set       WATCHDOG_CTRL_REG[WDOG_FREEZE_EN]
         * and reset WATCHDOG_CTRL_REG[NMI_RST]
@@ -584,21 +586,7 @@ Wrong_SP:
         orrs    r0, r0, r1
         /* Update SYS_CTRL_REG */
         strh    r0, [r4, #0]
-#else
-        /* Unfreeze WDog at all times */
-        ldr     r0, =RESET_FREEZE_REG
-        ldr     r1, =RESET_FREEZE_REG_FRZ_SYS_WDOG_MSK
-        strh    r1, [r0, #0]
-#if (dg_configENABLE_DEBUGGER == 1)
-        /* Enable debugger */
-        ldr     r4, =SYS_CTRL_REG
-        ldrh    r0, [r4, #0]
-        movs    r1, #SYS_CTRL_REG_DEBUGGER_ENABLE_MSK
-        orrs    r0, r0, r1
-        /* Update SYS_CTRL_REG */
-        strh    r0, [r4, #0]
-#endif
-#endif /* (dg_configIMAGE_SETUP == DEVELOPMENT_MODE) */
+
         /* Wait for the WDog to hit or a debug session to start */
         b       .
         .size   HardFault_Handler, . - HardFault_Handler

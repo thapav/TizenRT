@@ -20,20 +20,11 @@
  *
  ****************************************************************************************
  */
-#if dg_configUSE_HW_WKUP
-
 
 #include <stdio.h>
 #include <string.h>
-#include <hw_wkup_da1469x.h>
 
-#if (dg_configSYSTEMVIEW == 1)
-#  include "SEGGER_SYSVIEW_FreeRTOS.h"
-#else
-#  define SEGGER_SYSTEMVIEW_ISR_ENTER()
-#  define SEGGER_SYSTEMVIEW_ISR_EXIT()
-#endif /* (dg_configSYSTEMVIEW == 1) */
-
+#include "hw_wkup_da1469x.h"
 
 __RETAINED static hw_wkup_interrupt_cb intr_cb_key;
 __RETAINED static hw_wkup_interrupt_cb intr_cb_p0;
@@ -169,37 +160,23 @@ void hw_wkup_p1_handler(void)
 
 void Key_Wkup_GPIO_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         hw_wkup_reset_interrupt();
         NVIC_ClearPendingIRQ(KEY_WKUP_GPIO_IRQn);
         hw_wkup_key_handler();
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
 
 void GPIO_P0_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         NVIC_ClearPendingIRQ(GPIO_P0_IRQn);
         hw_wkup_p0_handler();
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
 
 void GPIO_P1_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         NVIC_ClearPendingIRQ(GPIO_P1_IRQn);
         hw_wkup_p1_handler();
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
 
-
-#endif /* dg_configUSE_HW_WKUP */
 /**
  * \}
  * \}

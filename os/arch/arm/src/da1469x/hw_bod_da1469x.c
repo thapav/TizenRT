@@ -21,8 +21,6 @@
 ****************************************************************************************
 */
 
-#if dg_configUSE_BOD
-
 #include "hw_bod.h"
 #include "hw_pmu.h"
 #include "hw_usb.h"
@@ -205,9 +203,6 @@ void hw_bod_configure(void)
                         REG_MSK(CRG_TOP, BOD_CTRL_REG, BOD_VBAT_RST_EN);
         REG_SET_MASKED(CRG_TOP, BOD_CTRL_REG, mask, mask);
 }
-
-#endif /* dg_configUSE_BOD */
-
 
 /**
 \}

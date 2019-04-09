@@ -174,55 +174,55 @@ void hw_usb_interrupt_handler(uint32_t status);
  * \brief Process SD3 interrupt.
  *
  */
-void hw_usb_sd3_event();
+void hw_usb_sd3_event(void);
 
 /**
  * \brief Process SD5 interrupt.
  *
  */
-void hw_usb_sd5_event();
+void hw_usb_sd5_event(void);
 
 /**
  * \brief Process reset interrupt.
  *
  */
-void hw_usb_reset_event();
+void hw_usb_reset_event(void);
 
 /**
  * \brief Process resume interrupt.
  *
  */
-void hw_usb_resume_event();
+void hw_usb_resume_event(void);
 
 /**
  * \brief Process frame interrupt.
  *
  */
-void hw_usb_frame_event();
+void hw_usb_frame_event(void);
 
 /**
  * \brief Check for NAK interrupt from all endpoints.
  *
  */
-void hw_usb_nak_event();
+void hw_usb_nak_event(void);
 
 /**
  * \brief Check for interrupt from TX endpoints.
  *
  */
-void hw_usb_tx_event();
+void hw_usb_tx_event(void);
 
 /**
  * \brief Check for interrupt from RX endpoints.
  *
  */
-void hw_usb_rx_event();
+void hw_usb_rx_event(void);
 
 /**
  * \brief Check for NAK interrupt from endpoints 0.
  *
  */
-void hw_usb_nak_event_ep0();
+void hw_usb_nak_event_ep0(void);
 
 /**
  * \brief Receive on endpoint zero.

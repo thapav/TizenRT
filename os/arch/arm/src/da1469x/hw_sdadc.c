@@ -21,17 +21,7 @@
  ****************************************************************************************
  */
 
-
-#if dg_configUSE_HW_SDADC
-
-#include <hw_sdadc.h>
-
-#if (dg_configSYSTEMVIEW)
-#  include "SEGGER_SYSVIEW_FreeRTOS.h"
-#else
-#  define SEGGER_SYSTEMVIEW_ISR_ENTER()
-#  define SEGGER_SYSTEMVIEW_ISR_EXIT()
-#endif
+#include "hw_sdadc.h"
 
 static hw_sdadc_interrupt_cb intr_cb = NULL;
 
@@ -80,7 +70,7 @@ uint16_t hw_sdadc_gain_recalculate(uint16_t raw_gain)
         return (gain & 0x03FF);
  }
 
-void hw_sdadc_get_trimmed_and_set_to_regs()
+void hw_sdadc_get_trimmed_and_set_to_regs(void)
 {
         int16_t gain_corr;
         int16_t offs_corr;
@@ -216,7 +206,7 @@ void hw_sdadc_init(const sdadc_config *cfg)
         hw_sdadc_configure(cfg);
 }
 
-void hw_sdadc_deinit()
+void hw_sdadc_deinit(void)
 {
         hw_sdadc_unregister_interrupt();
 }
@@ -301,18 +291,12 @@ void hw_sdadc_unregister_interrupt(void)
 
 void ADC2_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         if (intr_cb) {
                 intr_cb();
         } else {
                 hw_sdadc_clear_interrupt();
         }
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
-
-#endif /* dg_configUSE_HW_GPADC */
 
 /**
  * \}

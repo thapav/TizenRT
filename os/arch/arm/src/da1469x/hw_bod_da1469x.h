@@ -23,10 +23,7 @@
 #ifndef HW_BOD_D2522_H_
 #define HW_BOD_D2522_H_
 
-
 #include "sdk_defs.h"
-
-#if dg_configUSE_BOD
 
 /**
  * \brief The BOD channel name
@@ -227,9 +224,6 @@ __STATIC_INLINE void hw_bod_deactivate(void)
                         REG_MSK(CRG_TOP, BOD_CTRL_REG, BOD_VBAT_EN);
         REG_SET_MASKED(CRG_TOP, BOD_CTRL_REG, mask, 0);
 }
-
-
-#endif /* HW_BOD_D2522_H_ */
 
 /**
 \}

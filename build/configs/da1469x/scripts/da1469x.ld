@@ -10,7 +10,8 @@
 
 MEMORY
 {
-        RAM (rwx)    : ORIGIN = 0x00000000, LENGTH = 63K
+/*        RAM (rwx)    : ORIGIN = 0x00000000, LENGTH = 2M */
+        RAM (rwx)    : ORIGIN = 0x00810000, LENGTH = 512K
         RetRAM0 (rwx): ORIGIN = 63K,        LENGTH =  1K
         BUFFER (rw)  : ORIGIN = 0x00010000, LENGTH = 64K
 }
@@ -49,7 +50,7 @@ MEMORY
  *   __RetRAM0_start
  *   __RetRAM0_size
  */
-ENTRY(Reset_Handler)
+ENTRY(__start)
 
 SECTIONS
 {

@@ -22,8 +22,6 @@
 #ifndef HW_PD_H_
 #define HW_PD_H_
 
-#if dg_configUSE_HW_PD
-
 #include "sdk_defs.h"
 
 /**
@@ -241,9 +239,6 @@ __STATIC_INLINE bool hw_pd_check_tim_status(void)
 {
         return REG_GETF(CRG_TOP, SYS_STAT_REG, TIM_IS_UP) == 1;
 }
-
-
-#endif /* dg_configUSE_HW_PD */
 
 #endif /* HW_PD_H_ */
 

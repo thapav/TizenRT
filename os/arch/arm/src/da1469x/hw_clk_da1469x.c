@@ -21,9 +21,6 @@
 ****************************************************************************************
 */
 
-#if dg_configUSE_HW_CLK
-
-
 #define USE_FAST_STARTUP        0
 
 #include <stdint.h>
@@ -383,9 +380,6 @@ void hw_clk_xtalm_configure(void)
         REG_SETF(CRG_XTAL, XTAL32M_CTRL0_REG, XTAL32M_RCOSC_CALIBRATE, 0x0);
 #endif
 }
-
-
-#endif /* dg_configUSE_HW_CLK */
 /**
 \}
 \}

@@ -15,10 +15,8 @@
 #ifndef PMU_H_
 #define PMU_H_
 
-#if dg_configUSE_HW_PMU
+#define HW_PMU_SANITY_CHECKS_ENABLE 1
 
 #include "hw_pmu_da1469x.h"
-
-#endif /* dg_configUSE_HW_PMU */
 
 #endif /* PMU_H_ */

@@ -23,12 +23,10 @@
 #ifndef HW_SDADC_H
 #define HW_SDADC_H
 
-
-#if dg_configUSE_HW_SDADC
-
 #include <stdbool.h>
 #include <stdint.h>
-#include <sdk_defs.h>
+
+#include "sdk_defs.h"
 
 /**
  * \brief SDADC input mode
@@ -153,7 +151,7 @@ void hw_sdadc_init(const sdadc_config *cfg);
  * It also disables and clears pending SDADC interrupts.
  *
  */
-void hw_sdadc_deinit();
+void hw_sdadc_deinit(void);
 
 /**
  * \brief Configure SDADC
@@ -569,9 +567,6 @@ __STATIC_INLINE int32_t hw_sdadc_get_voltage(sdadc_config *cfg)
 
         return hw_sdadc_result_reg_to_millivolt(cfg);
 }
-
-#endif /* dg_configUSE_HW_SDADC */
-
 
 #endif /* HW_SDADC_H_ */
 

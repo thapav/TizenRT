@@ -24,10 +24,7 @@
 #ifndef HW_OTPC_D2522_H_
 #define HW_OTPC_D2522_H_
 
-#include <sdk_defs.h>
-
-#if dg_configUSE_HW_OTPC
-
+#include "sdk_defs.h"
 
 /**
  * \brief Get the mask of a field of an OTPC register.
@@ -383,9 +380,6 @@ __STATIC_INLINE void *hw_otpc_cell_to_mem(uint32_t cell_offset)
  *
  */
 uint32_t hw_otpc_address_to_cell_offset(uint32_t address);
-
-
-#endif /* dg_configUSE_HW_OTPC */
 
 #endif /* HW_OTPC_D2522_H_ */
 

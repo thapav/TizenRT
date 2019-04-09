@@ -21,10 +21,7 @@
  ****************************************************************************************
  */
 
-#if dg_configUSE_HW_PDC
-
-
-#include <hw_pdc.h>
+#include "hw_pdc.h"
 
 __RETAINED_CODE uint32_t hw_pdc_add_entry(uint32_t lut_entry)
 {
@@ -68,8 +65,6 @@ void hw_pdc_lut_reset(void)
                 hw_pdc_acknowledge(i);
         }
 }
-
-#endif /* dg_configUSE_HW_PDC */
 /**
  * \}
  * \}

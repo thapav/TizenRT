@@ -21,12 +21,10 @@
  ****************************************************************************************
  */
 
-#if dg_configUSE_HW_GPIO
-
+#include <tinyara/config.h>
 
 #include <stdint.h>
-#include <hw_gpio.h>
-#include "sys_power_mgr.h"
+#include "hw_gpio.h"
 
 /* Register adresses */
 #define PX_DATA_REG_ADDR(_port)         ((volatile uint32_t *)(GPIO_BASE + offsetof(GPIO_Type, P0_DATA_REG)) + _port)
@@ -161,8 +159,6 @@ void hw_gpio_set_pin_function(HW_GPIO_PORT port, HW_GPIO_PIN pin, HW_GPIO_MODE m
         hw_gpio_verify_reserved(port, pin);
 
         PXX_MODE_REG(port, pin) = mode | function;
-
-		pm_save_pinmux_setting(port, pin, mode, function);
 }
 
 void hw_gpio_get_pin_function(HW_GPIO_PORT port, HW_GPIO_PIN pin, HW_GPIO_MODE* mode,
@@ -216,8 +212,6 @@ void hw_gpio_set_active(HW_GPIO_PORT port, HW_GPIO_PIN pin)
         hw_gpio_verify_reserved(port, pin);
 
         PX_SET_DATA_REG(port) = 1 << pin;
-
-        pm_save_pin_state(port, pin, 1);
 }
 
 void hw_gpio_set_inactive(HW_GPIO_PORT port, HW_GPIO_PIN pin)
@@ -225,8 +219,6 @@ void hw_gpio_set_inactive(HW_GPIO_PORT port, HW_GPIO_PIN pin)
         hw_gpio_verify_reserved(port, pin);
 
         PX_RESET_DATA_REG(port) = 1 << pin;
-
-        pm_save_pin_state(port, pin, 0);	
 }
 
 bool hw_gpio_get_pin_status(HW_GPIO_PORT port, HW_GPIO_PIN pin)
@@ -268,10 +260,3 @@ int hw_gpio_get_pins_with_function(HW_GPIO_FUNC func, uint8_t *buf, int buf_size
         }
         return count;
 }
-
-#endif /* dg_configUSE_HW_GPIO */
-/**
- * \}
- * \}
- * \}
- */

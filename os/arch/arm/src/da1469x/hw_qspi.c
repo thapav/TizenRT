@@ -21,9 +21,8 @@
  ****************************************************************************************
  */
 
-#if dg_configUSE_HW_QSPI || dg_configUSE_HW_QSPI2
-
 #include <stdint.h>
+
 #include "hw_qspi.h"
 
 /*
@@ -327,8 +326,6 @@ __RETAINED_CODE void hw_qspi_set_instructions(HW_QSPIC_ID id, struct qspic_instr
         }
 #endif
 }
-
-#endif /* dg_configUSE_HW_QSPI || dg_configUSE_HW_QSPI2 */
 
 /**
  * \}

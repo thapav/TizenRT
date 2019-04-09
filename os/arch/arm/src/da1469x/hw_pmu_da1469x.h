@@ -23,8 +23,6 @@
 #ifndef HW_PMU_H_D2522
 #define HW_PMU_H_D2522
 
-#if dg_configUSE_HW_PMU
-
 #include "sdk_defs.h"
 
 /**
@@ -910,9 +908,6 @@ HW_PMU_POWER_RAIL_STATE hw_pmu_get_1v2_onwakeup_config(HW_PMU_1V2_RAIL_CONFIG *r
  *         to work in sleep state, or POWER_RAIL_DISABLED otherwise.
  */
 HW_PMU_POWER_RAIL_STATE hw_pmu_get_1v2_onsleep_config(HW_PMU_1V2_SLEEP_VOLTAGE *rail_voltage);
-
-
-#endif /* dg_configUSE_HW_PMU */
 
 #endif /* HW_PMU_H_D2522 */
 

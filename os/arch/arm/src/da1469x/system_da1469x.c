@@ -23,12 +23,21 @@
  * limitations under the License.
  */
 
+//#include <tinyara/config.h>
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <sys/errno.h>
+#include <assert.h>
+#include <errno.h>
+#include <debug.h>
+
+#include <tinyara/init.h>
+#include <arch/board/board.h>
+
 #include "sdk_defs.h"
 #include "interrupts.h"
+
 #include "hw_bod.h"
 #include "hw_cache.h"
 #include "hw_clk.h"
@@ -44,15 +53,38 @@
 #include "sys_tcs.h"
 #include "sys_trng.h"
 
+//#if dg_configUSE_CLOCK_MGR
+//#include "sys_clock_mgr.h"
+//#include "../../system/sys_man/sys_clock_mgr_internal.h"
+//#endif
 
-#if dg_configUSE_CLOCK_MGR
-#include "sys_clock_mgr.h"
-#include "../../system/sys_man/sys_clock_mgr_internal.h"
-#endif
+extern uint32_t __bss_end__;
 
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+/* .data is positioned first in the primary RAM followed immediately by .bss.
+ * The IDLE thread stack lies just after .bss and has size give by
+ * CONFIG_IDLETHREAD_STACKSIZE;  The heap then begins just after the IDLE.
+ * ARM EABI requires 64 bit stack alignment.
+ */
+#define IDLE_STACKSIZE (CONFIG_IDLETHREAD_STACKSIZE & ~7)
+#define IDLE_STACK     ((uintptr_t)&__bss_end__ + IDLE_STACKSIZE)
+#define HEAP_BASE      ((uintptr_t)&__bss_end__ + IDLE_STACKSIZE)
+
+/* g_idle_topstack: _sbss is the start of the BSS region as defined by the
+ * linker script. _ebss lies at the end of the BSS region. The idle task
+ * stack starts at the end of BSS and is of size CONFIG_IDLETHREAD_STACKSIZE.
+ * The IDLE thread is the thread that the system boots on and, eventually,
+ * becomes the IDLE, do nothing task that runs only when there is nothing
+ * else to run.  The heap continues from there until the end of memory.
+ * g_idle_topstack is a read-only variable the provides this computed
+ * address.
+ */
+const uintptr_t g_idle_topstack = HEAP_BASE;
 
 #ifndef __SYSTEM_CLOCK
-# define __SYSTEM_CLOCK                 (dg_configRC32M_FREQ)
+# define __SYSTEM_CLOCK                 (SYSCLK_FREQUENCY)
 #endif
 
 /*
@@ -109,11 +141,11 @@ void *_sbrk(int incr)
 /**
 * \brief  SDK implementation of stdlib's rand().
 *
-*/
 int rand(void)
 {
         return (int) sys_trng_rand();
 }
+*/
 
 /**
 * \brief  SDK implementation of stdlib's srand().
@@ -436,7 +468,7 @@ static void configure_pdc(void)
         NVIC_DisableIRQ(PDC_IRQn);
         NVIC_ClearPendingIRQ(PDC_IRQn);
 
-#if defined(CONFIG_USE_BLE) || (dg_configUSE_SYS_CHARGER) || (dg_configENABLE_DEBUGGER == 1)
+#if defined(CONFIG_USE_BLE) || (dg_configENABLE_DEBUGGER == 1)
         /* Set up PDC entry for CMAC2SYS IRQ or VBUS IRQ or debugger */
         pdc_entry_index = hw_pdc_add_entry(HW_PDC_LUT_ENTRY_VAL(
                                                 HW_PDC_TRIG_SELECT_PERIPHERAL,
@@ -502,24 +534,6 @@ static void configure_pdc(void)
 void SystemInitPre(void) __attribute__((section("text_reset")));
 void SystemInitPre(void)
 {
-        /*
-         * Enable M33 debugger.
-         */
-        if (dg_configENABLE_DEBUGGER) {
-                ENABLE_DEBUGGER;
-        } else {
-                DISABLE_DEBUGGER;
-        }
-
-        /*
-         * Enable CMAC debugger.
-         */
-        if (dg_configENABLE_CMAC_DEBUGGER) {
-                ENABLE_CMAC_DEBUGGER;
-        } else {
-                DISABLE_CMAC_DEBUGGER;
-        }
-
         /*
          * Bandgap has already been set by the bootloader.
          * Use fast clocks from now on.
@@ -669,7 +683,7 @@ void SystemInit(void)
 #endif
 
         hw_qspi_disable_init(HW_QSPIC);             // Disable QSPI init after wakeup
-        qspi_automode_init();               // The bootloader may have left the Flash in wrong mode...
+//        qspi_automode_init();               // The bootloader may have left the Flash in wrong mode...
 
         /* Already up in SystemInitPre() */
         ASSERT_WARNING(hw_pd_check_tim_status());
@@ -785,7 +799,9 @@ void SystemInit(void)
         hw_bod_deactivate();
 #endif
 
+	os_start();
 
+	while (1) ;
 }
 
 uint32_t black_orca_phy_addr(uint32_t addr)

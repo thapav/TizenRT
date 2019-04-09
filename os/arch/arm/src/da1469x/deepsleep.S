@@ -5,7 +5,7 @@
  */
 
         .syntax unified
-        .arch   armv8-m
+        .arch   armv7-m
 
 
         .equ RESET_STAT_REG,0x500000BC

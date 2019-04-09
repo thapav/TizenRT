@@ -15,10 +15,6 @@
 #ifndef HW_CPM_H_
 #define HW_CPM_H_
 
-#if dg_configUSE_HW_CPM
-
-        #include "hw_cpm_da1469x.h"
-
-#endif /* dg_configUSE_HW_CPM */
+#include "hw_cpm_da1469x.h"
 
 #endif /* HW_CPM_H_ */

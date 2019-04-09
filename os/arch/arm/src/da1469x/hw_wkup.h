@@ -17,10 +17,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <sdk_defs.h>
 
-#if dg_configUSE_HW_WKUP
+#include "sdk_defs.h"
 #include "hw_wkup_da1469x.h"
 
-#endif /* dg_configUSE_HW_WKUP */
 #endif /* HW_WKUP_H_ */

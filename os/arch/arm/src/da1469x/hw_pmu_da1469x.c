@@ -21,18 +21,9 @@
 ****************************************************************************************
 */
 
-#if dg_configUSE_HW_PMU
-
-#include "hw_pmu.h"
 #include <string.h>
 
-#ifndef HW_PMU_SANITY_CHECKS_ENABLE
-#       if dg_configIMAGE_SETUP == DEVELOPMENT_MODE
-#               define HW_PMU_SANITY_CHECKS_ENABLE 1
-#       else
-#               define HW_PMU_SANITY_CHECKS_ENABLE 0
-#       endif
-#endif
+#include "hw_pmu.h"
 
 #define HW_PMU_BOD_THRESHOLD_MARGIN_PERCENT (4)
 
@@ -332,12 +323,12 @@ static void v30_ldo_vbat_vbus_disable(void)
         REG_SETF(CRG_TOP, POWER_CTRL_REG, LDO_3V0_MODE, 0);
 }
 
-static void v30_ldo_vbat_ret_active()
+static void v30_ldo_vbat_ret_active(void)
 {
         REG_SET_BIT(CRG_TOP, POWER_CTRL_REG, LDO_3V0_RET_ENABLE_ACTIVE);
 }
 
-static void v30_ldo_vbat_vbus_active()
+static void v30_ldo_vbat_vbus_active(void)
 {
         REG_SETF(CRG_TOP, POWER_CTRL_REG, LDO_3V0_MODE, 0x3);
 }
@@ -1761,7 +1752,6 @@ HW_PMU_POWER_RAIL_STATE hw_pmu_get_1v2_onsleep_config(HW_PMU_1V2_SLEEP_VOLTAGE *
         return r_state;
 }
 
-#endif /* dg_configUSE_HW_PMU */
 /**
 \}
 \}

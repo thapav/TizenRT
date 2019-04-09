@@ -23,9 +23,6 @@
 #ifndef HW_CLK_D2522_H_
 #define HW_CLK_D2522_H_
 
-#if dg_configUSE_HW_CLK
-
-
 #include "sdk_defs.h"
 #include "hw_sys.h"
 
@@ -760,8 +757,6 @@ void hw_clk_perform_init_rcosc_calibration(void);
  */
 void hw_clk_xtalm_calibrate_rcosc(void);
 #endif
-
-#endif /* dg_configUSE_HW_CLK */
 
 #endif /* HW_CLK_D2522_H_ */
 

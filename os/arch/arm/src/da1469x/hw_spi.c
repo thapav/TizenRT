@@ -21,18 +21,8 @@
  ****************************************************************************************
  */
 
-#if dg_configUSE_HW_SPI
-
-
 #include <stdint.h>
-#include <hw_spi.h>
-
-#if (dg_configSYSTEMVIEW)
-#  include "SEGGER_SYSVIEW_FreeRTOS.h"
-#else
-#  define SEGGER_SYSTEMVIEW_ISR_ENTER()
-#  define SEGGER_SYSTEMVIEW_ISR_EXIT()
-#endif
+#include "hw_spi.h"
 
 typedef enum {
         HW_SPI_TRANSFER_READ      = 1,
@@ -823,11 +813,7 @@ static void SPI_Interrupt_Handler(HW_SPI_ID id)
  */
 void SPI_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         SPI_Interrupt_Handler(HW_SPI1);
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
 
 /**
@@ -836,17 +822,5 @@ void SPI_Handler(void)
  */
 void SPI2_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         SPI_Interrupt_Handler(HW_SPI2);
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
-
-#endif /* dg_configUSE_HW_SPI */
-/**
- * \}
- * \}
- * \}
- */
-

@@ -12,16 +12,7 @@
  ****************************************************************************************
  */
 
-#if dg_configUSE_HW_TRNG
-
-#include <hw_trng.h>
-
-#if (dg_configSYSTEMVIEW)
-#  include "SEGGER_SYSVIEW_FreeRTOS.h"
-#else
-#  define SEGGER_SYSTEMVIEW_ISR_ENTER()
-#  define SEGGER_SYSTEMVIEW_ISR_EXIT()
-#endif
+#include "hw_trng.h"
 
 #define HW_TRNG_FIFO_DEPTH      (32)
 
@@ -90,15 +81,10 @@ void TRNG_Handler(void)
 {
         uint32_t dummy __UNUSED;
 
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         if (trng_cb != NULL)
                 trng_cb();
 
         /* read TRNG_FIFOLVL_REG to clear level-sensitive source. */
         dummy = TRNG->TRNG_FIFOLVL_REG;
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
 
-#endif /* dg_configUSE_HW_TRNG */

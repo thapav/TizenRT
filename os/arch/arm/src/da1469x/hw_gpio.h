@@ -23,11 +23,10 @@
 #ifndef HW_GPIO_H_
 #define HW_GPIO_H_
 
-#if dg_configUSE_HW_GPIO
-
 #include <stdbool.h>
 #include <stdint.h>
-#include <sdk_defs.h>
+
+#include "sdk_defs.h"
 
 /**
  * Definitions of boards UART retarget GPIO pins, mode and function
@@ -588,9 +587,6 @@ __STATIC_INLINE bool hw_gpio_pad_latch_is_enabled(HW_GPIO_PORT port, HW_GPIO_PIN
 * \return true if the port / pin pair for the specific function was found, else false.
 */
 bool hw_gpio_get_pin_with_function(HW_GPIO_FUNC func, HW_GPIO_PORT* port, HW_GPIO_PIN* pin);
-
-
-#endif /* dg_configUSE_HW_GPIO */
 
 #endif /* HW_GPIO_H_ */
 

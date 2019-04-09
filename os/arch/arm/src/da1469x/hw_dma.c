@@ -21,18 +21,11 @@
  ****************************************************************************************
  */
 
-#if dg_configUSE_HW_DMA
+#include <tinyara/config.h>
 
-#include <hw_gpio.h>
-#include <hw_dma.h>
-#include "sys_power_mgr.h"
-
-#if (dg_configSYSTEMVIEW)
-#  include "SEGGER_SYSVIEW_FreeRTOS.h"
-#else
-#  define SEGGER_SYSTEMVIEW_ISR_ENTER()
-#  define SEGGER_SYSTEMVIEW_ISR_EXIT()
-#endif
+#include "hw_gpio.h"
+#include "hw_dma.h"
+//#include "sys_power_mgr.h"
 
 static struct hw_dma_callback_data {
         hw_dma_transfer_cb callback;
@@ -40,6 +33,7 @@ static struct hw_dma_callback_data {
 } dma_callbacks_user_data[8];
 
 #define DMA_CHN_REG(reg, chan) ((volatile uint32 *)(&(reg)) + ((chan) * 8))
+#define DMA_CHNx_REG(reg, chan) ((volatile dma_size_t *)(&(reg)) + ((chan) * 8))
 
 /**
  * \brief Initialize DMA Channel
@@ -77,10 +71,10 @@ void hw_dma_channel_initialization(DMA_setup *channel_setup)
         dma_x_b_start_reg = DMA_CHN_REG(DMA->DMA0_B_START_REG, channel_setup->channel_number);
 
         // Look up DMAX_LEN_REG address
-        dma_x_len_reg = DMA_CHN_REG(DMA->DMA0_LEN_REG, channel_setup->channel_number);
+        dma_x_len_reg = DMA_CHNx_REG(DMA->DMA0_LEN_REG, channel_setup->channel_number);
 
         // Look up DMAX_INT
-        dma_x_int_reg = DMA_CHN_REG(DMA->DMA0_INT_REG, channel_setup->channel_number);
+        dma_x_int_reg = DMA_CHNx_REG(DMA->DMA0_INT_REG, channel_setup->channel_number);
 
         // Make sure DMA channel is disabled first
         REG_SET_FIELD(DMA, DMA0_CTRL_REG, DMA_ON, *dma_x_ctrl_reg, HW_DMA_STATE_DISABLED);
@@ -134,7 +128,7 @@ void hw_dma_channel_initialization(DMA_setup *channel_setup)
                 default:
                         break;
                 }
-#if dg_configDMA_DYNAMIC_MUX || (dg_configBLACK_ORCA_IC_REV == BLACK_ORCA_IC_REV_A)
+#if (dg_configBLACK_ORCA_IC_REV == BLACK_ORCA_IC_REV_A)
                 /*
                  * When different DMA channels are used for same device it is important
                  * that only one trigger is set for specific device at a time.
@@ -217,10 +211,10 @@ void hw_dma_channel_update_source(HW_DMA_CHANNEL channel, void *addr, dma_size_t
         volatile uint32 *dma_x_a_start_reg = DMA_CHN_REG(DMA->DMA0_A_START_REG, channel);
 
         // Look up DMAX_LEN_REG address
-        volatile dma_size_t *dma_x_len_reg = DMA_CHN_REG(DMA->DMA0_LEN_REG, channel);
+        volatile dma_size_t *dma_x_len_reg = DMA_CHNx_REG(DMA->DMA0_LEN_REG, channel);
 
         // Look up DMAX_INT_REG address
-        volatile dma_size_t *dma_x_int_reg = DMA_CHN_REG(DMA->DMA0_INT_REG, channel);
+        volatile dma_size_t *dma_x_int_reg = DMA_CHNx_REG(DMA->DMA0_INT_REG, channel);
 
         // Set source address registers
         *dma_x_a_start_reg = phy_addr;
@@ -248,8 +242,8 @@ void hw_dma_channel_update_destination(HW_DMA_CHANNEL channel, void *addr, dma_s
         volatile uint32 *dma_x_b_start_reg = DMA_CHN_REG(DMA->DMA0_B_START_REG, channel);
 
         // Look up DMAX_LEN_REG address
-        volatile dma_size_t *dma_x_len_reg = DMA_CHN_REG(DMA->DMA0_LEN_REG, channel);
-        volatile dma_size_t *dma_x_int_reg = DMA_CHN_REG(DMA->DMA0_INT_REG, channel);
+        volatile dma_size_t *dma_x_len_reg = DMA_CHNx_REG(DMA->DMA0_LEN_REG, channel);
+        volatile dma_size_t *dma_x_int_reg = DMA_CHNx_REG(DMA->DMA0_INT_REG, channel);
 
         // Set destination address register
         *dma_x_b_start_reg = phy_addr;
@@ -262,7 +256,7 @@ void hw_dma_channel_update_destination(HW_DMA_CHANNEL channel, void *addr, dma_s
 
 void hw_dma_channel_update_int_ix(HW_DMA_CHANNEL channel, uint16_t int_ix)
 {
-        volatile dma_size_t *dma_x_int_reg = DMA_CHN_REG(DMA->DMA0_INT_REG, channel);
+        volatile dma_size_t *dma_x_int_reg = DMA_CHNx_REG(DMA->DMA0_INT_REG, channel);
         *dma_x_int_reg = int_ix;
 }
 
@@ -276,7 +270,7 @@ void hw_dma_channel_update_int_ix(HW_DMA_CHANNEL channel, uint16_t int_ix)
 void hw_dma_channel_enable(HW_DMA_CHANNEL channel_number, HW_DMA_STATE dma_on)
 {
         // Look up DMAx_CTRL_REG address
-        volatile dma_size_t *dma_x_ctrl_reg = DMA_CHN_REG(DMA->DMA0_CTRL_REG, channel_number);
+        volatile dma_size_t *dma_x_ctrl_reg = DMA_CHNx_REG(DMA->DMA0_CTRL_REG, channel_number);
 
         if (dma_on == HW_DMA_STATE_ENABLED) {
                 uint16_t dma_ctrl = *dma_x_ctrl_reg;
@@ -324,14 +318,12 @@ bool hw_dma_channel_active(void)
         dma_on |= REG_GETF(DMA, DMA6_CTRL_REG, DMA_ON) << 6;
         dma_on |= REG_GETF(DMA, DMA7_CTRL_REG, DMA_ON) << 7;
 
-        pm_increase_dma_cnt(dma_on);
-
         return (dma_on > 0);
 }
 
 bool hw_dma_is_channel_active(HW_DMA_CHANNEL channel_number)
 {
-        volatile dma_size_t *dma_x_ctrl_reg = DMA_CHN_REG(DMA->DMA0_CTRL_REG, channel_number);
+        volatile dma_size_t *dma_x_ctrl_reg = DMA_CHNx_REG(DMA->DMA0_CTRL_REG, channel_number);
         return REG_GET_FIELD(DMA, DMA0_CTRL_REG, DMA_ON, *dma_x_ctrl_reg);
 }
 
@@ -343,8 +335,6 @@ bool hw_dma_is_channel_active(HW_DMA_CHANNEL channel_number)
  */
 void DMA_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         uint16_t risen;
         uint16_t i;
         volatile dma_size_t *dma_x_len_reg;
@@ -360,12 +350,12 @@ void DMA_Handler(void)
                          * DMAx_INT_REG shows after how many transfers the interrupt
                          * is generated
                          */
-                        dma_x_int_reg = DMA_CHN_REG(DMA->DMA0_INT_REG, i);
+                        dma_x_int_reg = DMA_CHNx_REG(DMA->DMA0_INT_REG, i);
 
                         /*
                          * DMAx_LEN_REG shows the length of the DMA transfer
                          */
-                        dma_x_len_reg = DMA_CHN_REG(DMA->DMA0_LEN_REG, i);
+                        dma_x_len_reg = DMA_CHNx_REG(DMA->DMA0_LEN_REG, i);
 
                         dma_x_ctrl_reg = DMA_CHN_REG(DMA->DMA0_CTRL_REG, i);
 
@@ -380,25 +370,17 @@ void DMA_Handler(void)
                         dma_helper(i, *dma_x_int_reg + 1, stop);
                 }
         }
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
 
 void hw_dma_channel_stop(HW_DMA_CHANNEL channel_number)
 {
         // Stopping DMA will clear DMAx_IDX_REG so read it before
-        volatile dma_size_t *dma_x_idx_reg = DMA_CHN_REG(DMA->DMA0_IDX_REG, channel_number);
+        volatile dma_size_t *dma_x_idx_reg = DMA_CHNx_REG(DMA->DMA0_IDX_REG, channel_number);
         dma_helper(channel_number, *dma_x_idx_reg, true);
 }
 
 dma_size_t hw_dma_transfered_bytes(HW_DMA_CHANNEL channel_number)
 {
-        volatile dma_size_t *dma_x_int_reg = DMA_CHN_REG(DMA->DMA0_IDX_REG, channel_number);
+        volatile dma_size_t *dma_x_int_reg = DMA_CHNx_REG(DMA->DMA0_IDX_REG, channel_number);
         return *dma_x_int_reg;
 }
-#endif /* dg_configUSE_HW_DMA */
-/**
- * \}
- * \}
- * \}
- */

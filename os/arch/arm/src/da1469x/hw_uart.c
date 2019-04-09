@@ -21,13 +21,12 @@
  ****************************************************************************************
  */
 
-#if dg_configUSE_HW_UART
-
+#include <tinyara/config.h>
 
 #include <stdint.h>
 #include <string.h>
-#include <hw_uart.h>
 
+#include "hw_uart.h"
 #include "hw_pd.h"
 
 #if (dg_configSYSTEMVIEW)
@@ -1686,10 +1685,3 @@ bool hw_uart_rx_in_progress(HW_UART_ID uart)
         UART_Data *ud = UARTDATA(uart);
         return ud->rx_cb != NULL;
 }
-
-#endif /* dg_configUSE_HW_UART */
-/**
- * \}
- * \}
- * \}
- */

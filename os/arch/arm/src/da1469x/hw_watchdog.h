@@ -26,7 +26,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <sdk_defs.h>
+
+#include "sdk_defs.h"
 
 #define NMI_MAGIC_NUMBER                0xDEADBEEF
 

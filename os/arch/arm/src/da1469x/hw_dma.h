@@ -23,10 +23,8 @@
 #ifndef HW_DMA_H_
 #define HW_DMA_H_
 
-#if dg_configUSE_HW_DMA
-
 #include <stdint.h>
-#include <sdk_defs.h>
+#include "sdk_defs.h"
 
 /*
 * ENUMERATION DEFINITIONS
@@ -375,8 +373,6 @@ bool hw_dma_is_channel_active(HW_DMA_CHANNEL channel_number);
  * \return true, if a channel is active else false.
  */
 bool hw_dma_channel_active(void);
-
-#endif /* dg_configUSE_HW_DMA */
 
 #endif /* HW_DMA_H_ */
 

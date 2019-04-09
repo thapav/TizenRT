@@ -22,19 +22,12 @@
  */
 #include <stdint.h>
 #include <stdio.h>
+
 #include "sdk_defs.h"
 #include "hw_hard_fault.h"
 #include "hw_watchdog.h"
 #include "hw_cpm.h"
 #include "hw_sys.h"
-
-#if defined(SEC_MODEN)
-#include "system.h"
-#include "boot_info.h"
-#include <osal.h>
-#include <FreeRTOSConfig.h>
-#endif
-#include "sec_fault.h"
 
 #define MTB_MASTER_REG                  ((uint32_t *) (0xE0043004))
 #define MTB_MASTER_DISABLE_MSK          (0x00000009)
@@ -362,10 +355,6 @@ void HardFault_HandlerC(unsigned long *hardfault_args)
 #if (dg_configFAULT_DEBUG_DUMP==1)
 	save_reg(&ss_fault_register, hardfault_args);
 #endif
-#if dg_configENABLE_MTB
-        /* Disable MTB */
-        *MTB_MASTER_REG = MTB_MASTER_DISABLE_MSK;
-#endif /* dg_configENABLE_MTB */
 
         // Stack frame contains:
         // r0, r1, r2, r3, r12, r14, the return address and xPSR
@@ -426,10 +415,6 @@ void HardFault_HandlerC(unsigned long *hardfault_args)
 
 #endif
 
-#ifdef SEC_MODEN
-        sys_set_reset_reason(RESET_REASON_FAULT_HARD);
-        printf_debug_info(0,"reboot \r\n");
-#endif
         hw_cpm_reboot_system();                         // Force reset
 
         if (dg_configIMAGE_SETUP == DEVELOPMENT_MODE) {
@@ -506,10 +491,6 @@ void MemManage_HandlerC(unsigned long *fault_args, unsigned int exc)
         volatile uint8_t mem_fault_status_reg;
         volatile uint32_t mem_fault_addr __UNUSED;
 
-#if dg_configENABLE_MTB
-        /* Disable MTB */
-        *MTB_MASTER_REG = MTB_MASTER_DISABLE_MSK;
-#endif
         mem_fault_status_reg = (SCB->CFSR & SCB_CFSR_MEMFAULTSR_Msk) >> SCB_CFSR_MEMFAULTSR_Pos;
         if (mem_fault_status_reg & 0x80) {
                 mem_fault_addr = SCB->MMFAR;
@@ -553,10 +534,6 @@ void MemManage_HandlerC(unsigned long *fault_args, unsigned int exc)
         FAULT_memcpy32(CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
 
 #endif
-#if defined(SEC_MODEN)
-        sys_set_reset_reason(RESET_REASON_FAULT_MEM);
-        printf_debug_info(0,"reboot \r\n");
-#endif
         hw_cpm_reboot_system();
 
         while (1) {}
@@ -573,11 +550,6 @@ void BusFault_HandlerC(unsigned long *fault_args, unsigned int exc)
 #endif
         volatile uint8_t bus_fault_status_reg;
         volatile uint32_t bus_fault_addr __UNUSED;
-
-#if dg_configENABLE_MTB
-        /* Disable MTB */
-        *MTB_MASTER_REG = MTB_MASTER_DISABLE_MSK;
-#endif
 
         bus_fault_status_reg = (SCB->CFSR & SCB_CFSR_BUSFAULTSR_Msk) >> SCB_CFSR_BUSFAULTSR_Pos;
         if (bus_fault_status_reg & 0x80) {
@@ -623,10 +595,6 @@ void BusFault_HandlerC(unsigned long *fault_args, unsigned int exc)
         FAULT_memcpy32(CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
 
 #endif
-#if defined(SEC_MODEN)
-        sys_set_reset_reason(RESET_REASON_FAULT_BUS);
-        printf_debug_info(0,"reboot \r\n");
-#endif
         hw_cpm_reboot_system();
 
         while (1) {}
@@ -643,11 +611,6 @@ void UsageFault_HandlerC(unsigned long *fault_args, unsigned int exc)
         volatile uint16_t usage_fault_status_reg __UNUSED;
 
         usage_fault_status_reg = (SCB->CFSR & SCB_CFSR_USGFAULTSR_Msk) >> SCB_CFSR_USGFAULTSR_Pos;
-
-#if dg_configENABLE_MTB
-        /* Disable MTB */
-        *MTB_MASTER_REG = MTB_MASTER_DISABLE_MSK;
-#endif
 
 #if (dg_configFAULT_DEBUG_DUMP==1)
         FAULT_header_addr = FAULT_get_header_addr();
@@ -685,10 +648,6 @@ void UsageFault_HandlerC(unsigned long *fault_args, unsigned int exc)
         FAULT_memcpy32(CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
 
 #endif
-#if defined(SEC_MODEN)
-        sys_set_reset_reason(RESET_REASON_FAULT_USAGE);
-        printf_debug_info(0,"reboot \r\n");
-#endif
         hw_cpm_reboot_system();
 
         while(1) {}
@@ -699,11 +658,6 @@ __attribute__((section("text_retained")))
 #endif
 void DebugMon_Handler(void)
 {
-#if dg_configENABLE_MTB
-        /* Disable MTB */
-        *MTB_MASTER_REG = MTB_MASTER_DISABLE_MSK;
-#endif
-
         while (1) {}
 }
 

@@ -21,8 +21,6 @@
  ****************************************************************************************
  */
 
-#if dg_configUSE_HW_OTPC
-
 #include "hw_otpc.h"
 
 /*
@@ -344,7 +342,6 @@ uint32_t hw_otpc_address_to_cell_offset(uint32_t address)
         }
 }
 
-#endif /* dg_configUSE_HW_OTPC */
 /**
  * \}
  * \}

@@ -23,9 +23,7 @@
 #ifndef HW_PDC_H_
 #define HW_PDC_H_
 
-#if dg_configUSE_HW_PDC
-
-#include <sdk_defs.h>
+#include "sdk_defs.h"
 
 #define HW_PDC_LUT_SIZE                 (16)
 #define HW_PDC_INVALID_LUT_INDEX        (0xFFFF)
@@ -265,7 +263,6 @@ void hw_pdc_ack_all_pending_cm33(void);
  */
 void hw_pdc_lut_reset(void);
 
-#endif /* dg_configUSE_HW_PDC */
 #endif /* HW_PDC_H_ */
 
 /**

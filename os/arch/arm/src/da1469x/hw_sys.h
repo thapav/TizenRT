@@ -23,11 +23,9 @@
 #ifndef HW_SYS_H_
 #define HW_SYS_H_
 
-#if dg_configUSE_HW_SYS
-
 #include "sdk_defs.h"
 
-#include <hw_memctrl.h>
+#include "hw_memctrl.h"
 
 /* \brief Specifies the HW BSR mask used for accessing the SW BSR */
 #define SW_BSR_HW_BSR_MASK     (0x3)
@@ -359,9 +357,6 @@ uint32_t *hw_sys_reg_get_num_of_config_entries(void);
  * configuration table.
  */
 __RETAINED_CODE void hw_sys_reg_apply_config(void);
-
-
-#endif /* dg_configUSE_HW_SYS */
 
 #endif /* HW_SYS_H_ */
 

@@ -23,9 +23,7 @@
 #ifndef HW_TRNG_H_
 #define HW_TRNG_H_
 
-#if dg_configUSE_HW_TRNG
-
-#include <sdk_defs.h>
+#include "sdk_defs.h"
 
 /**
  * \brief TRNG callback.
@@ -125,8 +123,6 @@ void hw_trng_disable_interrupt(void);
  * \brief Clear TRNG pending interrupt.
  */
 void hw_trng_clear_pending(void);
-
-#endif /* dg_configUSE_HW_TRNG */
 
 #endif /* HW_TRNG_H_ */
 /**

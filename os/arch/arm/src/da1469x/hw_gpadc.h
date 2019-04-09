@@ -23,11 +23,10 @@
 #ifndef HW_GPADC_H
 #define HW_GPADC_H
 
-#if dg_configUSE_HW_GPADC
-
 #include <stdbool.h>
 #include <stdint.h>
-#include <sdk_defs.h>
+
+#include "sdk_defs.h"
 
 /**
  * \brief GPADC input voltages
@@ -875,8 +874,6 @@ void hw_gpadc_adc_measure(void);
  *
  */
 void hw_gpadc_test_measurements(void);
-
-#endif /* dg_configUSE_HW_GPADC */
 
 #endif /* HW_GPADC_H_ */
 

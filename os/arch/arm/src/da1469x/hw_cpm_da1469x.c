@@ -21,8 +21,6 @@
 ****************************************************************************************
 */
 
-#if dg_configUSE_HW_CPM
-
 #include "hw_cpm.h"
 #include "hw_watchdog.h"
 
@@ -47,8 +45,6 @@ __RETAINED_CODE void hw_cpm_reboot_system(void)
 
         while (1);
 }
-
-#endif /* dg_configUSE_HW_CPM */
 
 /**
 \}

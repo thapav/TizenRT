@@ -21,8 +21,6 @@
 ****************************************************************************************
 */
 
-#if dg_configUSE_HW_SYS
-
 #include <stdint.h>
 #include "hw_cpm.h"
 #include "hw_clk.h"
@@ -393,8 +391,6 @@ __RETAINED_CODE void hw_sys_reg_apply_config(void)
                 p += 2;
         }
 }
-
-#endif /* dg_configUSE_HW_SYS */
 
 /**
 \}

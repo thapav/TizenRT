@@ -20,22 +20,16 @@
  *
  ****************************************************************************************
  */
-#if dg_configUSE_HW_RTC
+
+#include <tinyara/config.h>
 
 #include <stdio.h>
-#include <sdk_defs.h>
-#include <hw_rtc.h>
-#ifdef SEC_MODEN
-#include <hw_pdc.h>
-#include "ad_nvms.h"
-#include "LogUtil.h"
-#ifndef ONLY_SDK_BUILD
-#include "nvms_app_param_config.h"
-#include "UI_task.h"
-#endif
-#include "osal.h"
-#endif
 
+#include "sdk_defs.h"
+#include "hw_rtc.h"
+#ifdef SEC_MODEN
+#include "hw_pdc.h"
+#endif
 
 #if (dg_configSYSTEMVIEW == 1)
 #  include "SEGGER_SYSVIEW_FreeRTOS.h"
@@ -281,7 +275,7 @@ HW_RTC_SET_REG_STATUS hw_rtc_set_time_clndr(const rtc_time *time, const rtc_cale
         // stores the current RTC calendar. If the new calendar value causes an entry error, this time will be re-written
         uint32_t clndr_cur_val;
 
-        printf_ex(DBG_RTC, DBG_PATH_UART, "%s set to %4u-%02u-%02u %u %02u:%02u:%02u:%02u\r\n", __func__,
+        printf("%s set to %4u-%02u-%02u %u %02u:%02u:%02u:%02u\r\n", __func__,
                 clndr->year, clndr->month, clndr->mday, clndr->wday, time->hour, time->minute, time->sec, time->hsec);
 
         if ((time != NULL) && (clndr != NULL)) {
@@ -599,7 +593,7 @@ void _rtc_init(void)
            */
           HW_RTC_SET_REG_STATUS rtc_error = hw_rtc_set_time_clndr(&rtc_time_cfg, &rtc_clndr_cfg);
           OS_ASSERT( rtc_error == HW_RTC_VALID_ENTRY );
-          printf_ex(DBG_RTC, DBG_PATH_UART, "Apply RTC initial time\r\n");
+          printf("Apply RTC initial time\r\n");
 
           nvms_t app_param_nvms = ad_nvms_open(NVMS_APP_PARAM_PART);
           if(is_exist_rtc_nvms_flash(app_param_nvms) && is_exist_timezone_nvms_flash(app_param_nvms))
@@ -666,7 +660,7 @@ void _rtc_init(void)
 
     rtcInitFlag = true;
 
-    printf_ex(DBG_RTC, DBG_PATH_UART, "\r\n****** RTC INITIALIZED ******\n\r");
+    printf("\r\n****** RTC INITIALIZED ******\n\r");
 
     /*
      * Add an PDC LUT entry so that the CM33 can wakeup upon an RTC event.
@@ -735,7 +729,7 @@ void write_rtc_to_flash(rtc_time_t time, rtc_calendar clndr)
     ret = set_epoch_to_flash(last_epoch);
     if(ret < 0)
     {
-        printf_ex(DBG_RTC, DBG_PATH_UART, "%s ret: %d\r\n", __func__, ret);
+        printf("%s ret: %d\r\n", __func__, ret);
     }
 }
 
@@ -764,7 +758,7 @@ void sys_settime(time_t secs_since_epoch)
     //OS_ASSERT( rtc_error == HW_RTC_VALID_ENTRY );
     if(rtc_error != HW_RTC_VALID_ENTRY)
     {
-        printf_ex(DBG_RTC, DBG_PATH_UART, "%s rtc_error: %d\r\n", __func__, rtc_error);
+        printf("%s rtc_error: %d\r\n", __func__, rtc_error);
     }
 }
 
@@ -895,9 +889,9 @@ void show_current_calendar(void)
 {
     char buf[100];
     if(sys_gettime_str(buf,  sizeof(buf)))
-    	printf_ex(DBG_RTC, DBG_PATH_UART, "%s\r\n", buf);
+    	printf("%s\r\n", buf);
     else
-		printf_ex(DBG_RTC, DBG_PATH_UART, "RTC not initialized.\r\n");
+		printf("RTC not initialized.\r\n");
 
 }
 
@@ -927,7 +921,7 @@ rtc_date_time_t convert_epoch_to_calendar(uint64_t msec_since_epoch)
 ***********************************************************/
 bool set_epoch_to_flash(time_t epoch)
 {
-    printf_ex(DBG_RTC, DBG_PATH_UART, "%s epoch: %lu\r\n", __func__, epoch);
+    printf("%s epoch: %lu\r\n", __func__, epoch);
     nvms_t app_param_nvms = ad_nvms_open(NVMS_APP_PARAM_PART);
     uint8_t epoch_array[NVMS_APP_PARAMS_TAG_RTC_SIZE] = {0};
     epoch_to_byte_array(epoch, epoch_array);
@@ -955,7 +949,7 @@ bool get_epoch_from_flash(time_t* flash_epoch)
 
 bool set_timezone_flash(int32_t timezone)
 {
-    printf_ex(DBG_RTC, DBG_PATH_UART, "set_timezone_flash [%d] \r\n", timezone);
+    printf("set_timezone_flash [%d] \r\n", timezone);
     nvms_t app_param_nvms = ad_nvms_open(NVMS_APP_PARAM_PART);
     uint8_t timezone_array[NVMS_APP_PARAMS_TAG_TIMEZONE_SIZE] = {0};
     epoch_to_byte_array((time_t)timezone, timezone_array);
@@ -977,7 +971,7 @@ bool get_timezone_from_flash(int32_t* flash_timezone)
     }
     else
     {
-        printf_ex(DBG_RTC, DBG_PATH_UART|DBG_PATH_FLASH,"[RTC] get_timezone_from_flash error!\r\n");
+        printf(DBG_RTC, DBG_PATH_UART|DBG_PATH_FLASH,"[RTC] get_timezone_from_flash error!\r\n");
         return false;
     }
 }
@@ -996,11 +990,11 @@ int32_t sys_gettimezone()
  */
 void sys_settimezone(int32_t timezone)
 {
-    printf_ex(DBG_RTC, DBG_PATH_UART, "%s set to tz: %d\r\n", __func__, timezone);
+    printf("%s set to tz: %d\r\n", __func__, timezone);
     current_timezone = timezone;
     if(!set_timezone_flash(timezone))
     {
-        printf_ex(DBG_RTC, DBG_PATH_UART, "%s save to flash failed\r\n", __func__);
+        printf("%s save to flash failed\r\n", __func__);
     }
 }
 
@@ -1053,13 +1047,13 @@ void rtc_read_from_nvms(void)
     if(is_exist_rtc_nvms_flash(app_param_nvms))
     {
         time_t flash_epoch;
-    	printf_ex(DBG_RTC, DBG_PATH_UART, "Restore Previous RTC Date & Time\r\n");		
+    	printf("Restore Previous RTC Date & Time\r\n");		
         get_epoch_from_flash(&flash_epoch);
         sys_settime(flash_epoch);
     }
     else
     {
-    	printf_ex(DBG_RTC, DBG_PATH_UART, "Apply Factory RTC Date & Time\r\n");				
+    	printf("Apply Factory RTC Date & Time\r\n");				
     }
 }
 
@@ -1096,14 +1090,14 @@ void timezone_read_from_nvms(void)
     if(is_exist_timezone_nvms_flash(app_param_nvms))
     {
         int32_t flash_timezone=0;
-        printf_ex(DBG_RTC, DBG_PATH_UART, "Restore Previous Timezone\r\n");
+        printf("Restore Previous Timezone\r\n");
         get_timezone_from_flash(&flash_timezone);
         sys_settimezone(flash_timezone);
     }
     else
     {
         current_timezone = 0;
-        printf_ex(DBG_RTC, DBG_PATH_UART, "Apply Factory Timezone\r\n");
+        printf("Apply Factory Timezone\r\n");
     }
 }
 
@@ -1115,7 +1109,7 @@ bool read_app_param_nvms(uint8_t buf[], uint8_t size)
 
 void reset_rtc_timezone_flash(void)
 {
-    printf_ex(DBG_RTC, DBG_PATH_UART|DBG_PATH_FLASH,"[RTC] Reset rtc and timezone flash\r\n");
+    printf(DBG_RTC, DBG_PATH_UART|DBG_PATH_FLASH,"[RTC] Reset rtc and timezone flash\r\n");
     set_timezone_flash(0);
 }
 #endif
@@ -1134,14 +1128,14 @@ void terminate_rtc_task(void)
 
     ret = set_epoch_to_flash(last_epoch);
     if(!ret)
-        printf_ex(DBG_RTC, DBG_PATH_UART, "Can't save rtc epoch\r\n");
+        printf("Can't save rtc epoch\r\n");
     else
     {
         // Save last timezone to flash
         last_timezone = sys_gettimezone();
         ret = set_timezone_flash(last_timezone);
         if(!ret)
-            printf_ex(DBG_RTC, DBG_PATH_UART, "Can't save rtc timezone\r\n");
+            printf("Can't save rtc timezone\r\n");
     }
 
     // Delete rtc interrupt, timer and task
@@ -1149,10 +1143,3 @@ void terminate_rtc_task(void)
 }
 
 #endif
-
-#endif /* dg_configUSE_HW_RTC */
-/**
- * \}
- * \}
- * \}
- */

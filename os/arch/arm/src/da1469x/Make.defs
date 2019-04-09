@@ -88,14 +88,52 @@ endif
 endif
 
 CHIP_CSRCS  += system_da1469x.c
-CHIP_CSRCS  += hw_clk_da1469x.c
-CHIP_CSRCS  += hw_dma.c
-CHIP_CSRCS  += hw_timer.c
-CHIP_CSRCS  += hw_gpio.c
-CHIP_CSRCS  += hw_irgen.c
-CHIP_CSRCS  += hw_timer0.c hw_timer1.c hw_timer2.c
-CHIP_CSRCS  += hw_uart.c
-CHIP_CSRCS  += hw_spi.c
-CHIP_CSRCS  += hw_i2c.c
 CHIP_CSRCS  += hw_watchdog.c
+#CHIP_CSRCS  += sys_watchdog.c
+#CHIP_CSRCS  += hw_aes_hash.c
+CHIP_CSRCS  += hw_bod_da1469x.c
+CHIP_CSRCS  += hw_cpm_da1469x.c
+CHIP_CSRCS  += hw_sys_da1469x.c
+CHIP_CSRCS  += hw_clk_da1469x.c
+CHIP_CSRCS  += hw_pmu_da1469x.c
+CHIP_CSRCS  += hw_dma.c
+#CHIP_CSRCS  += hw_ecc.c
+CHIP_CSRCS  += hw_gpadc.c hw_sdadc.c
+CHIP_CSRCS  += hw_gpio.c
+CHIP_CSRCS  += hw_hard_fault.c
+#CHIP_CSRCS  += hw_i2c.c
+#CHIP_CSRCS  += hw_irgen.c
+#CHIP_CSRCS  += hw_iso7816
+#CHIP_CSRCS  += hw_keyboard_scanner.c
+#CHIP_CSRCS  += hw_lcdc.c
+CHIP_CSRCS  += hw_otpc_da1469x.c
+CHIP_CSRCS  += hw_qspi.c
+#CHIP_CSRCS  += hw_quad.c
+#CHIP_CSRCS  += hw_snc.c
+#CHIP_CSRCS  += hw_soc.c
+#CHIP_CSRCS  += hw_spi.c
+CHIP_CSRCS  += hw_spi.c
+CHIP_CSRCS  += hw_timer.c
 CHIP_CSRCS  += hw_rtc.c
+CHIP_CSRCS  += hw_trng.c
+CHIP_CSRCS  += hw_uart.c
+#CHIP_CSRCS  += hw_usb_da1469x.c
+CHIP_CSRCS  += hw_wkup_da1469x.c
+#CHIP_CSRCS  += hw_haptic.c
+CHIP_CSRCS  += hw_cache.c
+CHIP_CSRCS  += hw_pdc.c
+CHIP_CSRCS  += hw_memctrl.c
+CHIP_CSRCS  += sys_tcs_da1469x.c
+CHIP_CSRCS  += da1469x_up_idle.c
+CHIP_CSRCS  += da1469x_irq.c
+CHIP_CSRCS  += da1469x_serial.c
+CHIP_CSRCS  += da1469x_timerisr.c
+CHIP_CSRCS  += hw_wakeup_from_deepsleep.c
+
+# ??????????????????????????????????????
+#CHIP_ASRC  += deepsleep.S
+#########################################
+
+# Read readme in moden to include automode. It is not suggetsed to use automode
+#CHIP_CSRCS  += qspi_automode.c
+#CHIP_CSRCS  += hw_timer0.c hw_timer1.c hw_timer2.c

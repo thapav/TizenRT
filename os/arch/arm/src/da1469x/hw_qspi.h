@@ -23,11 +23,10 @@
 #ifndef HW_QSPI_H_
 #define HW_QSPI_H_
 
-#if dg_configUSE_HW_QSPI || dg_configUSE_HW_QSPI2
-
 #include <stdbool.h>
 #include <stdint.h>
-#include <sdk_defs.h>
+
+#include "sdk_defs.h"
 
 /*
  * ENUMERATION DEFINITIONS
@@ -1585,7 +1584,6 @@ __STATIC_INLINE void hw_qspi_set_burst_length(HW_QSPIC_ID id, HW_QSPI2_MEMBLEN v
  */
 __RETAINED_CODE void hw_qspi_set_instructions(HW_QSPIC_ID id, struct qspic_instructions *qspic_set);
 #endif /* HW_QSPI_H_ */
-#endif /* dg_configUSE_HW_QSPI || dg_configUSE_HW_QSPI2 */
 /**
  * \}
  * \}

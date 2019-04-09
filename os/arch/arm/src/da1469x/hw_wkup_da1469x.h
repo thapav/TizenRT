@@ -23,11 +23,10 @@
 #ifndef HW_WKUP_D2522_H_
 #define HW_WKUP_D2522_H_
 
-#if dg_configUSE_HW_WKUP
-
 #include <stdbool.h>
 #include <stdint.h>
-#include <sdk_defs.h>
+
+#include "sdk_defs.h"
 #include "hw_gpio.h"
 
 #undef  HW_GPIO_NUM_PORTS
@@ -566,7 +565,6 @@ __STATIC_INLINE void hw_wkup_sel_gpio(HW_GPIO_PORT port, uint32_t status)
         }
 }
 
-#endif
 #endif /* HW_WKUP_H_ */
 
 /**

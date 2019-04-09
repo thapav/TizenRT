@@ -20,19 +20,13 @@
  *
  ****************************************************************************************
  */
-#if dg_configUSE_HW_TIMER
+
+#include <tinyara/config.h>
 
 #include <stdio.h>
-#include <sdk_defs.h>
-#include <hw_timer.h>
-#include <hw_gpio.h>
-
-#if (dg_configSYSTEMVIEW == 1)
-#  include "SEGGER_SYSVIEW_FreeRTOS.h"
-#else
-#  define SEGGER_SYSTEMVIEW_ISR_ENTER()
-#  define SEGGER_SYSTEMVIEW_ISR_EXIT()
-#endif /* (dg_configSYSTEMVIEW == 1) */
+#include "sdk_defs.h"
+#include "hw_gpio.h"
+#include "hw_timer.h"
 
 // Timer is in PD_TM and can be active during sleep. Callback needs to be retained
 static hw_timer_handler_cb tmr_intr_cb __RETAINED;
@@ -197,62 +191,42 @@ void hw_timer_unregister_capture_int(void)
 
 void Timer_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         TIMER->TIMER_CLEAR_IRQ_REG = 0;
         if (tmr_intr_cb != NULL) {
                 tmr_intr_cb();
         }
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
 
 void Timer2_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         TIMER2->TIMER2_CLEAR_IRQ_REG = 0;
         if (tmr2_intr_cb != NULL) {
                 tmr2_intr_cb();
         }
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
 
 void Timer3_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         TIMER3->TIMER3_CLEAR_IRQ_REG = 0;
         if (tmr3_intr_cb != NULL) {
                 tmr3_intr_cb();
         }
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
 
 void Timer4_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         TIMER4->TIMER4_CLEAR_IRQ_REG = 0;
         if (tmr4_intr_cb != NULL) {
                 tmr4_intr_cb();
         }
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
 
 void CAPTIMER1_Handler(void)
 {
-        SEGGER_SYSTEMVIEW_ISR_ENTER();
-
         if (tmr_capture_intr_cb != NULL) {
                 tmr_capture_intr_cb(hw_timer_get_gpio_event_pending());
         }
         hw_timer_clear_gpio_event(0xf);
-
-        SEGGER_SYSTEMVIEW_ISR_EXIT();
 }
 
 void hw_timer_configure_pwm(HW_TIMER_ID id, const timer_config_pwm *cfg)
@@ -299,10 +273,3 @@ void hw_timer_configure_pwm(HW_TIMER_ID id, const timer_config_pwm *cfg)
 
         hw_gpio_set_pin_function(cfg->port, cfg->pin, HW_GPIO_MODE_OUTPUT, func);
 }
-
-#endif /* dg_configUSE_HW_TIMER */
-/**
- * \}
- * \}
- * \}
- */

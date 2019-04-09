@@ -23,10 +23,7 @@
 #ifndef HW_CACHE_H_
 #define HW_CACHE_H_
 
-
-#if (dg_configUSE_HW_CACHE == 1)
-
-#include <sdk_defs.h>
+#include "sdk_defs.h"
 
 /*
  * ENUMERATION DEFINITIONS
@@ -560,9 +557,6 @@ void hw_cache_mrm_enable_interrupt(hw_cache_cb_t cb);
  *
  */
 void hw_cache_mrm_disable_interrupt(void);
-
-#endif /* dg_configUSE_HW_CACHE */
-
 
 #endif /* HW_CACHE_H_ */
 

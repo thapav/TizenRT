@@ -23,8 +23,6 @@
 #ifndef HW_CPM_D2522_H_
 #define HW_CPM_D2522_H_
 
-#if dg_configUSE_HW_CPM
-
 #include "sdk_defs.h"
 
 /**
@@ -45,8 +43,6 @@ __RETAINED_CODE void hw_cpm_reset_system(void);
  */
 __RETAINED_CODE void hw_cpm_reboot_system(void);
 
-
-#endif /* dg_configUSE_HW_CPM */
 
 #endif /* HW_CPM_D2522_H_ */
 

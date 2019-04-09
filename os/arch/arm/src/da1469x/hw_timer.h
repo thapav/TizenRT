@@ -23,13 +23,11 @@
 #ifndef HW_TIMER_H_
 #define HW_TIMER_H_
 
-
-#if dg_configUSE_HW_TIMER
-
 #include <stdbool.h>
 #include <stdint.h>
-#include <sdk_defs.h>
-#include <hw_gpio.h>
+
+#include "sdk_defs.h"
+#include "hw_gpio.h"
 
 
 /* Timer Base Address */
@@ -1206,9 +1204,6 @@ __STATIC_INLINE void hw_timer_clear_interrupt(HW_TIMER_ID id)
                 ASSERT_WARNING(0);//Invalid argument
         }
 }
-
-#endif /* dg_configUSE_HW_TIMER */
-
 
 #endif /* HW_TIMER_H_ */
 /**

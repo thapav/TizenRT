@@ -23,10 +23,9 @@
 #ifndef HW_SPI_H_
 #define HW_SPI_H_
 
-#if dg_configUSE_HW_SPI
-
 #include <stdint.h>
-#include <sdk_defs.h>
+
+#include "sdk_defs.h"
 #include "hw_dma.h"
 #include "hw_gpio.h"
 
@@ -1174,8 +1173,6 @@ __STATIC_INLINE void hw_spi_set_quick_dma_txreq(HW_SPI_ID id)
         HW_SPI_REG_SETF(id, SPI_CTRL_REG, SPI_DMA_TXREQ_MODE, 1);
         hw_spi_enable(id, on);
 }
-
-#endif /* dg_configUSE_HW_SPI */
 
 #endif /* HW_SPI_H_ */
 

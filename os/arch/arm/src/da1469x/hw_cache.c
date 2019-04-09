@@ -22,9 +22,6 @@
  *****************************************************************************************
  */
 
-
-#if (dg_configUSE_HW_CACHE == 1)
-
 #include "hw_cache.h"
 
 __RETAINED static hw_cache_cb_t hw_cache_cb;
@@ -52,9 +49,6 @@ __RETAINED_CODE void MRM_Handler(void)
                 hw_cache_cb();
         }
 }
-
-#endif /* dg_configUSE_HW_CACHE */
-
 
 /**
  * \}
