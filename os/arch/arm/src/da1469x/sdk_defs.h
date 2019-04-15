@@ -53,7 +53,11 @@
 #include "custom_config.h"
 
 #ifndef dg_configFAULT_DEBUG_DUMP
-#define dg_configFAULT_DEBUG_DUMP 0
+#define dg_configFAULT_DEBUG_DUMP               (0)
+#endif
+
+#ifndef dg_configPMU_ADAPTER
+#define dg_configPMU_ADAPTER                    (0)
 #endif
 
 /* ------------------------------------------ Common -------------------------------------------- */

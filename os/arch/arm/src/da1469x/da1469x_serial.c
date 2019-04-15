@@ -26,6 +26,7 @@
 #include <tinyara/arch.h>
 #include <tinyara/serial/serial.h>
 
+#include "hw_uart.h"
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -102,20 +103,60 @@
 /****************************************************************************
  * Private Types
  ****************************************************************************/
-
-struct da1469x_up_dev_s {
-	uint32_t port;				/* UART port */
-	uint32_t im;				/* Saved IM value */
-	uint32_t baud;				/* Configured baud */
-	uint32_t irq;				/* IRQ associated with this UART */
-	uint32_t parity;			/* 0=none, 1=odd, 2=even */
-	uint32_t bits;				/* 5: 5bits    6: 6bits    7: 7bits    8: 8bits */
-	uint32_t stopbits2;			/* true: Configure with 2 stop bits instead of 1 */
+/* UART configuration */
+static uart_config uart_init = {
+	.baud_rate              = HW_UART_BAUDRATE_115200,	//CHECK VALUES ONCE
+	.data                   = HW_UART_DATABITS_8,
+	.parity                 = HW_UART_PARITY_NONE,
+	.stop                   = HW_UART_STOPBITS_1,
+	.auto_flow_control      = 0,
+	.use_dma                = 0,
+	.use_fifo               = 1,
+	.tx_dma_channel         = 0,
+	.rx_dma_channel         = 0,
 };
 
 /****************************************************************************
- * Private Variables
+ * Private Function Prototypes
  ****************************************************************************/
+
+static int da1469x_up_setup(struct uart_dev_s *dev);
+static void da1469x_up_shutdown(struct uart_dev_s *dev);
+static int da1469x_up_attach(struct uart_dev_s *dev);
+static void da1469x_up_detach(struct uart_dev_s *dev);
+static int da1469x_up_interrupt(int irq, void *context, FAR void *arg);
+static int da1469x_up_ioctl(struct file *filep, int cmd, unsigned long arg);
+static int da1469x_up_receive(struct uart_dev_s *dev, uint32_t *status);
+static void da1469x_up_rxint(struct uart_dev_s *dev, bool enable);
+static bool da1469x_up_rxavailable(struct uart_dev_s *dev);
+static void da1469x_up_send(struct uart_dev_s *dev, int ch);
+static void da1469x_up_txint(struct uart_dev_s *dev, bool enable);
+static bool da1469x_up_txready(struct uart_dev_s *dev);
+static bool da1469x_up_txempty(struct uart_dev_s *dev);
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+/* Serial driver UART operations */
+
+static const struct uart_ops_s g_uart_ops = {
+        .setup = da1469x_up_setup,
+        .shutdown = da1469x_up_shutdown,
+        .attach = da1469x_up_attach,
+        .detach = da1469x_up_detach,
+        .ioctl = da1469x_up_ioctl,
+        .receive = da1469x_up_receive,
+        .rxint = da1469x_up_rxint,
+        .rxavailable = da1469x_up_rxavailable,
+#ifdef CONFIG_SERIAL_IFLOWCONTROL
+        .rxflowcontrol = NULL,
+#endif
+        .send = da1469x_up_send,
+        .txint = da1469x_up_txint,
+        .txready = da1469x_up_txready,
+        .txempty = da1469x_up_txempty,
+};
 
 #ifdef CONFIG_DA1469X_UART0
 static char g_uart0rxbuffer[CONFIG_UART0_RXBUFSIZE];
@@ -134,18 +175,21 @@ static char g_uart2txbuffer[CONFIG_UART2_TXBUFSIZE];
 #define DA1469X_UART1_IRQ (UART1_IRQn+16)
 #define DA1469X_UART2_IRQ (UART2_IRQn+16)
 
-/*
-static struct da1469x_up_dev_s g_uart0priv = {
-	.port = HAL_UART_0,
-	.baud = CONFIG_UART0_BAUD,
-	.irq = DA1469X_UART0_IRQ,
-	.parity = CONFIG_UART0_PARITY,
-	.bits = CONFIG_UART0_BITS,
-	.stopbits2 = CONFIG_UART0_2STOP,
-};
-*/
-
 #ifdef CONFIG_DA1469X_UART0
+static uart_config g_uart0priv = {
+	.baud_rate              = CONFIG_UART0_BAUD,	//CHECK VALUES ONCE
+	.data                   = CONFIG_UART0_BITS,    ///CHECK VALUES ONCE currently = 3
+	.parity                 = CONFIG_UART0_PARITY,
+	.stop                   = CONFIG_UART0_2STOP,
+	.auto_flow_control      = 0,
+	.use_dma                = 0,
+	.use_fifo               = 1,
+	.tx_dma_channel         = 0,
+	.rx_dma_channel         = 0,
+};
+//	.port = HW_UART1,
+//	.irq = DA1469X_UART0_IRQ,
+
 static uart_dev_t g_uart0port = {
 	.recv = {
 		.size = CONFIG_UART0_RXBUFSIZE,
@@ -155,23 +199,26 @@ static uart_dev_t g_uart0port = {
 		.size = CONFIG_UART0_TXBUFSIZE,
 		.buffer = g_uart0txbuffer,
 	},
-//	.ops = &g_uart_ops,
-//	.priv = &g_uart0priv,
+	.ops = &g_uart_ops,
+	.priv = &g_uart0priv,
 };
 #endif
 
-/*
-static struct da1469x_up_dev_s g_uart1priv = {
-	.port = HAL_UART_1,
-	.baud = CONFIG_UART1_BAUD,
-	.irq = DA1469X_UART1_IRQ,
-	.parity = CONFIG_UART1_PARITY,
-	.bits = CONFIG_UART1_BITS,
-	.stopbits2 = CONFIG_UART1_2STOP,
-};
-*/
-
 #ifdef CONFIG_DA1469X_UART1
+static uart_config g_uart1priv = {
+	.baud_rate              = CONFIG_UART1_BAUD,	//CHECK VALUES ONCE
+	.data                   = CONFIG_UART1_BITS,
+	.parity                 = CONFIG_UART1_PARITY,
+	.stop                   = CONFIG_UART1_2STOP,
+	.auto_flow_control      = 0,
+	.use_dma                = 0,
+	.use_fifo               = 1,
+	.tx_dma_channel         = 0,
+	.rx_dma_channel         = 0,
+};
+//	.port = HW_UART2,
+//	.irq = DA1469X_UART1_IRQ,
+
 static uart_dev_t g_uart1port = {
 	.recv = {
 		.size = CONFIG_UART1_RXBUFSIZE,
@@ -181,23 +228,27 @@ static uart_dev_t g_uart1port = {
 		.size = CONFIG_UART1_TXBUFSIZE,
 		.buffer = g_uart1txbuffer,
 	},
-//	.ops = &g_uart_ops,
-//	.priv = &g_uart1priv,
+	.ops = &g_uart_ops,
+	.priv = &g_uart1priv,
 };
 #endif
 
-/*
-static struct da1469x_up_dev_s g_uart2priv = {
-	.port = HAL_UART_2,
-	.baud = CONFIG_UART2_BAUD,
-	.irq = DA1469X_UART2_IRQ,
-	.parity = CONFIG_UART2_PARITY,
-	.bits = CONFIG_UART2_BITS,
-	.stopbits2 = CONFIG_UART2_2STOP,
-};
-*/
-
 #ifdef CONFIG_DA1469X_UART2
+static uart_config g_uart2priv = {
+	.baud_rate              = CONFIG_UART2_BAUD,	//CHECK VALUES ONCE
+	.data                   = CONFIG_UART1_BITS,
+	.parity                 = CONFIG_UART1_PARITY,
+	.stop                   = CONFIG_UART1_2STOP,
+	.auto_flow_control      = 0,
+	.use_dma                = 0,
+	.use_fifo               = 1,
+	.tx_dma_channel         = 0,
+	.rx_dma_channel         = 0,
+};
+//	.data                   = HW_UART_DATABITS_8,
+//	.port = HW_UART3,
+//	.irq = DA1469X_UART2_IRQ,
+
 static uart_dev_t g_uart2port = {
 	.recv = {
 		.size = CONFIG_UART2_RXBUFSIZE,
@@ -207,8 +258,8 @@ static uart_dev_t g_uart2port = {
 		.size = CONFIG_UART2_TXBUFSIZE,
 		.buffer = g_uart2txbuffer,
 	},
-//	.ops = &g_uart_ops,
-//	.priv = &g_uart2priv,
+	.ops = &g_uart_ops,
+	.priv = &g_uart2priv,
 };
 #endif
 
@@ -229,8 +280,211 @@ static uart_dev_t g_uart2port = {
  ****************************************************************************/
 static int da1469x_up_setup(struct uart_dev_s *dev)
 {
+	uart_config *priv = (uart_config *)dev->priv;
+	uart_config uart_setup;
+	DEBUGASSERT(priv);
+	// deinit
+//	hw_uart_deinit();
+	//HW_UART_ID id = ad_uart_data->ctrl->id; >>> DA1469X_CONSOLE_UART_PORT
+
+	uart_setup.baud_rate = CONFIG_UART0_BAUD;    //CHECK VALUES ONCE
+	uart_setup.data = CONFIG_UART0_BITS;    ///CHECK VALUES ONCE currently = 3
+	uart_setup.parity = CONFIG_UART0_PARITY;
+	uart_setup.stop = CONFIG_UART0_2STOP;
+	uart_setup.auto_flow_control = 0;
+	uart_setup.use_dma = 0;
+	uart_setup.use_fifo = 1;
+	uart_setup.tx_dma_channel = 0;
+	uart_setup.rx_dma_channel = 0;
+
 	return OK;
 }
+
+/****************************************************************************
+ * Name: up_shutdown
+ *
+ * Description:
+ *   Disable the UART.  This method is called when the serial
+ *   port is closed
+ *
+ ****************************************************************************/
+
+static void da1469x_up_shutdown(struct uart_dev_s *dev)
+{
+}
+
+/****************************************************************************
+ * Name: up_attach
+ *
+ * Description:
+ *   Configure the UART to operation in interrupt driven mode.  This method is
+ *   called when the serial port is opened.  Normally, this is just after the
+ *   the setup() method is called, however, the serial console may operate in
+ *   a non-interrupt driven mode during the boot phase.
+ *
+ *   RX and TX interrupts are not enabled when by the attach method (unless the
+ *   hardware supports multiple levels of interrupt enabling).  The RX and TX
+ *   interrupts are not enabled until the txint() and rxint() methods are called.
+ *
+ ****************************************************************************/
+
+static int da1469x_up_attach(struct uart_dev_s *dev)
+{
+// TO DO
+	uart_config *priv = (uart_config *)dev->priv;
+	int ret;
+	DEBUGASSERT(priv);
+	/* Attach and enable the IRQ */
+
+//	ret = irq_attach(priv->irq, da1469x_up_interrupt, NULL);
+	if (ret == OK) {
+		/* Enable the interrupt (RX and TX interrupts are still disabled
+		 * in the UART
+		 */
+
+//		up_enable_irq(priv->irq);
+	}
+
+	return ret;
+}
+
+/****************************************************************************
+ * Name: up_detach
+ *
+ * Description:
+ *   Detach UART interrupts.  This method is called when the serial port is
+ *   closed normally just before the shutdown method is called.  The exception is
+ *   the serial console which is never shutdown.
+ *
+ ****************************************************************************/
+
+static void da1469x_up_detach(struct uart_dev_s *dev)
+{
+}
+
+/****************************************************************************
+ * Name: da1469x_up_interrupt
+ *
+ * Description:
+ *   This is the UART interrupt handler.  It will be invoked
+ *   when an interrupt received on the 'irq'  It should call
+ *   uart_transmitchars or uart_receivechar to perform the
+ *   appropriate data transfers.  The interrupt handling logic\
+ *   must be able to map the 'irq' number into the approprite
+ *   uart_dev_s structure in order to call these functions.
+ *
+ ****************************************************************************/
+static int da1469x_up_interrupt(int irq, void *context, FAR void *arg)
+{
+	return OK;
+}
+
+/****************************************************************************
+ * Name: up_ioctl
+ *
+ * Description:
+ *   All ioctl calls will be routed through this method
+ *
+ ****************************************************************************/
+
+static int da1469x_up_ioctl(struct file *filep, int cmd, unsigned long arg)
+{
+	return OK;
+}
+
+/****************************************************************************
+ * Name: up_receive
+ *
+ * Description:
+ *   Called (usually) from the interrupt level to receive one
+ *   character from the UART.  Error bits associated with the
+ *   receipt are provided in the return 'status'.
+ *
+ ****************************************************************************/
+
+static int da1469x_up_receive(struct uart_dev_s *dev, uint32_t *status)
+{
+	return OK;
+}
+
+/****************************************************************************
+ * Name: up_rxint
+ *
+ * Description:
+ *   Call to enable or disable RX interrupts
+ *
+ ****************************************************************************/
+
+static void da1469x_up_rxint(struct uart_dev_s *dev, bool enable)
+{
+	uart_config *priv = (uart_config *)dev->priv;
+	DEBUGASSERT(priv);
+//	hw_uart_rec_data_int_set(, enable);
+}
+
+/****************************************************************************
+ * Name: up_rxavailable
+ *
+ * Description:
+ *   Return true if the receive fifo is not empty
+ *
+ ****************************************************************************/
+
+static bool da1469x_up_rxavailable(struct uart_dev_s *dev)
+{
+	return true;
+}
+
+/****************************************************************************
+ * Name: up_send
+ *
+ * Description:
+ *   This method will send one byte on the UART
+ *
+ ****************************************************************************/
+
+static void da1469x_up_send(struct uart_dev_s *dev, int ch)
+{
+}
+
+/****************************************************************************
+ * Name: up_txint
+ *
+ * Description:
+ *   Call to enable or disable TX interrupts
+ *
+ ****************************************************************************/
+
+static void da1469x_up_txint(struct uart_dev_s *dev, bool enable)
+{
+}
+
+/****************************************************************************
+ * Name: up_txready
+ *
+ * Description:
+ *   Return true if the tranmsit fifo is not full
+ *
+ ****************************************************************************/
+
+static bool da1469x_up_txready(struct uart_dev_s *dev)
+{
+	return true;
+}
+
+/****************************************************************************
+ * Name: up_txempty
+ *
+ * Description:
+ *   Return true if the transmit fifo is empty
+ *
+ ****************************************************************************/
+
+static bool da1469x_up_txempty(struct uart_dev_s *dev)
+{
+	return true;
+}
+
 /****************************************************************************
  * Name: up_serialinit
  *
@@ -260,6 +514,23 @@ void up_serialinit(void)
 }
 
 /**************************************************************************
+ * Pre-processor Definitions
+ **************************************************************************/
+/* Configuration **********************************************************/
+
+/* Select UART parameters for the selected console */
+
+#if defined(CONFIG_UART0_SERIAL_CONSOLE)
+#define DA1469X_CONSOLE_UART_PORT HW_UART1
+#elif defined(CONFIG_UART1_SERIAL_CONSOLE)
+#define DA1469X_CONSOLE_UART_PORT HW_UART2
+#elif defined(CONFIG_UART2_SERIAL_CONSOLE)
+#define DA1469X_CONSOLE_UART_PORT HW_UART3
+#else
+ #error "No CONFIG_UARTn_SERIAL_CONSOLE Setting"
+#endif
+
+/**************************************************************************
  * Name: up_lowputc
  *
  * Description:
@@ -272,6 +543,20 @@ void up_lowputc(char ch)
 //	hal_uart_put_char(DA1469X_CONSOLE_UART_PORT, ch);
 }
 
+/**************************************************************************
+ * Name: up_lowsetup
+ *
+ * Description:
+ *   This performs basic initialization of the UART used for the serial
+ *   console.  Its purpose is to get the console output availabe as soon
+ *   as possible.
+ *
+ **************************************************************************/
+
+void up_lowsetup(void)
+{
+	hw_uart_init(DA1469X_CONSOLE_UART_PORT, &uart_init);
+}
 /****************************************************************************
  * Name: up_putc
  *

@@ -88,6 +88,9 @@ endif
 endif
 
 CHIP_CSRCS  += system_da1469x.c
+#CHIP_CSRCS  += main_init.c
+#CHIP_CSRCS  += config.c
+CHIP_CSRCS  += sys_clock_mgr_da1469x.c
 CHIP_CSRCS  += hw_watchdog.c
 #CHIP_CSRCS  += sys_watchdog.c
 #CHIP_CSRCS  += hw_aes_hash.c

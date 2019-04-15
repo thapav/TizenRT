@@ -27,6 +27,8 @@
 #include <tinyara/irq.h>
 #include <arch/irq.h>
 
+#include "cmsis_gcc.h"  // da1469x_config.h
+#include "core_cm33.h"	// nvic.h
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -52,14 +54,70 @@ volatile uint32_t *current_regs;
 
 void up_irqinitialize(void)
 {
-//	hw_irgen_init();
+	/* Initialized in SystemInit */
+	//set_interrupt_priorities(__dialog_interrupt_priorities);
 
 	/* currents_regs is non-NULL only while processing an interrupt */
 	current_regs = NULL;
 
 	/* Enable Exceptions */
-//	irqenable();
-//	faultirqenable();
-
+	irqenable();
+	__enable_fault_irq();
 }
 
+/****************************************************************************
+ * Name: up_enable_irq
+ *
+ * Description:
+ *   Enable the IRQ specified by 'irq'
+ *
+ ****************************************************************************/
+
+void up_enable_irq(int irq)
+{
+	__NVIC_EnableIRQ(irq - 16);
+}
+
+/****************************************************************************
+ * Name: up_disable_irq
+ *
+ * Description:
+ *   Disable the IRQ specified by 'irq'
+ *
+ ****************************************************************************/
+
+void up_disable_irq(int irq)
+{
+	__NVIC_DisableIRQ(irq - 16);
+}
+
+/****************************************************************************
+ * Name: up_prioritize_irq
+ *
+ * Description:
+ *   Set the priority of an IRQ.
+ *
+ *   Since this API is not supported on all architectures, it should be
+ *   avoided in common implementations where possible.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_ARCH_IRQPRIO
+int up_prioritize_irq(int irq, int priority)
+{
+	__NVIC_SetPriority(irq, priority);
+	return 0;
+}
+#endif
+
+/****************************************************************************
+ * Name: up_ack_irq
+ *
+ * Description:
+ *   Acknowledge the IRQ
+ *
+ ****************************************************************************/
+
+void up_ack_irq(int irq)
+{
+}
