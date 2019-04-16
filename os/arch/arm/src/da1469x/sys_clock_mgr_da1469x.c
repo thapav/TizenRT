@@ -46,7 +46,7 @@
 #define SEGGER_SYSTEMVIEW_ISR_ENTER()
 #define SEGGER_SYSTEMVIEW_ISR_EXIT()
 #endif
-
+#undef OS_FREERTOS
 #ifdef OS_FREERTOS
 #include "sdk_list.h"
 
@@ -146,6 +146,7 @@ static const uint64_t rcx_period_dividend = 1048576000000;             // 1024 *
 static cm_sys_clk_set_status_t sys_clk_set(sys_clk_t type);
 static void apb_set_clock_divider(apb_div_t div);
 static bool ahb_set_clock_divider(ahb_div_t div);
+
 
 #ifdef OS_FREERTOS
 #define CM_ENTER_CRITICAL_SECTION() OS_ENTER_CRITICAL_SECTION()
@@ -374,6 +375,8 @@ static void switch_to_pll(void)
  */
 static void vLPTimerCallback(OS_TIMER pxTimer)
 {
+#if 1
+#else
         OS_ENTER_CRITICAL_SECTION();                            // Critical section
         if ((dg_configLP_CLK_SOURCE == LP_CLK_IS_ANALOG) &&
                 ((dg_configUSE_LP_CLK == LP_CLK_32000) || (dg_configUSE_LP_CLK == LP_CLK_32768))) {
@@ -392,6 +395,7 @@ static void vLPTimerCallback(OS_TIMER pxTimer)
 
         // Stop the Timer.
         OS_TIMER_STOP(xLPSettleTimer, OS_TIMER_FOREVER);
+#endif
 }
 
 /**
@@ -400,6 +404,9 @@ static void vLPTimerCallback(OS_TIMER pxTimer)
  */
 static OS_BASE_TYPE xtal32m_is_ready(BaseType_t *xHigherPriorityTaskWoken)
 {
+#if 1
+	return 1;
+#else
         OS_BASE_TYPE xResult = OS_FAIL;
 
         if (xtal32m_settled_notification == false) {
@@ -429,6 +436,7 @@ static OS_BASE_TYPE xtal32m_is_ready(BaseType_t *xHigherPriorityTaskWoken)
                 DBG_SET_LOW(CLK_MGR_USE_TIMING_DEBUG, CLKDBG_XTAL32M_SETTLED);
         }
         return xResult;
+#endif
 }
 
 /**
@@ -436,6 +444,9 @@ static OS_BASE_TYPE xtal32m_is_ready(BaseType_t *xHigherPriorityTaskWoken)
  */
 static OS_BASE_TYPE pll_is_locked(BaseType_t *xHigherPriorityTaskWoken)
 {
+#if 1
+	return 1;
+#else
         OS_BASE_TYPE xResult = OS_FAIL;
 
         if (xEventGroupCM_xtal != NULL) {
@@ -446,6 +457,7 @@ static OS_BASE_TYPE pll_is_locked(BaseType_t *xHigherPriorityTaskWoken)
         }
 
         return xResult;
+#endif
 }
 
 #endif /* OS_FREERTOS */
@@ -782,7 +794,7 @@ void cm_sys_clk_init(sys_clk_t type)
                         else {
                                 disable_pll();
 #ifdef OS_FREERTOS
-                                OS_EVENT_GROUP_CLEAR_BITS(xEventGroupCM_xtal, PLL_AVAILABLE);
+                                //OS_EVENT_GROUP_CLEAR_BITS(xEventGroupCM_xtal, PLL_AVAILABLE);
 #endif
                         }
                 }
@@ -1576,6 +1588,8 @@ static void lp_clk_timer_start(void)
 
 void cm_lp_clk_init(void)
 {
+#if 1
+#else
        // ASSERT_WARNING(xSemaphoreCM != NULL);
 
         CM_EVENT_WAIT();
@@ -1612,6 +1626,7 @@ void cm_lp_clk_init(void)
         }
 
         CM_EVENT_SIGNAL();
+#endif
 }
 
 bool cm_lp_clk_is_avail(void)

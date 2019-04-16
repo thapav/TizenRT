@@ -163,8 +163,8 @@ void get_suspected_task(struct task_info_t *task_info) {
 		       task_info->cnt = MAX_SUSPECTED_TASK_CNT;
 			return;
 		}
-		strncpy(task_info->task_name[task_info->cnt], dog_monitor.list[id].task_name, configMAX_TASK_NAME_LEN );
-		task_info->task_name[task_info->cnt][configMAX_TASK_NAME_LEN] = '\0';
+		strncpy(task_info->task_name[task_info->cnt], dog_monitor.list[id].task_name, MAX_TASK_NAME_LEN );
+		task_info->task_name[task_info->cnt][MAX_TASK_NAME_LEN] = '\0';
 		//printf("[%s %05d] suspected_task%d=[%s]\r\n",__func__,__LINE__,task_info->cnt, task_info->task_name[task_info->cnt]);
 
 //#if (INCLUDE_xTaskGetHandle == 1)

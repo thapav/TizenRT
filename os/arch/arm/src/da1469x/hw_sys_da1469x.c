@@ -176,7 +176,7 @@ void hw_sys_assert_trigger_gpio(void)
 
 bool hw_sys_hw_bsr_try_lock(HW_BSR_MASTER_ID hw_bsr_master_id, HW_BSR_POS pos)
 {
-        ASSERT_ERROR((hw_bsr_master_id & SW_BSR_HW_BSR_MASK) == hw_bsr_master_id);
+        //ASSERT_ERROR((hw_bsr_master_id & SW_BSR_HW_BSR_MASK) == hw_bsr_master_id);
         ASSERT_WARNING((pos % 2) == 0);
         ASSERT_WARNING(pos < 31);
 
@@ -200,7 +200,7 @@ static HW_BSR_MASTER_ID hw_sys_sw_bsr_to_hw_bsr(SW_BSR_MASTER_ID sw_bsr_master_i
                 return HW_BSR_MASTER_CMAC;
                 break;
         default:
-                ASSERT_ERROR(0);
+                //ASSERT_ERROR(0);
                 return HW_BSR_MASTER_NONE;
                 break;
         };
@@ -208,8 +208,8 @@ static HW_BSR_MASTER_ID hw_sys_sw_bsr_to_hw_bsr(SW_BSR_MASTER_ID sw_bsr_master_i
 
 void hw_sys_hw_bsr_unlock(HW_BSR_MASTER_ID hw_bsr_master_id, HW_BSR_POS pos)
 {
-        ASSERT_ERROR((hw_bsr_master_id & SW_BSR_HW_BSR_MASK) == hw_bsr_master_id);
-        ASSERT_ERROR(((MEMCTRL->BUSY_STAT_REG >> pos) & SW_BSR_HW_BSR_MASK) == hw_bsr_master_id);
+        //ASSERT_ERROR((hw_bsr_master_id & SW_BSR_HW_BSR_MASK) == hw_bsr_master_id);
+        //ASSERT_ERROR(((MEMCTRL->BUSY_STAT_REG >> pos) & SW_BSR_HW_BSR_MASK) == hw_bsr_master_id);
         ASSERT_WARNING((pos % 2) == 0);
         ASSERT_WARNING(pos < 31);
 
@@ -233,7 +233,7 @@ bool hw_sys_sw_bsr_try_acquire(SW_BSR_MASTER_ID sw_bsr_master_id, uint32_t perip
         HW_BSR_MASTER_ID hw_bsr_master_id;
         bool acquired = false;
 
-        ASSERT_ERROR (periph_id < BSR_PERIPH_ID_MAX);
+        //ASSERT_ERROR (periph_id < BSR_PERIPH_ID_MAX);
 
         /*
          * Since hw_sys_hw_bsr_try_lock() / hw_sys_hw_bsr_unlock() sequence
@@ -288,8 +288,8 @@ void hw_sys_sw_bsr_release(SW_BSR_MASTER_ID sw_bsr_master_id, uint32_t periph_id
 
         while (!hw_sys_hw_bsr_try_lock(hw_bsr_master_id, HW_BSR_SW_POS)) {}
 
-        ASSERT_ERROR (hw_sys_sw_bsr[periph_id] == sw_bsr_master_id);
-        ASSERT_ERROR (hw_sys_sw_bsr_cnt[periph_id]);
+        //ASSERT_ERROR (hw_sys_sw_bsr[periph_id] == sw_bsr_master_id);
+        //ASSERT_ERROR (hw_sys_sw_bsr_cnt[periph_id]);
 
         if (--hw_sys_sw_bsr_cnt[periph_id] == 0) {
                 hw_sys_sw_bsr[periph_id] = SW_BSR_MASTER_NONE;
@@ -301,22 +301,22 @@ void hw_sys_sw_bsr_release(SW_BSR_MASTER_ID sw_bsr_master_id, uint32_t periph_id
 __RETAINED_CODE void hw_sys_pd_com_enable(void)
 {
         GLOBAL_INT_DISABLE();
-        ASSERT_ERROR((!hw_sys_pd_com_acquire_cnt) || !REG_GETF(CRG_TOP, PMU_CTRL_REG, COM_SLEEP));
-        ASSERT_ERROR((hw_sys_pd_com_acquire_cnt) || REG_GETF(CRG_TOP, PMU_CTRL_REG, COM_SLEEP));
+        //ASSERT_ERROR((!hw_sys_pd_com_acquire_cnt) || !REG_GETF(CRG_TOP, PMU_CTRL_REG, COM_SLEEP));
+        //ASSERT_ERROR((hw_sys_pd_com_acquire_cnt) || REG_GETF(CRG_TOP, PMU_CTRL_REG, COM_SLEEP));
         if (++hw_sys_pd_com_acquire_cnt == 1) {
                 hw_pd_power_up_com();
         }
         GLOBAL_INT_RESTORE();
 
-        ASSERT_ERROR(REG_GETF(CRG_TOP, SYS_STAT_REG, COM_IS_UP));
+        //ASSERT_ERROR(REG_GETF(CRG_TOP, SYS_STAT_REG, COM_IS_UP));
 }
 
 __RETAINED_CODE void hw_sys_pd_com_disable(void)
 {
-        ASSERT_ERROR(!REG_GETF(CRG_TOP, PMU_CTRL_REG, COM_SLEEP));
+        //ASSERT_ERROR(!REG_GETF(CRG_TOP, PMU_CTRL_REG, COM_SLEEP));
 
         GLOBAL_INT_DISABLE();
-        ASSERT_ERROR(hw_sys_pd_com_acquire_cnt);
+        //ASSERT_ERROR(hw_sys_pd_com_acquire_cnt);
         if (--hw_sys_pd_com_acquire_cnt == 0) {
                 hw_pd_power_down_com();
         }
@@ -331,15 +331,15 @@ __RETAINED_CODE void hw_sys_pd_periph_enable(void)
         }
         GLOBAL_INT_RESTORE();
 
-        ASSERT_ERROR(REG_GETF(CRG_TOP, SYS_STAT_REG, PER_IS_UP));
+        //ASSERT_ERROR(REG_GETF(CRG_TOP, SYS_STAT_REG, PER_IS_UP));
 }
 
 __RETAINED_CODE void hw_sys_pd_periph_disable(void)
 {
-        ASSERT_ERROR(!REG_GETF(CRG_TOP, PMU_CTRL_REG, PERIPH_SLEEP));
+        //ASSERT_ERROR(!REG_GETF(CRG_TOP, PMU_CTRL_REG, PERIPH_SLEEP));
 
         GLOBAL_INT_DISABLE();
-        ASSERT_ERROR(hw_sys_pd_periph_acquire_cnt);
+        //ASSERT_ERROR(hw_sys_pd_periph_acquire_cnt);
         if (--hw_sys_pd_periph_acquire_cnt == 0) {
                 hw_pd_power_down_periph();
         }
@@ -348,7 +348,7 @@ __RETAINED_CODE void hw_sys_pd_periph_disable(void)
 
 uint32_t hw_sys_reg_add_config(hw_sys_reg_config_t *config, uint32_t num_of_entries)
 {
-       ASSERT_ERROR(hw_sys_reg_num_of_config_entries + num_of_entries <= NUM_OF_REG_CONFIG_ENTRIES);
+       //ASSERT_ERROR(hw_sys_reg_num_of_config_entries + num_of_entries <= NUM_OF_REG_CONFIG_ENTRIES);
 
        uint32_t ret = hw_sys_reg_num_of_config_entries;
 
@@ -369,7 +369,7 @@ hw_sys_reg_config_t *hw_sys_reg_get_config(uint32_t index)
 
 void hw_sys_reg_modify_config(uint32_t index, __IO uint32_t *addr, uint32_t value)
 {
-        ASSERT_ERROR(index < hw_sys_reg_num_of_config_entries);
+        //ASSERT_ERROR(index < hw_sys_reg_num_of_config_entries);
 
         hw_sys_reg_config[index].value = value;
 

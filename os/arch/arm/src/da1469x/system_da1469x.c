@@ -126,7 +126,7 @@ void *_sbrk(int incr)
                 volatile int stored_incr __UNUSED;
 
                 stored_incr = incr;
-                ASSERT_ERROR(0);
+                //ASSERT_ERROR(0);
 
                 errno = ENOMEM;
                 return (void *)-1;
@@ -636,6 +636,31 @@ void SystemInitPre(void)
         REG_SETF(CRG_TOP, CLK_AMBA_REG, OTP_ENABLE, 0);
 }
 
+#include "hw_uart.h"
+#define LOGBUFFER_MAX_SIZE	200
+static char logutil_buf[LOGBUFFER_MAX_SIZE+4]={0,};
+extern 
+HW_UART_CONFIG_ERR hw_uart_send(HW_UART_ID uart, const void *data, uint16_t len, hw_uart_tx_callback cb,
+                                                                                void *user_data);
+void printf_debug_info(uint8_t force ,uint8_t level, const char * fmt, ...) {
+	/* In order to protect log when receiving factory command or dumping in progress */
+
+	int str_len = 0;
+	char *buf_ptr = NULL;
+
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(logutil_buf, sizeof(logutil_buf) - 1, fmt, ap);
+	va_end(ap);
+
+	//Adjust to CRLF for ease in Windows
+	logutil_buf[LOGBUFFER_MAX_SIZE-1] = '\0';
+	str_len = strlen(logutil_buf);
+	buf_ptr = logutil_buf;
+		hw_uart_send(HW_UART2, logutil_buf, str_len, NULL, NULL);
+}
+
+
 /**
  * Initialize the system
  *
@@ -647,6 +672,7 @@ void SystemInit(void)
         /*
          * Detect chip version (optionally).
          */
+/*
         if (dg_configUSE_AUTO_CHIP_DETECTION == 1) {
                 black_orca_chip_version = black_orca_get_chip_version();
 
@@ -654,7 +680,7 @@ void SystemInit(void)
                         //ASSERT_WARNING_UNINIT(0);
                 //}
         }
-
+*/
         REG_SETF(CRG_TOP, POWER_CTRL_REG, LDO_RADIO_ENABLE, 1); // Switch on the RF LDO
 
         /*
@@ -670,6 +696,13 @@ void SystemInit(void)
         SystemCoreClock = __SYSTEM_CLOCK;
         SystemLPClock = dg_configXTAL32K_FREQ;
 
+        /*
+         * Keep PD_COM and PD_PER enabled.
+         */
+        REG_SETF(CRG_TOP, PMU_CTRL_REG, COM_SLEEP, 0);
+        while (!REG_GETF(CRG_TOP, SYS_STAT_REG, COM_IS_UP));
+        REG_SETF(CRG_TOP, PMU_CTRL_REG, PERIPH_SLEEP, 0);
+        while (!REG_GETF(CRG_TOP, SYS_STAT_REG, PER_IS_UP));
 
 #if (dg_configENABLE_DA1469x_AA_SUPPORT)
         /*
@@ -683,7 +716,7 @@ void SystemInit(void)
 #endif
 
         hw_qspi_disable_init(HW_QSPIC);             // Disable QSPI init after wakeup
-//        qspi_automode_init();               // The bootloader may have left the Flash in wrong mode...
+        qspi_automode_init();               // The bootloader may have left the Flash in wrong mode...
 
         /* Already up in SystemInitPre() */
         ASSERT_WARNING(hw_pd_check_tim_status());
@@ -759,7 +792,7 @@ void SystemInit(void)
         sys_tcs_apply_reg_pairs(SYS_TCS_GROUP_PD_MEM);
         sys_tcs_apply_reg_pairs(SYS_TCS_GROUP_PD_PER);
         /* In non baremetal apps PD_COMM will be opened by the  power manager */
-#ifdef OS_BAREMETAL
+#if defined(OS_BAREMETAL)
         hw_sys_pd_com_enable();
         sys_tcs_apply_reg_pairs(SYS_TCS_GROUP_PD_COMM);
 #endif
@@ -798,6 +831,16 @@ void SystemInit(void)
 #else
         hw_bod_deactivate();
 #endif
+#if 1
+        hw_gpio_pad_latch_enable_all();
+#endif	
+	uart_enable();
+		
+	  _ttywrch('H');
+	  _ttywrch('E');
+	  _ttywrch('L');
+	  _ttywrch('L');
+	  _ttywrch('O');
 
 	os_start();
 
@@ -850,7 +893,7 @@ uint32_t black_orca_phy_addr(uint32_t addr)
                          * In the remapped region, accesses are only allowed when
                          * 0 <= addr < flash_region_size.
                          */
-                        ASSERT_ERROR(addr < flash_region_size);
+                        //ASSERT_ERROR(addr < flash_region_size);
 
                         phy_addr = flash_region_base_offset + addr;
                 } else if (IS_QSPIF_ADDRESS(addr)) {
@@ -860,8 +903,8 @@ uint32_t black_orca_phy_addr(uint32_t addr)
                          *   AND
                          * addr < flash_region_base_offset + flash_region_base_offset
                          */
-                        ASSERT_ERROR(addr >= flash_region_base_offset);
-                        ASSERT_ERROR(addr < flash_region_base_offset + flash_region_size);
+                        //ASSERT_ERROR(addr >= flash_region_base_offset);
+                        //ASSERT_ERROR(addr < flash_region_base_offset + flash_region_size);
                         phy_addr = addr;
                 } else {
                         phy_addr = addr;

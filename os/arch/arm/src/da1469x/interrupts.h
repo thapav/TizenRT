@@ -24,7 +24,6 @@
 
 #ifndef INTERRUPTS_H_
 #define INTERRUPTS_H_
-
 #include <stdbool.h>
 
 #ifdef __cplusplus
@@ -84,7 +83,7 @@ void set_interrupt_priorities(const int8_t prios[]);
  *
  * \return true if the CPU is serving an interrupt.
  */
-__STATIC_INLINE bool in_interrupt(void)
+static inline bool in_interrupt(void)
 {
         return (SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) != 0;
 }

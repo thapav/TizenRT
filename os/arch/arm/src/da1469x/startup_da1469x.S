@@ -31,11 +31,7 @@
    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
    POSSIBILITY OF SUCH DAMAGE.
    ---------------------------------------------------------------------------*/
-#include <tinyara/config.h>
-
-#include <arch/irq.h>
-
-#include "chip.h"
+#include "custom_config.h"
 
 #define SYS_CTRL_REG                            0x50000024
 #define SYS_CTRL_REG_DEBUGGER_ENABLE_MSK        0x80
@@ -57,14 +53,20 @@
 #define MTB_MASTER_REG                          0xE0043004
 #define MTB_MASTER_REG_ENABLE_MSK               0x80000009
 
-	.file	"startup_da1469x.S"
 	.syntax	unified
 	.arch	armv7-m
 
+#if ( (dg_configSKIP_MAGIC_CHECK_AT_START == 0) && (dg_configIMAGE_SETUP == PRODUCTION_MODE) )
+#error "Building Production image with MAGIC Value check enabled! Possible security risk..."
+#endif
+
 	.equ RESET_STAT_REG, 0x500000BC
 
+#if (dg_configCODE_LOCATION == NON_VOLATILE_IS_NONE)
 	.section .text
-
+#else
+	.section text_retained
+#endif
 	.thumb
 	.thumb_func
 	.align	2
@@ -87,31 +89,22 @@ Wakeup_Reset_Handler:
         ldr     r3, =wakeup_from_deepsleep
         bx      r3
 .cold_reset:
-        ldr     r3, =__start
+        ldr     r3, =Reset_Handler
         bx      r3
         .size	Wakeup_Reset_Handler, . - Wakeup_Reset_Handler
 
-        .section .reset_handler
+
+        .section text_reset
         .thumb
         .thumb_func
         .align  2
-	.weak   __start
-        .globl  __start
-        .type   __start, %function
-__start:
-	/* set stack pointer */
-	ldr  sp, =(__bss_end__ + CONFIG_IDLETHREAD_STACKSIZE & ~7)
-
-	/* interrupt disable */
-	cpsid i
-
-	/* watch dog disable */
-	/* TO DO*/
-
+        .globl  Reset_Handler
+        .type   Reset_Handler, %function
+Reset_Handler:
         ldr     r0, =0x20000004
         ldr     r1, =Wakeup_Reset_Handler
         str     r1, [r0]
-#if 0
+
 #if (dg_configENABLE_MTB)
         ldr     r0, =MTB_POSITION_REG
         ldr     r1, =0
@@ -123,7 +116,8 @@ __start:
         ldr     r1, =MTB_MASTER_REG_ENABLE_MSK
         str     r1, [r0]
 #endif
-#endif
+
+#if (dg_configSKIP_MAGIC_CHECK_AT_START == 0)
 
 /* If the Magic Word {0xDEADBEEF, 0xDEADBEEF, 0xDEADBEEF, 0xDEAD10CC} is found at 0x20010000 then the
  * execution will block for a while in order to give time to a debugger to attach. */
@@ -160,8 +154,10 @@ __start:
         strh    r6, [r4]
 
 .code_starts:
+#endif
 
 /* RAM projects should disable the cache controller */
+#if (dg_configCODE_LOCATION == NON_VOLATILE_IS_NONE)
         ldr     r4, =SYS_CTRL_REG
         ldrh    r0, [r4]
         movs    r1, #1
@@ -169,6 +165,7 @@ __start:
         bics    r0, r0, r1
         /* Update SYS_CTRL_REG. */
         strh    r0, [r4]
+#endif
 
 #ifndef __NO_SYSTEM_INIT
         bl		SystemInitPre
@@ -345,7 +342,7 @@ __start:
 */
 
 	.pool
-	.size	__start, . - __start
+	.size	Reset_Handler, . - Reset_Handler
 
     .text
     .align  2
@@ -435,16 +432,19 @@ SVC_Handler:
     def_irq_handler Reserver46_Handler
     def_irq_handler Reserver47_Handler
 
+#if (dg_configCODE_LOCATION == NON_VOLATILE_IS_FLASH)
+        .section text_retained
+#endif
         .align  2
         .thumb
         .thumb_func
         .globl  NMI_Handler
         .type   NMI_Handler, %function
 NMI_Handler:
-        ldr     r1, =NMI_HandlerC
+        ldr     r3, =NMI_HandlerC
         movs    r0, #4
-        mov     r2, lr
-        tst     r0, r2
+        mov     r1, lr
+        tst     r0, r1
         beq     NMI_stacking_using_MSP
         mrs     r0, psp
         b       stack_check
@@ -459,16 +459,15 @@ NMI_stacking_using_MSP:
 		.globl	MemManage_Handler
 		.type	MemManage_Handler, %function
 MemManage_Handler: 
-		ldr 	r2, =MemManage_HandlerC
+		ldr 	r3, =MemManage_HandlerC
 		movs	r0, #4
 		mov 	r1, lr
 		tst 	r0, r1
 		beq 	MEM_stacking_using_MSP
 		mrs 	r0, psp
-		bx		r2
 MEM_stacking_using_MSP:
 		mrs 	r0, msp
-		bx		r2
+		b	    stack_check
 		.size	MemManage_Handler, . - MemManage_Handler
 
 		.align	2
@@ -477,16 +476,15 @@ MEM_stacking_using_MSP:
 		.globl	BusFault_Handler
 		.type	BusFault_Handler, %function
 BusFault_Handler: 
-		ldr 	r2, =BusFault_HandlerC
+		ldr 	r3, =BusFault_HandlerC
 		movs	r0, #4
 		mov 	r1, lr
 		tst 	r0, r1
 		beq 	BUS_stacking_using_MSP
 		mrs 	r0, psp
-		bx		r2
 BUS_stacking_using_MSP:
 		mrs 	r0, msp
-		bx		r2
+		b	    stack_check
 		.size	BusFault_Handler, . - BusFault_Handler
 
         .align  2
@@ -495,16 +493,15 @@ BUS_stacking_using_MSP:
         .globl  UsageFault_Handler
         .type   UsageFault_Handler, %function
 UsageFault_Handler: 
-		ldr 	r2, =UsageFault_HandlerC
+		ldr 	r3, =UsageFault_HandlerC
 		movs	r0, #4
 		mov 	r1, lr
 		tst 	r0, r1
 		beq 	USAGE_stacking_using_MSP
 		mrs 	r0, psp
-		bx		r2
 USAGE_stacking_using_MSP:
 		mrs 	r0, msp
-		bx		r2
+		b	    stack_check
         .size   UsageFault_Handler, . - UsageFault_Handler
 
         .align  2
@@ -513,10 +510,10 @@ USAGE_stacking_using_MSP:
         .globl  HardFault_Handler
         .type   HardFault_Handler, %function
 HardFault_Handler:
-        ldr     r1, =HardFault_HandlerC
+        ldr     r3, =HardFault_HandlerC
         movs    r0, #4
-        mov     r2, lr
-        tst     r0, r2
+        mov     r1, lr
+        tst     r0, r1
         beq     HF_stacking_using_MSP
         mrs     r0, psp
         b       stack_check
@@ -544,17 +541,17 @@ stack_check_range_0x0:
         ldr     r2, =0x80000-32
         cmp     r0, r2
         bgt 	stack_check_range_0x800000
-        bx      r1 /* Valid SP */
+        bx      r3 /* Valid SP */
 
 stack_check_range_0x800000:
         /* Check if SP (r0) belongs to [0x800000, 0x880000) */
         ldr     r2, =0x800000
         cmp     r0, r2
         blt     Wrong_SP
-        ldr     r2, =0x800000-32
+        ldr     r2, =0x880000-32
         cmp     r0, r2
         bgt 	stack_check_range_0x20000000
-        bx      r1 /* Valid SP */
+        bx      r3 /* Valid SP */
 
 stack_check_range_0x20000000:
         /* Check if SP (r0) belongs to [0x20000000, 0x20080000) */
@@ -563,10 +560,21 @@ stack_check_range_0x20000000:
         blt     Wrong_SP
         ldr     r2, =0x20080000-32
         cmp     r0, r2
-        bgt     Wrong_SP
-        bx      r1 /* Valid SP */
+        bgt     stack_check_range_0x32000000
+        bx      r3 /* Valid SP */
+
+stack_check_range_0x32000000:
+		/* Check if SP (r0) belongs to [0x32000000, 0x34000000) */
+		ldr     r2, =0x32000000
+		cmp     r0, r2
+		blt     Wrong_SP
+		ldr     r2, =0x34000000-32
+		cmp     r0, r2
+		bgt     Wrong_SP
+		bx      r3 /* Valid SP */
 
 Wrong_SP:
+#if (dg_configIMAGE_SETUP == DEVELOPMENT_MODE) || defined (SEC_MODEN)
         /*
         * Set       WATCHDOG_CTRL_REG[WDOG_FREEZE_EN]
         * and reset WATCHDOG_CTRL_REG[NMI_RST]
@@ -586,7 +594,21 @@ Wrong_SP:
         orrs    r0, r0, r1
         /* Update SYS_CTRL_REG */
         strh    r0, [r4, #0]
-
+#else
+        /* Unfreeze WDog at all times */
+        ldr     r0, =RESET_FREEZE_REG
+        ldr     r1, =RESET_FREEZE_REG_FRZ_SYS_WDOG_MSK
+        strh    r1, [r0, #0]
+#if (dg_configENABLE_DEBUGGER == 1)
+        /* Enable debugger */
+        ldr     r4, =SYS_CTRL_REG
+        ldrh    r0, [r4, #0]
+        movs    r1, #SYS_CTRL_REG_DEBUGGER_ENABLE_MSK
+        orrs    r0, r0, r1
+        /* Update SYS_CTRL_REG */
+        strh    r0, [r4, #0]
+#endif
+#endif /* (dg_configIMAGE_SETUP == DEVELOPMENT_MODE) */
         /* Wait for the WDog to hit or a debug session to start */
         b       .
         .size   HardFault_Handler, . - HardFault_Handler

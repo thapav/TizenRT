@@ -13,23 +13,15 @@
  */
 
         .syntax	unified
-        .arch	armv8-m
+        .arch	armv7-m
 
         .section .stack
         .align	3
-#if (dg_configSYSTEMVIEW == 0)
         #ifdef __STACK_SIZE
                 .equ	Stack_Size, __STACK_SIZE
         #else
                 .equ	Stack_Size, 0xC00
         #endif
-#else
-        #ifdef __STACK_SIZE
-                .equ	Stack_Size, (__STACK_SIZE + dg_configSYSTEMVIEW_STACK_OVERHEAD)
-        #else
-                .equ	Stack_Size, (0xC00 + dg_configSYSTEMVIEW_STACK_OVERHEAD)
-        #endif
-#endif /* (dg_configSYSTEMVIEW == 0) */
         .globl	__StackTop
         .globl	__StackLimit
 __StackLimit:

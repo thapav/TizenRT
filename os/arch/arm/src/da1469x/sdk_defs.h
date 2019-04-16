@@ -28,6 +28,7 @@
 #include <assert.h>
 #include <debug.h>
 #include <stddef.h>
+#include <sched.h>
 
 #ifdef __cplusplus
  extern "C" {
@@ -44,13 +45,17 @@
 #endif
 
 #include "sw_version.h"
-# include "D2522AA.h"
+#include "D2522AA.h"
 #include "system_D2522.h"		/* DA1469x System */
+#include "interrupts.h"
 
+extern void uart_enable(void);
+extern void _ttywrch(int ch);
 /************************
  * Includes from bsp_defaults.h
  ************************/
 #define dg_configUSE_AUTO_CHIP_DETECTION        (1)
+#define dg_configUSE_USB_ENUMERATION            ( 0 )
 
 #ifndef dg_configPMU_ADAPTER
 #define dg_configPMU_ADAPTER                    (0)
@@ -60,15 +65,59 @@
 #define dg_configOPTIMAL_RETRAM                 (0)
 #endif
 
-#include "custom_config_qspi.h"
 
+//#define dg_configDEVICE DEVICE_D2522
+#define USE_BLE_SLEEP	0
+
+//#include "custom_config_qspi.h"
+#include "custom_config.h"
+
+#ifndef dg_configFAULT_DEBUG_DUMP
+#define dg_configFAULT_DEBUG_DUMP 0
+#endif
 /////////////////////////////////////////////////////////////////////////
 /* TINYARA API MAPPINGS */
 
 #define OS_ASSERT(x)		ASSERT(x)
-#define ASSERT_WARNING(x)	lldbg("ASSERT_WARNING!! \n");
+#define ASSERT_ERROR(x)		DEBUGASSERT(x)
+#define ASSERT_WARNING(x)	DEBUGASSERT(x)
 
+typedef void * void_pt_t;
+typedef long long_t;
 
+typedef uint32_t TickType_t;
+#define portMAX_DELAY ( TickType_t ) 0xffffffffUL
+#define pdFALSE			( ( BaseType_t ) 0 )
+#define pdTRUE			( ( BaseType_t ) 1 )
+
+#define OS_MUTEX                void_pt_t
+#define OS_EVENT_GROUP          void_pt_t
+#define OS_TIMER                void_pt_t
+#define OS_TASK		void_pt_t
+#define OS_BASE_TYPE            long_t
+#define OS_EVENT_GROUP		void_pt_t
+#define OS_EVENT_FOREVER	portMAX_DELAY
+#define OS_EVENT_GROUP_OK       pdTRUE
+#define OS_EVENT_GROUP_FAIL     pdFALSE
+#define OS_FAIL	pdFALSE
+#define OS_PASS	pdTRUE
+#define BaseType_t	long_t
+
+//#define OS_TASK_PRIORITY_GET(task) current_task(0)->sched_priority
+
+#if 0
+#define OS_ENTER_CRITICAL_SECTION() \
+        do { \
+                OS_ASSERT(!in_interrupt()); \
+                //portENTER_CRITICAL(); \		//temporarily done
+        } while (0)
+#else
+#define OS_ENTER_CRITICAL_SECTION() \
+        do { \
+                OS_ASSERT(!in_interrupt());\
+        } while (0)
+#endif
+        
 #if 0
 #define 
 #define 
@@ -342,7 +391,6 @@ void SYS_ASSERT_hook(char *file, int line);
                 }                                                                               \
         }
 #endif
-#endif
 /**
  * \brief Assert as error macro
  *
@@ -386,7 +434,7 @@ void SYS_ASSERT_hook(char *file, int line);
                 }                                                                               \
         }
 #endif
-
+#endif
 /**
  * \brief Assert as warning macro when the system is still uninitialized
  *

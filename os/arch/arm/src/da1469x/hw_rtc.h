@@ -30,7 +30,7 @@
 #include <sdk_defs.h>
 #ifdef SEC_MODEN
 #include <time.h>
-//#include "ad_nvms.h"
+#include "ad_nvms.h"
 #endif
 
 /**

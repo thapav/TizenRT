@@ -35,6 +35,7 @@
 #ifndef BSP_DEFAULTS_H_
 #define BSP_DEFAULTS_H_
 
+#include "bsp_definitions.h"
 
 #if defined(dg_configUSE_HW_ECC)
 #if (dg_configUSE_HW_ECC == 1)
@@ -519,6 +520,8 @@
 #               define dg_configUSE_CLOCK_MGR (0)
 #       elif defined(OS_FREERTOS)
 #               define dg_configUSE_CLOCK_MGR (1)
+#       elif defined(OS_TIZENRT)
+#               define dg_configUSE_CLOCK_MGR (0)
 #       endif
 #endif
 
@@ -1064,8 +1067,12 @@
  * \bsp_default_note{\bsp_config_option_app,}
  */
 #ifndef dg_configFLASH_HEADER_FILE
+#if (dg_configENABLE_DA1469x_AA_SUPPORT == 1)
+#define dg_configFLASH_HEADER_FILE      "qspi_w25q80ew.h"
+#else
 #define dg_configFLASH_HEADER_FILE      "qspi_mx25u3235.h"
-#endif
+#endif /* dg_configENABLE_DA1469x_AA_SUPPORT*/
+#endif /* dg_configFLASH_HEADER_FILE */
 
 /**
  * \brief The Flash Driver configuration structure
@@ -1075,8 +1082,12 @@
  * \bsp_default_note{\bsp_config_option_app,}
  */
 #ifndef dg_configFLASH_CONFIG
-#define dg_configFLASH_CONFIG flash_mx25u3235_config
-#endif
+#if (dg_configENABLE_DA1469x_AA_SUPPORT == 1)
+#define dg_configFLASH_CONFIG           flash_w25q80ew_config
+#else
+#define dg_configFLASH_CONFIG           flash_mx25u3235_config
+#endif /* dg_configENABLE_DA1469x_AA_SUPPORT*/
+#endif /* dg_configFLASH_CONFIG */
 
 #endif /* dg_configFLASH_AUTODETECT == 0 */
 
@@ -1158,7 +1169,7 @@
  * \bsp_default_note{\bsp_config_option_app,}
  */
 #ifndef dg_configCACHE_ASSOCIATIVITY
-#define dg_configCACHE_ASSOCIATIVITY    CACHE_ASSOC_4_WAY
+#define dg_configCACHE_ASSOCIATIVITY    (2)
 #endif
 
 /**
@@ -1173,7 +1184,7 @@
  *   - CACHE_LINESZ_32_BYTES
  */
 #ifndef dg_configCACHE_LINESZ
-#define dg_configCACHE_LINESZ           CACHE_LINESZ_8_BYTES
+#define dg_configCACHE_LINESZ           (0)
 #endif
 /* ---------------------------------------------------------------------------------------------- */
 
@@ -1480,7 +1491,9 @@
 #define dg_configUSE_HW_MPU             (0)
 #endif
 
-
+#if (dg_configUSE_HW_GPADC == 0)
+#error "dg_configUSE_HW_GPADC should be 1 in order to properly trim the PLL clock"
+#endif
 /* ---------------------------------------------------------------------------------------------- */
 
 
@@ -1730,7 +1743,7 @@
 /* ------------------------------- RF driver configuration settings ----------------------------- */
 
 /* Set to 1 to enable the recalibration procedure */
-#if   ( (dg_configDEVICE == DEVICE_D2522) && defined(CONFIG_USE_BLE) )
+#if   ( (dg_configDEVICE == DEVICE_DA1469x) && defined(CONFIG_USE_BLE) )
 #ifndef dg_configRF_ENABLE_RECALIBRATION
 #define dg_configRF_ENABLE_RECALIBRATION        (1)
 #endif

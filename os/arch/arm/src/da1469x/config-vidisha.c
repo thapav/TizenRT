@@ -23,10 +23,15 @@
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <time.h>
+
 #include "sdk_defs.h"
-#ifndef OS_BAREMETAL
-#include "osal.h"
+
+#ifndef CONFIG_RETARGET
+#define CONFIG_RETARGET 1
 #endif
+//#define dg_configUSE_CONSOLE 0
+
 #ifdef CONFIG_RETARGET
 #       include <stddef.h>
 #       include "hw_uart.h"
@@ -193,47 +198,10 @@ void _ttywrch(int ch)
         _write(1 /* STDOUT */, (char*) &ch, 1);
 }
 
-static int uart_enabled = 0;
-
-void uart_enable(void) {
-    if (uart_enabled)
-        return;
-        
-    hw_sys_pd_com_enable();
-    HW_GPIO_SET_PIN_FUNCTION(CONFIG_RETARGET_UART_TX);
-    HW_GPIO_PAD_LATCH_ENABLE(CONFIG_RETARGET_UART_TX);
-    
-    /* Enable UART if it's not enabled - can happen after exiting sleep */
-    if (uart_needs_initialization()) {
-            retarget_reinit();
-    }
-    uart_enabled = 1;
-	  _ttywrch('H');
-	  _ttywrch('E');
-	  _ttywrch('L');
-	  _ttywrch('L');
-	  _ttywrch('O');
-
-}
-
-void uart_disable(void) {
-    if (!uart_enabled)
-        return;
-        
-    HW_GPIO_PAD_LATCH_DISABLE(CONFIG_RETARGET_UART_TX);
-    hw_sys_pd_com_disable();
-    uart_enabled = 0;
-}
-
-int get_uart_state(void) {
-    return uart_enabled;
-}
-
-
 int uart_tx(char *ptr, int len)
 {
-        uint32_t tick_cur = 0;
-#if 0
+        uint32_t tick_cur;
+
         hw_sys_pd_com_enable();
         HW_GPIO_SET_PIN_FUNCTION(CONFIG_RETARGET_UART_TX);
         HW_GPIO_PAD_LATCH_ENABLE(CONFIG_RETARGET_UART_TX);
@@ -242,23 +210,17 @@ int uart_tx(char *ptr, int len)
         if (uart_needs_initialization()) {
                 retarget_reinit();
         }
-#else
-        if ( !uart_enabled ) {
-            uart_enable();        
-        }
-#endif
+
         /* Write "len" of char from "ptr" to file id "fd"
          * Return number of char written. */
         hw_uart_send(CONFIG_RETARGET_UART, ptr, len, NULL, NULL);
 
 //		tick_cur= OS_GET_TICK_COUNT();
-//        while (hw_uart_is_busy(CONFIG_RETARGET_UART) && (OS_MS_2_TICKS(1000) > (OS_GET_TICK_COUNT() - tick_cur)) ) {}
-		while (hw_uart_is_busy(CONFIG_RETARGET_UART) && (4000000 > tick_cur++) ) {}
+	tick_cur = clock();
 
-#if 0        
+        while (hw_uart_is_busy(CONFIG_RETARGET_UART) && (OS_MS_2_TICKS(1000) > (OS_GET_TICK_COUNT() - tick_cur)) ) {}
         HW_GPIO_PAD_LATCH_DISABLE(CONFIG_RETARGET_UART_TX);
         hw_sys_pd_com_disable();
-#endif
 
         return len;
 }
@@ -414,12 +376,6 @@ int _read(int fd, char *ptr, int len)
         return ret;
 }
 
-void uart_enable(void) {
-}
-
-void uart_disable(void) {
-}
-
 int uart_tx(char *ptr, int len)
 {
      
@@ -551,33 +507,36 @@ int puts(const char *s)
 #  error "Building for Flash code but a Flash is not connected!"
 # endif
 
-# if dg_configPMU_ADAPTER
-#  if (dg_configPOWER_1V8_ACTIVE == 0) && (dg_configPOWER_1V8_SLEEP == 1)
-#   error "1V8 rail set to off during active and on during sleep..."
-#  endif
-
-#   if (dg_configPOWER_1V8P_ACTIVE == 0) && (dg_configPOWER_1V8P_SLEEP == 1)
-#    error "1V8P rail set to off during active and on during sleep..."
-#   endif
-
-#  if (dg_configFLASH_CONNECTED_TO == FLASH_CONNECTED_TO_1V8) && (dg_configPOWER_1V8_ACTIVE == 0)
-#   error "Flash is connected to the 1V8 rail but the rail is turned off (2)..."
-#  endif
-
-
-#  if (dg_configFLASH_POWER_DOWN == 1)
-#   if defined(dg_configFLASH_POWER_OFF) && (dg_configFLASH_POWER_OFF == 1)
-#    error "dg_configFLASH_POWER_DOWN and dg_configFLASH_POWER_OFF cannot be both set to 1"
-#   endif
+//# if dg_configPMU_ADAPTER
+//#  if (dg_configPOWER_1V8_ACTIVE == 0) && (dg_configPOWER_1V8_SLEEP == 1)
+//#   error "1V8 rail set to off during active and on during sleep..."
+//#  endif
+//
+//#   if (dg_configPOWER_1V8P_ACTIVE == 0) && (dg_configPOWER_1V8P_SLEEP == 1)
+//#    error "1V8P rail set to off during active and on during sleep..."
+//#   endif
+//
+//#  if (dg_configFLASH_CONNECTED_TO == FLASH_CONNECTED_TO_1V8) && (dg_configPOWER_1V8_ACTIVE == 0)
+//#   error "Flash is connected to the 1V8 rail but the rail is turned off (2)..."
+//#  endif
+//
+//
+//#  if (dg_configFLASH_POWER_DOWN == 1)
+//#   if defined(dg_configFLASH_POWER_OFF) && (dg_configFLASH_POWER_OFF == 1)
+//#    error "dg_configFLASH_POWER_DOWN and dg_configFLASH_POWER_OFF cannot be both set to 1"
+//#   endif
+/*
 #    if ((dg_configFLASH_CONNECTED_TO == FLASH_CONNECTED_TO_1V8P || dg_configFLASH_CONNECTED_TO == FLASH_CONNECTED_TO_1V8F) \
         && (dg_configPOWER_1V8P_SLEEP == 1)) || \
        ((dg_configFLASH_CONNECTED_TO == FLASH_CONNECTED_TO_1V8) && (dg_configPOWER_1V8_SLEEP == 1))
-        /* OK */
-#    else
-#     error "Flash power down is selected but the rail that the Flash is connected to is turned off..."
-#    endif
-#  endif /* dg_configFLASH_POWER_DOWN */
-# endif /* dg_configPMU_ADAPTER */
+*/
+//        /* OK */
+//
+//#    else
+//#     error "Flash power down is selected but the rail that the Flash is connected to is turned off..."
+//#    endif
+//#  endif /* dg_configFLASH_POWER_DOWN */
+//# endif /* dg_configPMU_ADAPTER */
 
 # if (dg_configUSE_USB == 1) && (dg_configUSE_USB_CHARGER == 0) && (dg_configUSE_USB_ENUMERATION == 0)
 #  error "Wrong USB configuration!"
@@ -599,13 +558,13 @@ int puts(const char *s)
 #   endif
 #  endif
 
-#if (dg_configNVPARAM_ADAPTER)
-# if (dg_configNVMS_ADAPTER != 1)
-#  pragma message "NVMS adapter is mandatory to make use of NVPARAM and will be enabled silently"
-#  undef dg_configNVMS_ADAPTER
-#  define dg_configNVMS_ADAPTER 1
-# endif
-#endif
+//#if (dg_configNVPARAM_ADAPTER)
+//# if (dg_configNVMS_ADAPTER != 1)
+//#  pragma message "NVMS adapter is mandatory to make use of NVPARAM and will be enabled silently"
+//#  undef dg_configNVMS_ADAPTER
+//#  define dg_configNVMS_ADAPTER 1
+//# endif
+//#endif
 
 /*
  * Error about not supported DK motherboards

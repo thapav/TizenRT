@@ -29,7 +29,7 @@
 
 /* ------------------------------------ Generic definitions ------------------------------------- */
 #define DEVICE_DA14680                  1
-#define DEVICE_D2522                    2
+#define DEVICE_DA1469x                  2
 
 #define PRO_DK_DA1469x_BRD              1
 #define PRO_DK_DA1468x_BRD              2

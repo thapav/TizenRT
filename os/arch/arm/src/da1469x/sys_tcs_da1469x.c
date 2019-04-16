@@ -195,9 +195,9 @@ void sys_tcs_get_trim_values_from_cs(void)
         SYS_TCS_SOURCE source = TCS_OTP;
         uint16_t size_table[SYS_TCS_GROUP_MAX] = { 0 };
 
-#if (dg_configUSE_SYS_TCS == 0)
+//#if (dg_configUSE_SYS_TCS == 0)
         return;
-#endif
+//#endif
         //locate start of CS in OTP
         value = fetch_tcs_entry(source, address);
         if (value != CS_START_CMD) {

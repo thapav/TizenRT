@@ -347,7 +347,7 @@
 #undef dg_configUSE_HW_USB
 #define dg_configUSE_HW_USB                     (1)
 #endif
-
+#if 0
 /* If RF recalibration is enabled, we need to enable GPADC as well */
 #if dg_configRF_ENABLE_RECALIBRATION
 #undef dg_configUSE_HW_GPADC
@@ -364,6 +364,7 @@
 #define dg_configSNC_ADAPTER                    (1)
 #undef dg_configUSE_STATIC_IO_CONFIG
 #define dg_configUSE_STATIC_IO_CONFIG           (1)
+#endif
 #endif
 
 /* If RF is enabled, we need to enable GPADC adapter as well

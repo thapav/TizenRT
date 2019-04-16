@@ -27,6 +27,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "hw_hard_fault.h"
 
 #ifndef OS_TASK
 #define OS_TASK void*
@@ -196,6 +197,8 @@ __RETAINED_CODE void sys_watchdog_set_pos_val(uint16_t value);
  * sys_watchdog_get_val() with call to hw_watchdog_set_pos_val()
  */
 uint16_t sys_watchdog_get_val(void);
+
+//void get_suspected_task(struct task_info_t *task_info);
 
 #endif /* SYS_WATCHDOG_H_ */
 

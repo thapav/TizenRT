@@ -21,7 +21,7 @@
  ****************************************************************************/
 #include <stdio.h>
 
-void wakeup_from_deepsleep(unsigned long *exception_args)
-{
-	printf("Hi from deep sleep mode!!\n");
-}
+//void wakeup_from_deepsleep(unsigned long *exception_args)
+//{
+//	printf("Hi from deep sleep mode!!\n");
+//}

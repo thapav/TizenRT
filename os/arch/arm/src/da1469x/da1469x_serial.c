@@ -44,7 +44,7 @@
 #undef UART0_ASSIGNED
 #undef UART1_ASSIGNED
 #undef UART2_ASSIGNED
-
+#if 0
 /* Which UART with be ttyS0/console and which ttyS1? ttyS2 */
 
 /* First pick the console and ttys0. This could be any of UART0-2 */
@@ -567,17 +567,8 @@ void up_lowsetup(void)
  *   Provide priority, low-level access to support OS debug  writes
  *
  ****************************************************************************/
-
+#endif
 int up_putc(int ch)
 {
-	/* Check for LF */
-
-	if (ch == '\n') {
-		/* Add CR */
-
-		up_lowputc('\r');
-	}
-
-	up_lowputc(ch);
 	return ch;
 }

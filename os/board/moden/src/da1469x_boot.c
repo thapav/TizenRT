@@ -37,12 +37,14 @@
 #include "hw_clk.h"
 #include "sec_mpu.h"
 #include "sys_watchdog.h"
+#include "../da1469x/sys_power_mgr.h"
+#include "../da1469x/hw_gpio.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-extern void retarget_init(void);
+//extern void retarget_init(void);
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -60,20 +62,21 @@ extern void retarget_init(void);
  *   may be used, for example, to initialize board-specific device drivers.
  *
  ****************************************************************************/
+
 void board_initialize(void)
 {
 
 #if defined CONFIG_RETARGET
-	extern void retarget_init(void);
+	//extern void retarget_init(void);
 #endif
 	/* Prepare clocks. Note: cm_cpu_clk_set() and cm_sys_clk_set() can be called only from a
 	 * task since they will suspend the task until the XTAL16M has settled and, maybe, the PLL
 	 * is locked.
 	 */
-	cm_sys_clk_init(sysclk_XTAL32M);
-	cm_apb_set_clock_divider(apb_div1);
-	cm_ahb_set_clock_divider(ahb_div1);
-	cm_lp_clk_init();
+	//cm_sys_clk_init(sysclk_XTAL32M);
+	//cm_apb_set_clock_divider(apb_div1);
+	//cm_ahb_set_clock_divider(ahb_div1);
+	//cm_lp_clk_init();		//temporarily disabled
 
 //	cm_sys_clk_set(sysclk_PLL96);
 
@@ -84,8 +87,12 @@ void board_initialize(void)
 	 * Initialize platform watchdog
 	 */
 //	sys_watchdog_init();
+
+    /* Prepare the hardware to run this demo. */
+
 #if defined CONFIG_RETARGET
-	retarget_init();
+	//retarget_init();
+	//lldbg("ABCDEF\n");
 #endif
 
 }

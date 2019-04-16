@@ -219,11 +219,11 @@ void up_initialize(void)
 #endif							/* CONFIG_NFILE_DESCRIPTORS */
 
 	/* Initialize the serial device driver */
-
+#if 0	// NITS
 #ifdef USE_SERIALDRIVER
 	up_serialinit();
 #endif
-
+#endif
 	/* Initialize the console device driver (if it is other than the standard
 	 * serial driver).
 	 */

@@ -14,7 +14,7 @@
 #ifndef CUSTOM_CONFIG_QSPI_H_
 #define CUSTOM_CONFIG_QSPI_H_
 
-#define SEC_MODEN
+//#define SEC_MODEN
 
 #include "sw_version.h"
 #include "bsp_definitions.h"
@@ -73,7 +73,8 @@
 #define CONFIG_USE_SEC_PM
 #define CONFIG_USE_SEC_FAULT
 #define CONFIG_USE_SEC_MPU
-#define dg_configUSE_HW_MPU                     ( 1 )
+//#define dg_configUSE_HW_MPU                     ( 1 )
+#define dg_configUSE_HW_MPU                     ( 0 )
 
 // Suota function is supported if this config is set 1
 #define dg_configSUOTA_SUPPORT                  ( 1 )
@@ -112,9 +113,12 @@
 #error "Cannot have the RAM DUMP enabled for FAULTS, without external RAM and enabled the QSPI2 controller"
 #endif
 
-#define dg_configUSE_USB                        ( 1 )
-#define dg_configUSE_USB_CHARGER                ( 1 )
-#define dg_configALLOW_CHARGING_NOT_ENUM        ( 1 )
+//#define dg_configUSE_USB                        ( 1 )
+//#define dg_configUSE_USB_CHARGER                ( 1 )
+//#define dg_configALLOW_CHARGING_NOT_ENUM        ( 1 )
+#define dg_configUSE_USB                        (0  )
+#define dg_configUSE_USB_CHARGER                (0  )
+#define dg_configALLOW_CHARGING_NOT_ENUM        (0  )
 
 #define dg_configUSE_ProDK                      ( 1 )
 
@@ -123,10 +127,14 @@
 #define dg_configTESTMODE_MEASURE_SLEEP_CURRENT ( 0 )
 
 /* CHARGER */
-#define dg_configUSE_HW_CHARGER                 ( 1 )
-#define dg_configUSE_HW_USB_CHARGER             ( 1 )
-#define dg_configUSE_SYS_CHARGER                ( 1 )
-#define dg_configUSE_SYS_USB                    ( 1 )
+//#define dg_configUSE_HW_CHARGER                 ( 1 )
+//#define dg_configUSE_HW_USB_CHARGER             ( 1 )
+//#define dg_configUSE_SYS_CHARGER                ( 1 )
+//#define dg_configUSE_SYS_USB                    ( 1 )
+#define dg_configUSE_HW_CHARGER                 (0  )
+#define dg_configUSE_HW_USB_CHARGER             (0  )
+#define dg_configUSE_SYS_CHARGER                (0  )
+#define dg_configUSE_SYS_USB                    (0  )
 #define dg_configUSE_USB_ENUMERATION            ( 0 )
 #define dg_configCHG_TEMP_CONTROL               ( 0 )
 #define dg_configCHARGER_TEST_ONLY              ( 0 ) // INCLUDE_SCREEN_TIMEOUT off
@@ -136,13 +144,15 @@
 #define INCLUDE_BATTERY_LEVEL                   ( 1 )
 
 /* MOTOR */
-#define INCLUDE_MOTOR_ENABLE                    ( 1 )
+//#define INCLUDE_MOTOR_ENABLE                    ( 1 )
 
 /*************************************************************************************************\
  * FreeRTOS configuration
  */
-#define OS_FREERTOS                              /* Define this to use FreeRTOS */
-#define configTOTAL_HEAP_SIZE                    ( 76 * 1024 )   /* 96KB FreeRTOS Total Heap Size */
+ #define OS_BAREMETAL
+#define OS_TIZENRT                              /* Define this to use FreeRTOS */
+//#define OS_FREERTOS                              /* Define this to use FreeRTOS */
+//#define configTOTAL_HEAP_SIZE                    ( 76 * 1024 )   /* 96KB FreeRTOS Total Heap Size */
 
 /*************************************************************************************************\
  * PSRAM Heap Configuration
@@ -205,7 +215,9 @@
 /*************************************************************************************************\
  * FreeRTOS specific config
  */
-#define OS_FREERTOS                              /* Define this to use FreeRTOS */
+ #define OS_BAREMETAL
+ #define OS_TIZENRT
+//#define OS_FREERTOS                              /* Define this to use FreeRTOS */
 
 #if SUOTA_PSM
         #define SUOTA_HEAP_OVERHEAD     (8192)// SUOTA_HEAP_OVERHEAD is changed from 3200 to 8192 for increasing SUOTA speed
@@ -400,7 +412,7 @@
 #endif
 
 
-#define SAP_ENABLED 1
+#define SAP_ENABLED 0
 
 // Optimizations:
 #define dg_configBLE_STACK_DB_HEAP_SIZE         ( 5120 )  // 5KB

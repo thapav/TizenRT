@@ -282,7 +282,7 @@ void os_start(void)
 {
 	int i;
 
-	slldbg("Entry\n");
+	lldbg("Entry\n");
 
 	/* Initialize RTOS Data ************************************************** */
 	/* Initialize all task lists */
@@ -428,14 +428,14 @@ void os_start(void)
 #endif
 
 	/* Initialize the interrupt handling subsystem (if included) */
-
+#if 0	// NITS
 #ifdef CONFIG_HAVE_WEAKFUNCTIONS
 	if (irq_initialize != NULL)
 #endif
 	{
 		irq_initialize();
 	}
-
+#endif
 	/* Initialize the watchdog facility (if included in the link) */
 
 #ifdef CONFIG_HAVE_WEAKFUNCTIONS

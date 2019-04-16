@@ -152,6 +152,9 @@ __RETAINED_CODE void NMI_HandlerC(unsigned long *exception_args);
 
 void NMI_HandlerC(unsigned long *exception_args)
 {
+#if 1
+	return;
+#else
 #if (dg_configFAULT_DEBUG_DUMP==1)
 	save_reg(&ss_fault_register, exception_args);
     printf("\r\n!!!NMI_HandlerC!!!\r\n");
@@ -219,6 +222,7 @@ void NMI_HandlerC(unsigned long *exception_args)
 #endif
         hw_watchdog_handle_int(exception_args);
     }
+#endif
 }
 
 /**
