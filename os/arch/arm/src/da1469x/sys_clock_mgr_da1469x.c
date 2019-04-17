@@ -48,7 +48,6 @@
 #endif
 
 #ifdef OS_FREERTOS
-#include "osal.h"
 #include "sdk_list.h"
 
 #include "hw_qspi.h"
@@ -59,7 +58,7 @@
 #endif
 
 #ifdef CONFIG_USE_BLE
-#include "ad_ble.h"
+//#include "ad_ble.h"
 #endif
 
 #define XTAL32_AVAILABLE                1       // XTAL32M availability
@@ -267,7 +266,7 @@ static void switch_to_rc32(void)
 static void switch_to_xtal32m(void)
 {
         if (hw_clk_get_sysclk() != SYS_CLK_IS_XTAL32M) {
-                ASSERT_WARNING(hw_clk_is_xtalm_started());
+//                ASSERT_WARNING(hw_clk_is_xtalm_started());
 
                 hw_clk_set_sysclk(SYS_CLK_IS_XTAL32M);          // Set XTAL32 as sys_clk
                 if (sysclk > sysclk_XTAL32M) {                 // slow --> fast clock switch
@@ -295,7 +294,7 @@ static void disable_pll(void)
 #else
                         HW_PMU_ERROR_CODE error_code;
                         error_code = hw_pmu_1v2_onwakeup_set_voltage(vdd_voltage);
-                        ASSERT_WARNING(error_code == HW_PMU_ERROR_NOERROR);
+//                        ASSERT_WARNING(error_code == HW_PMU_ERROR_NOERROR);
 #endif
                 }
                 pll_locked = false;
@@ -314,7 +313,7 @@ static void enable_pll(void)
                 pll_locked = true;
         }
         else if (hw_clk_is_enabled_sysclk(SYS_CLK_IS_PLL) == false) {
-                ASSERT_WARNING(!pll_locked);
+                //ASSERT_WARNING(!pll_locked);
 
 #if (dg_configPMU_ADAPTER == 1)
                 ad_pmu_1v2_force_voltage(HW_PMU_1V2_VOLTAGE_1V2);
@@ -323,15 +322,15 @@ static void enable_pll(void)
                 hw_pmu_get_1v2_active_config(&rail_config);
 
                 // PLL cannot be powered by retention LDO
-                ASSERT_WARNING(rail_config.current == HW_PMU_1V2_MAX_LOAD_50 ||
-                        rail_config.src_type == HW_PMU_SRC_TYPE_DCDC_HIGH_EFFICIENCY);
+                //ASSERT_WARNING(rail_config.current == HW_PMU_1V2_MAX_LOAD_50 ||
+//                        rail_config.src_type == HW_PMU_SRC_TYPE_DCDC_HIGH_EFFICIENCY);
 
                 vdd_voltage = rail_config.voltage;
                 if (vdd_voltage != HW_PMU_1V2_VOLTAGE_1V2) {
                         // VDD voltage must be set to 1.2V prior to switching clock to PLL
                         HW_PMU_ERROR_CODE error_code;
                         error_code = hw_pmu_1v2_onwakeup_set_voltage(HW_PMU_1V2_VOLTAGE_1V2);
-                        ASSERT_WARNING(error_code == HW_PMU_ERROR_NOERROR);
+                        //ASSERT_WARNING(error_code == HW_PMU_ERROR_NOERROR);
                 }
 #endif
                 hw_clk_enable_sysclk(SYS_CLK_IS_PLL);           // Turn on PLL
@@ -349,7 +348,7 @@ static void switch_to_pll(void)
         if (hw_clk_get_sysclk() == SYS_CLK_IS_XTAL32M) {
                 // Slow --> fast clock switch
                 adjust_otp_access_timings();                         // Adjust OTP timings
-                qspi_automode_sys_clock_cfg(sysclk_PLL96);
+                //qspi_automode_sys_clock_cfg(sysclk_PLL96);
 
                 /*
                  * If ultra-fast wake-up mode is used, make sure that the startup state
@@ -565,7 +564,7 @@ void cm_enable_xtalm(void)
                                                                                   HW_PDC_LUT_ENTRY_EN_XTAL ) );
                 }
 
-                ASSERT_WARNING(xtal32_pdc_entry != HW_PDC_INVALID_LUT_INDEX);
+                //ASSERT_WARNING(xtal32_pdc_entry != HW_PDC_INVALID_LUT_INDEX);
 
                 // XTAL32M may not been started. Use PDC to start it.
                 hw_pdc_set_pending(xtal32_pdc_entry);
@@ -626,7 +625,7 @@ void cm_enable_xtalm(void)
                         DCDC->DCDC_V14_REG = value;
 
                         // Check if XTAL32M is started
-                        ASSERT_WARNING(hw_clk_is_enabled_sysclk(SYS_CLK_IS_XTAL32M));
+                        //ASSERT_WARNING(hw_clk_is_enabled_sysclk(SYS_CLK_IS_XTAL32M));
                 }
 #endif /*dg_configENABLE_DA1469x_AA_SUPPORT */
         }
@@ -649,7 +648,7 @@ void cm_clk_init_low_level_internal(void)
         hw_clk_enable_lpclk(LP_CLK_IS_RC32K);
         hw_clk_set_lpclk(LP_CLK_IS_RC32K);
 
-        ASSERT_WARNING(REG_GETF(CRG_TOP, SYS_STAT_REG, TIM_IS_UP));
+        //ASSERT_WARNING(REG_GETF(CRG_TOP, SYS_STAT_REG, TIM_IS_UP));
 
         hw_clk_xtalm_configure();
         if (dg_configXTAL32M_SETTLE_TIME_IN_USEC != 0) {
@@ -678,7 +677,7 @@ void cm_clk_init_low_level_internal(void)
                 hw_clk_disable_lpclk(LP_CLK_IS_RCX);            // Disable RCX
                 // LP clock cannot be set to XTAL32K here. XTAL32K needs a few seconds to settle after power up.
         } else {
-                ASSERT_WARNING(0);                              // Should not be here!
+                //ASSERT_WARNING(0);                              // Should not be here!
         }
 
 #if dg_configUSE_HW_PDC
@@ -715,14 +714,16 @@ void cm_rcx_calibrate(void)
 
 void cm_sys_clk_init(sys_clk_t type)
 {
+#if 0
 #ifdef OS_FREERTOS
-        ASSERT_WARNING(xSemaphoreCM == NULL);               // Called only once!
+        //ASSERT_WARNING(xSemaphoreCM == NULL);               // Called only once!
 
         xSemaphoreCM = xSemaphoreCreateMutex();             // Create Mutex
-        ASSERT_WARNING(xSemaphoreCM != NULL);
+        //ASSERT_WARNING(xSemaphoreCM != NULL);
 
         xEventGroupCM_xtal = OS_EVENT_GROUP_CREATE();       // Create Event Group
-        ASSERT_WARNING(xEventGroupCM_xtal != NULL);
+        //ASSERT_WARNING(xEventGroupCM_xtal != NULL);
+#endif
 #endif
         ahbclk = cm_ahb_get_clock_divider();
         apbclk = cm_apb_get_clock_divider();
@@ -730,7 +731,7 @@ void cm_sys_clk_init(sys_clk_t type)
         sys_clk_next = type;
         ahb_clk_next = ahbclk;
 
-        ASSERT_WARNING(type != sysclk_LP);                  // Not Applicable!
+        //ASSERT_WARNING(type != sysclk_LP);                  // Not Applicable!
 
         HW_PMU_1V2_RAIL_CONFIG rail_config;
         hw_pmu_get_1v2_active_config(&rail_config);
@@ -823,7 +824,7 @@ cm_sys_clk_set_status_t cm_sys_clk_set(sys_clk_t type)
 {
         cm_sys_clk_set_status_t ret;
 
-        ASSERT_WARNING(type != sysclk_LP);                      // Not Applicable!
+        //ASSERT_WARNING(type != sysclk_LP);                      // Not Applicable!
 
 
         if (type == sysclk_PLL96 && cm_ahb_get_clock_divider() != ahb_div1) {
@@ -913,7 +914,7 @@ cm_sys_clk_set_status_t cm_sys_clk_set(sys_clk_t type)
 #endif
                 }
                 else if (pll_count > 0) {
-                        ASSERT_WARNING(pll_count == 1);
+                        //ASSERT_WARNING(pll_count == 1);
 #ifdef OS_FREERTOS
                         /* The current task must be is in the list. */
                         elem = list_find(&clk_mgr_task_list, sys_clk_mgr_match_task, task);
@@ -922,7 +923,7 @@ cm_sys_clk_set_status_t cm_sys_clk_set(sys_clk_t type)
                                 elem->task_pll_count--;
                         } else {
                                 /* Remove the task element and decrease global pll counter */
-                                ASSERT_WARNING(elem->task_pll_count == 1);
+                                //ASSERT_WARNING(elem->task_pll_count == 1);
                                 elem = list_unlink(&clk_mgr_task_list, sys_clk_mgr_match_task,
                                                    task);
                                 OS_FREE(elem);
@@ -1092,7 +1093,7 @@ static cm_sys_clk_set_status_t sys_clk_set(sys_clk_t type)
                                 switch_to_xtal32m();
                                 break;
                         default:
-                                ASSERT_WARNING(0);
+                                //ASSERT_WARNING(0);
                                 break;
                         }
                         sysclk = sys_clk_next;
@@ -1106,9 +1107,9 @@ static cm_sys_clk_set_status_t sys_clk_set(sys_clk_t type)
 
 void cm_apb_set_clock_divider(apb_div_t div)
 {
-        CM_EVENT_WAIT();
+//        CM_EVENT_WAIT();
         apb_set_clock_divider(div);
-        CM_EVENT_SIGNAL();
+//        CM_EVENT_SIGNAL();
 }
 
 static void apb_set_clock_divider(apb_div_t div)
@@ -1119,9 +1120,9 @@ static void apb_set_clock_divider(apb_div_t div)
 
 bool cm_ahb_set_clock_divider(ahb_div_t div)
 {
-        CM_EVENT_WAIT();
+//        CM_EVENT_WAIT();
         bool ret = ahb_set_clock_divider(div);
-        CM_EVENT_SIGNAL();
+//        CM_EVENT_SIGNAL();
 
         return ret;
 }
@@ -1211,7 +1212,7 @@ bool cm_cpu_clk_set(cpu_clk_t clk)
                 ret = ahb_set_clock_divider(new_ahbclk);
 
                 if (ret == false) {
-                        ASSERT_WARNING(old_sysclk != sysclk_LP);   // Not Applicable!
+                        //ASSERT_WARNING(old_sysclk != sysclk_LP);   // Not Applicable!
                         cm_sys_enable_xtalm(old_sysclk);
                         sys_clk_set(old_sysclk);                   // Restore previous setting
                 }
@@ -1230,8 +1231,8 @@ bool cm_cpu_clk_set(cpu_clk_t clk)
 
 void cm_cpu_clk_set_fromISR(sys_clk_t clk, ahb_div_t hdiv)
 {
-        ASSERT_WARNING(clk != sysclk_LP);               // Not Applicable!
-        ASSERT_WARNING(clk != sysclk_RC32);             // Not supported!
+        //ASSERT_WARNING(clk != sysclk_LP);               // Not Applicable!
+        //ASSERT_WARNING(clk != sysclk_RC32);             // Not supported!
 
         sysclk = clk;
         ahbclk = hdiv;
@@ -1265,7 +1266,7 @@ sys_clk_t cm_sys_clk_get_fromISR(void)
         case SYS_CLK_IS_PLL:
                 return sysclk_PLL96;
         default:
-                ASSERT_WARNING(0);
+                //ASSERT_WARNING(0);
                 return sysclk_RC32;
         }
 }
@@ -1322,7 +1323,7 @@ void XTAL32M_Ready_Handler(void)
 
         DBG_SET_HIGH(CLK_MGR_USE_TIMING_DEBUG, CLKDBG_XTAL32M_READY);
 
-        ASSERT_WARNING(hw_clk_is_xtalm_started());
+        //ASSERT_WARNING(hw_clk_is_xtalm_started());
 
         if (dg_configXTAL32M_SETTLE_TIME_IN_USEC == 0) {
                 if (hw_sys_hw_bsr_try_lock(HW_BSR_MASTER_SYSCPU, HW_BSR_WAKEUP_CONFIG_POS)) {
@@ -1374,7 +1375,7 @@ void PLL_Lock_Handler(void)
 {
         SEGGER_SYSTEMVIEW_ISR_ENTER();
 
-        ASSERT_WARNING(hw_clk_is_pll_locked());
+        //ASSERT_WARNING(hw_clk_is_pll_locked());
 
         pll_locked = true;
 
@@ -1401,7 +1402,7 @@ void PLL_Lock_Handler(void)
 void cm_wait_xtalm_ready(void)
 {
 #ifdef OS_FREERTOS
-        ASSERT_WARNING(xEventGroupCM_xtal != NULL);
+        //ASSERT_WARNING(xEventGroupCM_xtal != NULL);
 
         if (!xtal32m_settled) {
                 // Do not go to sleep while waiting for XTAL32M to settle.
@@ -1417,7 +1418,7 @@ void cm_wait_xtalm_ready(void)
                                 OS_EVENT_GROUP_FOREVER);        // Block forever
 
                 /* If we get here, XTAL32 must have settled */
-                ASSERT_WARNING(xtal32m_settled == true);
+                //ASSERT_WARNING(xtal32m_settled == true);
 #ifdef CONFIG_USE_SEC_PM
                 pm_resume_sleep(pm_wc_clk);
 #else
@@ -1432,7 +1433,7 @@ void cm_wait_xtalm_ready(void)
 void cm_wait_pll_lock(void)
 {
 #ifdef OS_FREERTOS
-        ASSERT_WARNING(xEventGroupCM_xtal != NULL);
+        //ASSERT_WARNING(xEventGroupCM_xtal != NULL);
 
         if (!pll_locked) {
                 // Do not go to sleep while waiting for PLL to lock.
@@ -1448,7 +1449,7 @@ void cm_wait_pll_lock(void)
                                 OS_EVENT_GROUP_FOREVER);        // Block forever
 
                 /* If we get here, PLL must be locked */
-                ASSERT_WARNING(pll_locked == true);
+                //ASSERT_WARNING(pll_locked == true);
 #ifdef CONFIG_USE_SEC_PM
                 pm_resume_sleep(pm_wc_clk);
 #else
@@ -1503,7 +1504,7 @@ bool cm_calibrate_rcx_update(void)
 uint32_t cm_rcx_us_2_lpcycles(uint32_t usec)
 {
         /* Can only convert up to 4095 usec */
-        ASSERT_WARNING(usec < 4096);
+        //ASSERT_WARNING(usec < 4096);
 
         return ((usec << 20) / rcx_clock_period) + 1;
 }
@@ -1575,7 +1576,7 @@ static void lp_clk_timer_start(void)
 
 void cm_lp_clk_init(void)
 {
-        ASSERT_WARNING(xSemaphoreCM != NULL);
+       // ASSERT_WARNING(xSemaphoreCM != NULL);
 
         CM_EVENT_WAIT();
 
@@ -1615,21 +1616,21 @@ void cm_lp_clk_init(void)
 
 bool cm_lp_clk_is_avail(void)
 {
-        ASSERT_WARNING(xEventGroupCM_xtal != NULL);
+        //ASSERT_WARNING(xEventGroupCM_xtal != NULL);
 
         return (OS_EVENT_GROUP_GET_BITS(xEventGroupCM_xtal) & LP_CLK_AVAILABLE);
 }
 
 __RETAINED_CODE bool cm_lp_clk_is_avail_fromISR(void)
 {
-        ASSERT_WARNING(xEventGroupCM_xtal != NULL);
+        //ASSERT_WARNING(xEventGroupCM_xtal != NULL);
 
         return (OS_EVENT_GROUP_GET_BITS_FROM_ISR(xEventGroupCM_xtal) & LP_CLK_AVAILABLE);
 }
 
 void cm_wait_lp_clk_ready(void)
 {
-        ASSERT_WARNING(xEventGroupCM_xtal != NULL);
+        //ASSERT_WARNING(xEventGroupCM_xtal != NULL);
 
         OS_EVENT_GROUP_WAIT_BITS(xEventGroupCM_xtal,
                 LP_CLK_AVAILABLE,
@@ -1640,7 +1641,7 @@ void cm_wait_lp_clk_ready(void)
 
 void cm_lp_clk_wakeup(void)
 {
-        ASSERT_WARNING(xEventGroupCM_xtal != NULL);
+        //ASSERT_WARNING(xEventGroupCM_xtal != NULL);
 
         OS_EVENT_GROUP_CLEAR_BITS_FROM_ISR(xEventGroupCM_xtal, LP_CLK_AVAILABLE);
 }
@@ -1820,7 +1821,7 @@ void cm_register_xtal_ready_callback(void (*cb)(void))
 void cm_halt_until_pll_locked(void)
 {
 #ifdef OS_FREERTOS
-        ASSERT_WARNING(xEventGroupCM_xtal != NULL);
+        //ASSERT_WARNING(xEventGroupCM_xtal != NULL);
 
         while (!pll_locked) {
                 GLOBAL_INT_DISABLE();
@@ -1972,7 +1973,7 @@ __RETAINED_CODE void cm_sys_clk_sleep(bool entering_sleep)
 
 void cm_sys_restore_sysclk(sys_clk_t prev_sysclk)
 {
-        ASSERT_ERROR(prev_sysclk == sysclk_PLL96);
+        ASSERT(prev_sysclk == sysclk_PLL96);
 
         sys_enable_pll();
         sys_clk_next = prev_sysclk;

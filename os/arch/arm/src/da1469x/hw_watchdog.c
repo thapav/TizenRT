@@ -24,6 +24,7 @@
 
 #include "sw_version.h"
 #include "hw_watchdog.h"
+#include "sys_watchdog.h"
 #include "hw_sys.h"
 
 #if defined(CONFIG_WD_MONITOR)
@@ -163,9 +164,9 @@ void NMI_HandlerC(unsigned long *exception_args)
             int_handler(exception_args);
     } else {
 #if (dg_configFAULT_DEBUG_DUMP==1)
-        OS_TASK current_task;
-        current_task = OS_GET_CURRENT_TASK();
-        char cnt=0;
+//        OS_TASK current_task;
+//        current_task = OS_GET_CURRENT_TASK();
+//        char cnt=0;
 
     	char tasks2ble[128] = {0};
     	unsigned int nr = 0, nsize = sizeof(tasks2ble);
@@ -201,7 +202,7 @@ void NMI_HandlerC(unsigned long *exception_args)
         memset(sys_fault_header.task_info.task_name,0, sizeof(sys_fault_header.task_info.task_name));
         get_suspected_task(&sys_fault_header.task_info);
         for(int i=0; i < sys_fault_header.task_info.cnt; i++) {
-                printf_debug_info(1,"[%s %05d] task[%d] : %s\r\n",__func__,__LINE__,i, sys_fault_header.task_info.task_name[i]);
+                lldbg("[%s %05d] task[%d] : %s\r\n",__func__,__LINE__,i, sys_fault_header.task_info.task_name[i]);
                 nr += snprintf(tasks2ble + nr, nsize - nr, "%s ", sys_fault_header.task_info.task_name[i]);
         }
 
@@ -211,9 +212,9 @@ void NMI_HandlerC(unsigned long *exception_args)
                     ASSERT_WARNING(0); //the reserved size for the Registers dump is not big enough
         }
         FAULT_ram_addr = FAULT_get_ram_addr();
-        FAULT_memcpy32(FAULT_ram_addr, (void*)RAM_DUMP_ADDR, FAULT_RAM_SIZE/4);
-        FAULT_memcpy32(CONFIG_PSRAM_GDI_BACKUP_ADDR, (void*)CONFIG_PSRAM_DUMP_BASE, CONFIG_PSRAM_DUMP_SIZE/4);
-        FAULT_memcpy32(CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
+        FAULT_memcpy32((void*)FAULT_ram_addr, (void*)RAM_DUMP_ADDR, FAULT_RAM_SIZE/4);
+        FAULT_memcpy32((void*)CONFIG_PSRAM_GDI_BACKUP_ADDR, (void*)CONFIG_PSRAM_DUMP_BASE, CONFIG_PSRAM_DUMP_SIZE/4);
+        FAULT_memcpy32((void*)CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
 
 #endif
         hw_watchdog_handle_int(exception_args);

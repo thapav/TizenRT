@@ -30,6 +30,8 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+#define UART_IS_CONFIGURED_FLAG        (0x15)
+
 /*
  * If we are not using the serial driver for the console, then we
  * still must provide some minimal implementation of up_putc.
@@ -112,8 +114,8 @@ static uart_config uart_init = {
 	.auto_flow_control      = 0,
 	.use_dma                = 0,
 	.use_fifo               = 1,
-	.tx_dma_channel         = 0,
-	.rx_dma_channel         = 0,
+	.tx_dma_channel         = HW_DMA_CHANNEL_1,
+	.rx_dma_channel         = HW_DMA_CHANNEL_0,
 };
 
 /****************************************************************************
@@ -124,7 +126,7 @@ static int da1469x_up_setup(struct uart_dev_s *dev);
 static void da1469x_up_shutdown(struct uart_dev_s *dev);
 static int da1469x_up_attach(struct uart_dev_s *dev);
 static void da1469x_up_detach(struct uart_dev_s *dev);
-static int da1469x_up_interrupt(int irq, void *context, FAR void *arg);
+//static int da1469x_up_interrupt(int irq, void *context, FAR void *arg);
 static int da1469x_up_ioctl(struct file *filep, int cmd, unsigned long arg);
 static int da1469x_up_receive(struct uart_dev_s *dev, uint32_t *status);
 static void da1469x_up_rxint(struct uart_dev_s *dev, bool enable);
@@ -332,7 +334,7 @@ static int da1469x_up_attach(struct uart_dev_s *dev)
 {
 // TO DO
 	uart_config *priv = (uart_config *)dev->priv;
-	int ret;
+	int ret = 0;
 	DEBUGASSERT(priv);
 	/* Attach and enable the IRQ */
 
@@ -373,11 +375,11 @@ static void da1469x_up_detach(struct uart_dev_s *dev)
  *   must be able to map the 'irq' number into the approprite
  *   uart_dev_s structure in order to call these functions.
  *
- ****************************************************************************/
 static int da1469x_up_interrupt(int irq, void *context, FAR void *arg)
 {
 	return OK;
 }
+ ****************************************************************************/
 
 /****************************************************************************
  * Name: up_ioctl
@@ -556,6 +558,7 @@ void up_lowputc(char ch)
 void up_lowsetup(void)
 {
 	hw_uart_init(DA1469X_CONSOLE_UART_PORT, &uart_init);
+//	hw_uart_write_scr(DA1469X_CONSOLE_UART_PORT, UART_IS_CONFIGURED_FLAG);
 }
 /****************************************************************************
  * Name: up_putc

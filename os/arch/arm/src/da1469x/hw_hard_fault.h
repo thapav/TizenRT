@@ -30,7 +30,7 @@
 #include "sdk_defs.h"
 
 #define HARDFAULT_MAGIC_NUMBER          0xBADC0FFE
-
+#define MAX_TASK_NAME_LEN               16
 /**
  * \brief Holds the stack contents when a hard-fault occurs.
  *
@@ -55,7 +55,7 @@ extern volatile uint32_t hardfault_event_data[9];
 
 struct task_info_t {
 	unsigned char cnt;
-	char task_name[MAX_SUSPECTED_TASK_CNT][configMAX_TASK_NAME_LEN+1];
+	char task_name[MAX_SUSPECTED_TASK_CNT][MAX_TASK_NAME_LEN+1];
 };
 
 typedef enum __FAULT_type {

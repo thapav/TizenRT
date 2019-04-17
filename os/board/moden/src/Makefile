@@ -41,8 +41,9 @@ ifeq ($(WINTOOL),y)
   CFLAGS	+= -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}" \
 		   -I "${shell cygpath -w $(ARCH_SRCDIR)/common}" \
 		   -I "${shell cygpath -w $(ARCH_SRCDIR)/armv8-m}" \
+		   -I "${shell cygpath -w $(ARCH_SRCDIR)/chip}"
 else
-  CFLAGS	+= -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/armv8-m
+  CFLAGS	+= -I$(ARCH_SRCDIR)/chip -I$(ARCH_SRCDIR)/common -I$(ARCH_SRCDIR)/armv8-m -I$(ARCH_SRCDIR)/chip
 endif
 
 all: libboard$(LIBEXT)

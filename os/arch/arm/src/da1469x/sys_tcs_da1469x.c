@@ -21,17 +21,13 @@
 ****************************************************************************************
 */
 
-#include "sys_tcs.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
+#include "sys_tcs.h"
 #if (dg_configUSE_HW_GPADC == 1)
 #include "hw_gpadc.h"
-#endif
-
-#ifndef OS_BAREMETAL
-#include "osal.h"
 #endif
 
 #define CS_START_CMD    0xA5A5A5A5
@@ -221,9 +217,9 @@ void sys_tcs_get_trim_values_from_cs(void)
 
 #ifndef OS_BAREMETAL
         if (tcs_data) {
-                OS_FREE(tcs_data);
+               free(tcs_data);
         }
-        tcs_data = (uint32_t *) OS_MALLOC(size + 4);
+        tcs_data = (uint32_t *) malloc(size + 4);
 #else
         if (tcs_data) {
                 free(tcs_data);

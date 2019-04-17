@@ -90,7 +90,6 @@ endif
 CHIP_CSRCS  += system_da1469x.c
 #CHIP_CSRCS  += main_init.c
 #CHIP_CSRCS  += config.c
-CHIP_CSRCS  += sys_clock_mgr_da1469x.c
 CHIP_CSRCS  += hw_watchdog.c
 #CHIP_CSRCS  += sys_watchdog.c
 #CHIP_CSRCS  += hw_aes_hash.c
@@ -117,7 +116,7 @@ CHIP_CSRCS  += hw_qspi.c
 #CHIP_CSRCS  += hw_spi.c
 CHIP_CSRCS  += hw_spi.c
 CHIP_CSRCS  += hw_timer.c
-CHIP_CSRCS  += hw_rtc.c
+#CHIP_CSRCS  += hw_rtc.c
 CHIP_CSRCS  += hw_trng.c
 CHIP_CSRCS  += hw_uart.c
 #CHIP_CSRCS  += hw_usb_da1469x.c
@@ -127,11 +126,15 @@ CHIP_CSRCS  += hw_cache.c
 CHIP_CSRCS  += hw_pdc.c
 CHIP_CSRCS  += hw_memctrl.c
 CHIP_CSRCS  += sys_tcs_da1469x.c
+#CHIP_CSRCS  += sys_clock_mgr_da1469x.c
+
 CHIP_CSRCS  += da1469x_up_idle.c
 CHIP_CSRCS  += da1469x_irq.c
 CHIP_CSRCS  += da1469x_serial.c
 CHIP_CSRCS  += da1469x_timerisr.c
+
 CHIP_CSRCS  += hw_wakeup_from_deepsleep.c
+#CHIP_CSRCS  += qspi_automode.c
 
 # ??????????????????????????????????????
 #CHIP_ASRC  += deepsleep.S

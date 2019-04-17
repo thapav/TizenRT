@@ -28,15 +28,15 @@
 #elif defined(USE_PARTITION_TABLE_16MB)
 #include <16M/partition_table.h>
 #elif defined(USE_PARTITION_TABLE_32MB)
-#include <32M/partition_table.h>
+#include <32M_partition_table.h>
 #elif defined(USE_PARTITION_TABLE_16MB_WITH_SUOTA)
 #include <16M/suota/partition_table.h>
 #elif defined(USE_PARTITION_TABLE_32MB_WITH_SUOTA)
-#include <32M/suota/partition_table.h>
+#include <32M_partition_table.h>
 #elif (dg_configENABLE_DA1469x_AA_SUPPORT == 1)
 #include <1M/partition_table.h>
 #else
-#include <4M_partition_table.h>
+#include <4M/partition_table.h>
 #endif
 
 /*

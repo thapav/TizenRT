@@ -23,6 +23,7 @@
 #ifndef HW_PDC_H_
 #define HW_PDC_H_
 
+#include <assert.h>
 #include "sdk_defs.h"
 
 #define HW_PDC_LUT_SIZE                 (16)
@@ -139,7 +140,7 @@ typedef enum {
  */
 __STATIC_INLINE uint32_t hw_pdc_read_entry(uint32_t idx)
 {
-        ASSERT_ERROR(idx < HW_PDC_LUT_SIZE);
+        ASSERT(idx < HW_PDC_LUT_SIZE);
 
         return *(&PDC->PDC_CTRL0_REG + idx);
 }
@@ -153,7 +154,7 @@ __STATIC_INLINE uint32_t hw_pdc_read_entry(uint32_t idx)
  */
 __STATIC_INLINE void hw_pdc_write_entry(uint32_t idx, uint32_t value)
 {
-        ASSERT_ERROR(idx < HW_PDC_LUT_SIZE);
+        ASSERT(idx < HW_PDC_LUT_SIZE);
 
         *(&PDC->PDC_CTRL0_REG + idx) = value;
 }
@@ -220,7 +221,7 @@ __STATIC_INLINE uint32_t hw_pdc_get_pending_snc(void)
  */
 __STATIC_INLINE void hw_pdc_acknowledge(uint32_t idx)
 {
-        ASSERT_ERROR(idx < HW_PDC_LUT_SIZE);
+        ASSERT(idx < HW_PDC_LUT_SIZE);
 
         PDC->PDC_ACKNOWLEDGE_REG= idx;
 }
@@ -232,7 +233,7 @@ __STATIC_INLINE void hw_pdc_acknowledge(uint32_t idx)
  */
 __STATIC_INLINE void hw_pdc_set_pending(uint32_t idx)
 {
-        ASSERT_ERROR(idx < HW_PDC_LUT_SIZE);
+        ASSERT(idx < HW_PDC_LUT_SIZE);
 
         PDC->PDC_SET_PENDING_REG = idx;
 }
@@ -246,7 +247,7 @@ __STATIC_INLINE bool hw_pdc_is_pending(uint32_t idx) __attribute__((always_inlin
 
 __STATIC_INLINE bool hw_pdc_is_pending(uint32_t idx)
 {
-        ASSERT_ERROR(idx < HW_PDC_LUT_SIZE);
+        ASSERT(idx < HW_PDC_LUT_SIZE);
 
         return !!(PDC->PDC_PENDING_REG & (1 << idx));
 }

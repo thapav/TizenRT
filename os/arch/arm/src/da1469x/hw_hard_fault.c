@@ -20,8 +20,11 @@
  *
  ****************************************************************************************
  */
+
+#include <debug.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "sched/sched.h"
 
 #include "sdk_defs.h"
 #include "hw_hard_fault.h"
@@ -391,17 +394,17 @@ void HardFault_HandlerC(unsigned long *hardfault_args)
         sys_fault_header.hard_fault_args.Reg_BFAR = (*((volatile unsigned long *)(0xE000ED38)));    // BFAR
 
         // Obtain the handle of a task from its name.
-        OS_TASK current_task;
-        current_task = OS_GET_CURRENT_TASK();
+	struct tcb_s *rtcb;
+	rtcb = this_task();
         sys_fault_header.task_info.cnt = 1;
-        memcpy(sys_fault_header.task_info.task_name[0], pcTaskGetName(current_task), configMAX_TASK_NAME_LEN);
-        sys_fault_header.task_info.task_name[0][configMAX_TASK_NAME_LEN]='\0';
+        memcpy(sys_fault_header.task_info.task_name[0], rtcb->start, MAX_TASK_NAME_LEN);
+        sys_fault_header.task_info.task_name[0][MAX_TASK_NAME_LEN]='\0';
 
         // display summarized information
-        printf_debug_info(1,"Fault Type     : Hard Fault\r\n");
-        printf_debug_info(1,"Foreground Task: %s\r\n",sys_fault_header.task_info.task_name[0]);
-		sec_fault_report_fault_info(hardfault_args,0);
-        vTaskGetCallStack( current_task, 0 ); // for print current task call stack;
+        lldbg("Fault Type     : Hard Fault\r\n");
+        lldbg("Foreground Task: %s\r\n",sys_fault_header.task_info.task_name[0]);
+//	sec_fault_report_fault_info(hardfault_args,0);
+//      vTaskGetCallStack( current_task, 0 ); // for print current task call stack;
 
         FAULT_memcpy(FAULT_header_addr, (void*)&sys_fault_header, sizeof(sys_fault_header));
         FAULT_regs_addr = FAULT_get_regs_addr();
@@ -409,9 +412,9 @@ void HardFault_HandlerC(unsigned long *hardfault_args)
                 ASSERT_WARNING(0); //the reserved size for the Registers dump is not big enough
         }
         FAULT_ram_addr = FAULT_get_ram_addr();
-        FAULT_memcpy32(FAULT_ram_addr, (void*)RAM_DUMP_ADDR, FAULT_RAM_SIZE/4);
-        FAULT_memcpy32(CONFIG_PSRAM_GDI_BACKUP_ADDR, (void*)CONFIG_PSRAM_DUMP_BASE, CONFIG_PSRAM_DUMP_SIZE/4);
-        FAULT_memcpy32(CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
+        FAULT_memcpy32((void*)FAULT_ram_addr, (void*)RAM_DUMP_ADDR, FAULT_RAM_SIZE/4);
+        FAULT_memcpy32((void*)CONFIG_PSRAM_GDI_BACKUP_ADDR, (void*)CONFIG_PSRAM_DUMP_BASE, CONFIG_PSRAM_DUMP_SIZE/4);
+        FAULT_memcpy32((void*)CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
 
 #endif
 
@@ -497,7 +500,7 @@ void MemManage_HandlerC(unsigned long *fault_args, unsigned int exc)
         }
 
 #if (dg_configFAULT_DEBUG_DUMP==1)
-        sec_mpu_enable(0, 0);
+//      sec_mpu_enable(0, 0);
         FAULT_header_addr = FAULT_get_header_addr();
         FAULT_regs_addr = FAULT_get_regs_addr();
         FAULT_ram_addr = FAULT_get_ram_addr();
@@ -511,17 +514,17 @@ void MemManage_HandlerC(unsigned long *fault_args, unsigned int exc)
 		sys_fault_header.hard_fault_args.Reg_PC = ((unsigned long) fault_args[6]);
 
         // Obtain the handle of a task from its name.
-        OS_TASK current_task;
-        current_task = OS_GET_CURRENT_TASK();
+	struct tcb_s *rtcb;
+	rtcb = this_task();
         sys_fault_header.task_info.cnt = 1;
-        memcpy(sys_fault_header.task_info.task_name[0], pcTaskGetName(current_task), configMAX_TASK_NAME_LEN);
-        sys_fault_header.task_info.task_name[0][configMAX_TASK_NAME_LEN]='\0';
+        memcpy(sys_fault_header.task_info.task_name[0], rtcb->start, MAX_TASK_NAME_LEN);
+        sys_fault_header.task_info.task_name[0][MAX_TASK_NAME_LEN]='\0';
 
         // display summarized information
-        printf_debug_info(1,"Fault Type     : MemManage Fault\r\n");
-		sec_fault_report_fault_info(fault_args, exc);
-        printf_debug_info(1,"Foreground Task: %s\r\n",sys_fault_header.task_info.task_name[0]);
-        vTaskGetCallStack( current_task, 0 ); // for print current task call stack;
+        lldbg("Fault Type     : MemManage Fault\r\n");
+//	sec_fault_report_fault_info(fault_args, exc);
+        lldbg("Foreground Task: %s\r\n",sys_fault_header.task_info.task_name[0]);
+//      vTaskGetCallStack( current_task, 0 ); // for print current task call stack;
 
         FAULT_memcpy(FAULT_header_addr, (void*)&sys_fault_header, sizeof(sys_fault_header));
         FAULT_regs_addr = FAULT_get_regs_addr();
@@ -529,9 +532,9 @@ void MemManage_HandlerC(unsigned long *fault_args, unsigned int exc)
                 ASSERT_WARNING(0); //the reserved size for the Registers dump is not big enough
         }
         FAULT_ram_addr = FAULT_get_ram_addr();
-        FAULT_memcpy32(FAULT_ram_addr, (void*)RAM_DUMP_ADDR, FAULT_RAM_SIZE/4);
-        FAULT_memcpy32(CONFIG_PSRAM_GDI_BACKUP_ADDR, (void*)CONFIG_PSRAM_DUMP_BASE, CONFIG_PSRAM_DUMP_SIZE/4);
-        FAULT_memcpy32(CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
+        FAULT_memcpy32((void*)FAULT_ram_addr, (void*)RAM_DUMP_ADDR, FAULT_RAM_SIZE/4);
+        FAULT_memcpy32((void*)CONFIG_PSRAM_GDI_BACKUP_ADDR, (void*)CONFIG_PSRAM_DUMP_BASE, CONFIG_PSRAM_DUMP_SIZE/4);
+        FAULT_memcpy32((void*)CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
 
 #endif
         hw_cpm_reboot_system();
@@ -572,17 +575,17 @@ void BusFault_HandlerC(unsigned long *fault_args, unsigned int exc)
 		sys_fault_header.hard_fault_args.Reg_PC = ((unsigned long) fault_args[6]);
 
         // Obtain the handle of a task from its name.
-        OS_TASK current_task;
-        current_task = OS_GET_CURRENT_TASK();
+	struct tcb_s *rtcb;
+	rtcb = this_task();
         sys_fault_header.task_info.cnt = 1;
-        memcpy(sys_fault_header.task_info.task_name[0], pcTaskGetName(current_task), configMAX_TASK_NAME_LEN);
-        sys_fault_header.task_info.task_name[0][configMAX_TASK_NAME_LEN]='\0';
+        memcpy(sys_fault_header.task_info.task_name[0], rtcb->start, MAX_TASK_NAME_LEN);
+        sys_fault_header.task_info.task_name[0][MAX_TASK_NAME_LEN]='\0';
 
         // display summarized information
-        printf_debug_info(1,"Fault Type     : Bus Fault\r\n");
-		sec_fault_report_fault_info(fault_args, exc);
-        printf_debug_info(1,"Foreground Task: %s\r\n",sys_fault_header.task_info.task_name[0]);
-        vTaskGetCallStack( current_task, 0 ); // for print current task call stack;
+        lldbg("Fault Type     : Bus Fault\r\n");
+//	sec_fault_report_fault_info(fault_args, exc);
+        lldbg("Foreground Task: %s\r\n",sys_fault_header.task_info.task_name[0]);
+//      vTaskGetCallStack( current_task, 0 ); // for print current task call stack;
 
         FAULT_memcpy(FAULT_header_addr, (void*)&sys_fault_header, sizeof(sys_fault_header));
         FAULT_regs_addr = FAULT_get_regs_addr();
@@ -590,9 +593,9 @@ void BusFault_HandlerC(unsigned long *fault_args, unsigned int exc)
                 ASSERT_WARNING(0); //the reserved size for the Registers dump is not big enough
         }
         FAULT_ram_addr = FAULT_get_ram_addr();
-        FAULT_memcpy32(FAULT_ram_addr, (void*)RAM_DUMP_ADDR, FAULT_RAM_SIZE/4);
-        FAULT_memcpy32(CONFIG_PSRAM_GDI_BACKUP_ADDR, (void*)CONFIG_PSRAM_DUMP_BASE, CONFIG_PSRAM_DUMP_SIZE/4);
-        FAULT_memcpy32(CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
+        FAULT_memcpy32((void*)FAULT_ram_addr, (void*)RAM_DUMP_ADDR, FAULT_RAM_SIZE/4);
+        FAULT_memcpy32((void*)CONFIG_PSRAM_GDI_BACKUP_ADDR, (void*)CONFIG_PSRAM_DUMP_BASE, CONFIG_PSRAM_DUMP_SIZE/4);
+        FAULT_memcpy32((void*)CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
 
 #endif
         hw_cpm_reboot_system();
@@ -625,17 +628,17 @@ void UsageFault_HandlerC(unsigned long *fault_args, unsigned int exc)
 		sys_fault_header.hard_fault_args.Reg_PC = ((unsigned long) fault_args[6]);
 
         // Obtain the handle of a task from its name.
-        OS_TASK current_task;
-        current_task = OS_GET_CURRENT_TASK();
+	struct tcb_s *rtcb;
+	rtcb = this_task();
         sys_fault_header.task_info.cnt = 1;
-        memcpy(sys_fault_header.task_info.task_name[0], pcTaskGetName(current_task), configMAX_TASK_NAME_LEN);
-        sys_fault_header.task_info.task_name[0][configMAX_TASK_NAME_LEN]='\0';
+        memcpy(sys_fault_header.task_info.task_name[0], rtcb->start, MAX_TASK_NAME_LEN);
+        sys_fault_header.task_info.task_name[0][MAX_TASK_NAME_LEN]='\0';
 
         // display summarized information
-        printf_debug_info(1,"Fault Type     : Usage Fault\r\n");
-		sec_fault_report_fault_info(fault_args, exc);
-		printf_debug_info(1,"Foreground Task: %s\r\n",sys_fault_header.task_info.task_name[0]);
-        vTaskGetCallStack( current_task, 0 ); // for print current task call stack;
+        lldbg("Fault Type     : Usage Fault\r\n");
+//	sec_fault_report_fault_info(fault_args, exc);
+	lldbg("Foreground Task: %s\r\n",sys_fault_header.task_info.task_name[0]);
+//      vTaskGetCallStack( current_task, 0 ); // for print current task call stack;
 
         FAULT_memcpy(FAULT_header_addr, (void*)&sys_fault_header, sizeof(sys_fault_header));
         FAULT_regs_addr = FAULT_get_regs_addr();
@@ -643,9 +646,9 @@ void UsageFault_HandlerC(unsigned long *fault_args, unsigned int exc)
                 ASSERT_WARNING(0); //the reserved size for the Registers dump is not big enough
         }
         FAULT_ram_addr = FAULT_get_ram_addr();
-        FAULT_memcpy32(FAULT_ram_addr, (void*)RAM_DUMP_ADDR, FAULT_RAM_SIZE/4);
-        FAULT_memcpy32(CONFIG_PSRAM_GDI_BACKUP_ADDR, (void*)CONFIG_PSRAM_DUMP_BASE, CONFIG_PSRAM_DUMP_SIZE/4);
-        FAULT_memcpy32(CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
+        FAULT_memcpy32((void*)FAULT_ram_addr, (void*)RAM_DUMP_ADDR, FAULT_RAM_SIZE/4);
+        FAULT_memcpy32((void*)CONFIG_PSRAM_GDI_BACKUP_ADDR, (void*)CONFIG_PSRAM_DUMP_BASE, CONFIG_PSRAM_DUMP_SIZE/4);
+        FAULT_memcpy32((void*)CONFIG_PSRAM_BSS_BACKUP_ADDR, (void*)CONFIG_PSRAM_BSS_BASE, CONFIG_PSRAM_BSS_BACKUP_SIZE/4);
 
 #endif
         hw_cpm_reboot_system();

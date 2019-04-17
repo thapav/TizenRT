@@ -23,7 +23,6 @@
  ******************************************************************************/
 
 #include <tinyara/config.h>
-#include <arch/da1469x/chip.h>
 
 #define ARMV8M_PERIPHERAL_INTERRUPTS 32
 

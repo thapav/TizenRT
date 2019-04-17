@@ -1178,8 +1178,8 @@ HW_PMU_ERROR_CODE hw_pmu_1v2_onwakeup_set_voltage(HW_PMU_1V2_VOLTAGE voltage)
         }
 #endif
 
-        uint32_t reg1 = QSPIC->QSPIC_CTRLMODE_REG;
-        uint32_t reg2 = QSPIC2->QSPIC2_CTRLMODE_REG;
+//        uint32_t reg1 = QSPIC->QSPIC_CTRLMODE_REG;
+//        uint32_t reg2 = QSPIC2->QSPIC2_CTRLMODE_REG;
 
         // QSPIC readpipe cannot be greater than 2 when VDD_CORE is not 1.2V
         ASSERT_WARNING(voltage == HW_PMU_1V2_VOLTAGE_1V2 ||

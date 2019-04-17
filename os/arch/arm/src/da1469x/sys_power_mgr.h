@@ -28,9 +28,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#ifdef OS_FREERTOS
-#include "osal.h"
-#endif
 #include "sec_pm.h"
 
 typedef enum {

@@ -25,6 +25,8 @@
 #ifndef __SDK_DEFS_H__
 #define __SDK_DEFS_H__
 
+#include <assert.h>
+#include <debug.h>
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -41,23 +43,37 @@
 #  endif
 #endif
 
+#include "sw_version.h"
 # include "D2522AA.h"
 #include "system_D2522.h"		/* DA1469x System */
 
 /************************
  * Includes from bsp_defaults.h
  ************************/
-
-#define dg_configDEVICE DEVICE_D2522
-
-#include "custom_config.h"
-
-#ifndef dg_configFAULT_DEBUG_DUMP
-#define dg_configFAULT_DEBUG_DUMP               (0)
-#endif
+#define dg_configUSE_AUTO_CHIP_DETECTION        (1)
 
 #ifndef dg_configPMU_ADAPTER
 #define dg_configPMU_ADAPTER                    (0)
+#endif
+
+#ifndef dg_configOPTIMAL_RETRAM
+#define dg_configOPTIMAL_RETRAM                 (0)
+#endif
+
+#include "custom_config_qspi.h"
+
+/////////////////////////////////////////////////////////////////////////
+/* TINYARA API MAPPINGS */
+
+#define OS_ASSERT(x)		ASSERT(x)
+#define ASSERT_WARNING(x)	lldbg("ASSERT_WARNING!! \n");
+
+
+#if 0
+#define 
+#define 
+#define 
+#define 
 #endif
 
 /* ------------------------------------------ Common -------------------------------------------- */
@@ -295,6 +311,8 @@ __RETAINED_CODE void hw_sys_assert_trigger_gpio(void);
  */
 
 void SYS_ASSERT_hook(char *file, int line);
+
+#if 0
 #ifdef SEC_MODEN
 #define ASSERT_WARNING(a)                                                                       \
         {                                                                                       \
@@ -323,6 +341,7 @@ void SYS_ASSERT_hook(char *file, int line);
                         }                                                                       \
                 }                                                                               \
         }
+#endif
 #endif
 /**
  * \brief Assert as error macro

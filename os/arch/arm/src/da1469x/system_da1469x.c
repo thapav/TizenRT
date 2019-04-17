@@ -55,7 +55,7 @@
 
 #if dg_configUSE_CLOCK_MGR
 #include "sys_clock_mgr.h"
-#include "../../system/sys_man/sys_clock_mgr_internal.h"
+#include "sys_clock_mgr_internal.h"
 #endif
 
 extern uint32_t __bss_end__;

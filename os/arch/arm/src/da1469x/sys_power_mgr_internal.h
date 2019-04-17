@@ -31,9 +31,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "osal.h"
 #ifdef CONFIG_USE_BLE
-#include "ble_stack_config.h"
+//#include "ble_stack_config.h"
 #endif
 
 typedef enum system_state_type {

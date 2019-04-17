@@ -23,6 +23,8 @@
 #ifndef HW_CLK_D2522_H_
 #define HW_CLK_D2522_H_
 
+#include <assert.h>
+
 #include "sdk_defs.h"
 #include "hw_sys.h"
 
@@ -195,13 +197,13 @@ __STATIC_INLINE void hw_clk_enable_xtalm(void)
         }
 
         // Check if TIM power domain is enabled
-        ASSERT_WARNING(REG_GETF(CRG_TOP, SYS_STAT_REG, TIM_IS_UP));
+//        ASSERT_WARNING(REG_GETF(CRG_TOP, SYS_STAT_REG, TIM_IS_UP));
 
         // Check the power supply
-        ASSERT_WARNING(REG_GETF(CRG_TOP, POWER_CTRL_REG, LDO_RADIO_ENABLE) ||
-                       (REG_GETF(DCDC, DCDC_CTRL1_REG, DCDC_ENABLE) &&
-                        REG_GETF(DCDC, DCDC_V14_REG, DCDC_V14_ENABLE_HV) &&
-                        REG_GETF(DCDC, DCDC_V14_REG, DCDC_V14_ENABLE_LV)))
+//        ASSERT_WARNING(REG_GETF(CRG_TOP, POWER_CTRL_REG, LDO_RADIO_ENABLE) ||
+//                       (REG_GETF(DCDC, DCDC_CTRL1_REG, DCDC_ENABLE) &&
+//                        REG_GETF(DCDC, DCDC_V14_REG, DCDC_V14_ENABLE_HV) &&
+//                        REG_GETF(DCDC, DCDC_V14_REG, DCDC_V14_ENABLE_LV)))
 
         /* Enable the XTAL oscillator. */
         REG_SET_BIT(CRG_XTAL, XTAL32M_CTRL1_REG, XTAL32M_XTAL_ENABLE);
@@ -249,10 +251,10 @@ __STATIC_INLINE sys_clk_is_t hw_clk_get_sysclk(void)
 
         // drop bit0 to reduce the size of clocks[]
         uint32_t index = (CRG_TOP->CLK_CTRL_REG & freq_msk) >> (CRG_TOP_CLK_CTRL_REG_RUNNING_AT_LP_CLK_Pos + 1);
-        ASSERT_WARNING(index <= 4);
+//        ASSERT_WARNING(index <= 4);
 
         sys_clk_is_t clk = clocks[index];
-        ASSERT_WARNING(clk != SYS_CLK_IS_INVALID);
+//        ASSERT_WARNING(clk != SYS_CLK_IS_INVALID);
         return clk;
 }
 
@@ -309,8 +311,8 @@ __STATIC_INLINE bool hw_clk_lp_is_external(void)
  */
 __STATIC_INLINE void hw_clk_lp_set_rcx(void)
 {
-        ASSERT_WARNING(__get_PRIMASK() == 1 || __get_BASEPRI());
-        ASSERT_WARNING(REG_GETF(CRG_TOP, CLK_RCX_REG, RCX_ENABLE));
+//        ASSERT_WARNING(__get_PRIMASK() == 1 || __get_BASEPRI());
+//        ASSERT_WARNING(REG_GETF(CRG_TOP, CLK_RCX_REG, RCX_ENABLE));
 
         REG_SETF(CRG_TOP, CLK_CTRL_REG, LP_CLK_SEL, LP_CLK_IS_RCX);
 }
@@ -325,8 +327,8 @@ __STATIC_INLINE void hw_clk_lp_set_rcx(void)
  */
 __STATIC_INLINE void hw_clk_lp_set_xtal32k(void)
 {
-        ASSERT_WARNING(__get_PRIMASK() == 1 || __get_BASEPRI());
-        ASSERT_WARNING(REG_GETF(CRG_TOP, CLK_XTAL32K_REG, XTAL32K_ENABLE));
+//        ASSERT_WARNING(__get_PRIMASK() == 1 || __get_BASEPRI());
+//        ASSERT_WARNING(REG_GETF(CRG_TOP, CLK_XTAL32K_REG, XTAL32K_ENABLE));
 
         REG_SETF(CRG_TOP, CLK_CTRL_REG, LP_CLK_SEL, LP_CLK_IS_XTAL32K);
 }
@@ -339,7 +341,7 @@ __STATIC_INLINE void hw_clk_lp_set_xtal32k(void)
  */
 __STATIC_INLINE void hw_clk_lp_set_ext32k(void)
 {
-        ASSERT_WARNING(__get_PRIMASK() == 1 || __get_BASEPRI());
+//        ASSERT_WARNING(__get_PRIMASK() == 1 || __get_BASEPRI());
 
         REG_SETF(CRG_TOP, CLK_CTRL_REG, LP_CLK_SEL, LP_CLK_IS_EXTERNAL);
 }
@@ -359,7 +361,7 @@ __STATIC_INLINE void hw_clk_enable_rc32k(void)
  */
 __STATIC_INLINE void hw_clk_disable_rc32k(void)
 {
-        ASSERT_WARNING(REG_GETF(CRG_TOP, CLK_CTRL_REG, LP_CLK_SEL) != LP_CLK_IS_RC32K);
+//        ASSERT_WARNING(REG_GETF(CRG_TOP, CLK_CTRL_REG, LP_CLK_SEL) != LP_CLK_IS_RC32K);
 
         REG_CLR_BIT(CRG_TOP, CLK_RC32K_REG, RC32K_ENABLE);
 }
@@ -374,8 +376,8 @@ __STATIC_INLINE void hw_clk_disable_rc32k(void)
  */
 __STATIC_INLINE void hw_clk_lp_set_rc32k(void)
 {
-        ASSERT_WARNING(__get_PRIMASK() == 1 || __get_BASEPRI());
-        ASSERT_WARNING(REG_GETF(CRG_TOP, CLK_RC32K_REG, RC32K_ENABLE));
+//        ASSERT_WARNING(__get_PRIMASK() == 1 || __get_BASEPRI());
+//        ASSERT_WARNING(REG_GETF(CRG_TOP, CLK_RC32K_REG, RC32K_ENABLE));
 
         REG_SETF(CRG_TOP, CLK_CTRL_REG, LP_CLK_SEL, LP_CLK_IS_RC32K);
 }
@@ -410,7 +412,7 @@ __STATIC_INLINE void hw_clk_enable_rcx(void)
  */
 __STATIC_INLINE void hw_clk_disable_rcx(void)
 {
-        ASSERT_WARNING(REG_GETF(CRG_TOP, CLK_CTRL_REG, LP_CLK_SEL) != LP_CLK_IS_RCX);
+//        ASSERT_WARNING(REG_GETF(CRG_TOP, CLK_CTRL_REG, LP_CLK_SEL) != LP_CLK_IS_RCX);
 
         REG_CLR_BIT(CRG_TOP, CLK_RCX_REG, RCX_ENABLE);
 }
@@ -445,7 +447,7 @@ __STATIC_INLINE void hw_clk_enable_xtal32k(void)
  */
 __STATIC_INLINE void hw_clk_disable_xtal32k(void)
 {
-        ASSERT_WARNING(REG_GETF(CRG_TOP, CLK_CTRL_REG, LP_CLK_SEL) != LP_CLK_IS_XTAL32K);
+//        ASSERT_WARNING(REG_GETF(CRG_TOP, CLK_CTRL_REG, LP_CLK_SEL) != LP_CLK_IS_XTAL32K);
         REG_CLR_BIT(CRG_TOP, CLK_XTAL32K_REG, XTAL32K_ENABLE);
 }
 
@@ -495,27 +497,27 @@ uint32_t hw_clk_get_calibration_data(void);
 __STATIC_INLINE void hw_clk_set_sysclk(sys_clk_is_t mode)
 {
         /* Make sure a valid sys clock is requested */
-        ASSERT_WARNING(mode <= SYS_CLK_IS_PLL);
+//        ASSERT_WARNING(mode <= SYS_CLK_IS_PLL);
 
         /* Switch to PLL is only allowed when current system clock is XTAL32M */
-        ASSERT_WARNING(mode != SYS_CLK_IS_PLL ||
-                REG_GETF(CRG_TOP, CLK_CTRL_REG, RUNNING_AT_XTAL32M)  ||
-                REG_GETF(CRG_TOP, CLK_CTRL_REG, RUNNING_AT_PLL96M))
+//        ASSERT_WARNING(mode != SYS_CLK_IS_PLL ||
+//                REG_GETF(CRG_TOP, CLK_CTRL_REG, RUNNING_AT_XTAL32M)  ||
+//                REG_GETF(CRG_TOP, CLK_CTRL_REG, RUNNING_AT_PLL96M))
 
         /* Switch to PLL is only allowed when HDIV and PDIV are 0 */
-        ASSERT_WARNING(mode != SYS_CLK_IS_PLL || (hw_clk_get_hclk_div() == ahb_div1 &&  hw_clk_get_pclk_div() == apb_div1));
+//        ASSERT_WARNING(mode != SYS_CLK_IS_PLL || (hw_clk_get_hclk_div() == ahb_div1 &&  hw_clk_get_pclk_div() == apb_div1));
 
         /* Switch from PLL is only allowed when new system clock is XTAL32M */
-        ASSERT_WARNING(!REG_GETF(CRG_TOP, CLK_CTRL_REG, RUNNING_AT_PLL96M) ||
-                mode == SYS_CLK_IS_XTAL32M  ||
-                mode == SYS_CLK_IS_PLL);
+//        ASSERT_WARNING(!REG_GETF(CRG_TOP, CLK_CTRL_REG, RUNNING_AT_PLL96M) ||
+//                mode == SYS_CLK_IS_XTAL32M  ||
+//                mode == SYS_CLK_IS_PLL);
 
         if (mode == SYS_CLK_IS_XTAL32M && REG_GETF(CRG_TOP, CLK_CTRL_REG, RUNNING_AT_RC32M)) {
                 /* XTAL32M may have been enabled by the PDC. Check the power supply. */
-                ASSERT_WARNING(REG_GETF(CRG_TOP, POWER_CTRL_REG, LDO_RADIO_ENABLE) ||
-                               (REG_GETF(DCDC, DCDC_CTRL1_REG, DCDC_ENABLE) &&
-                                REG_GETF(DCDC, DCDC_V14_REG, DCDC_V14_ENABLE_HV) &&
-                                REG_GETF(DCDC, DCDC_V14_REG, DCDC_V14_ENABLE_LV)))
+//                ASSERT_WARNING(REG_GETF(CRG_TOP, POWER_CTRL_REG, LDO_RADIO_ENABLE) ||
+//                               (REG_GETF(DCDC, DCDC_CTRL1_REG, DCDC_ENABLE) &&
+//                                REG_GETF(DCDC, DCDC_V14_REG, DCDC_V14_ENABLE_HV) &&
+//                                REG_GETF(DCDC, DCDC_V14_REG, DCDC_V14_ENABLE_LV)))
 
                 REG_SET_BIT(CRG_TOP, CLK_SWITCH2XTAL_REG, SWITCH2XTAL);
         }
@@ -565,7 +567,7 @@ __STATIC_INLINE void hw_clk_pll_sys_on(void)
         while (!hw_sys_hw_bsr_try_lock(HW_BSR_MASTER_SYSCPU, HW_BSR_PLL_ENABLE_POS));
 
         /* LDO_CORE voltage must be set to 1.2V prior to enabling PLL */
-        ASSERT_WARNING(REG_GETF(CRG_TOP, POWER_CTRL_REG, VDD_LEVEL) == 3);
+//        ASSERT_WARNING(REG_GETF(CRG_TOP, POWER_CTRL_REG, VDD_LEVEL) == 3);
 
         do {
             /*  Enable DXTAL for the system PLL */
@@ -590,7 +592,7 @@ __STATIC_INLINE void hw_clk_pll_sys_on(void)
         REG_SET_BIT(CRG_XTAL, PLL_SYS_CTRL1_REG, PLL_EN);
 
         /* Added only for debugging purposes. */
-        ASSERT_WARNING(REG_GETF(CRG_XTAL, XTAL32M_CTRL0_REG, XTAL32M_DXTAL_SYSPLL_ENABLE));
+//        ASSERT_WARNING(REG_GETF(CRG_XTAL, XTAL32M_CTRL0_REG, XTAL32M_DXTAL_SYSPLL_ENABLE));
 
         GLOBAL_INT_RESTORE();
 }
@@ -607,7 +609,7 @@ __STATIC_INLINE void hw_clk_pll_sys_off(void)
         GLOBAL_INT_DISABLE();
 
         // The PLL is not the system clk.
-        ASSERT_WARNING(!REG_GETF(CRG_TOP, CLK_CTRL_REG, RUNNING_AT_PLL96M));
+//        ASSERT_WARNING(!REG_GETF(CRG_TOP, CLK_CTRL_REG, RUNNING_AT_PLL96M));
 
         uint32_t val = CRG_XTAL->PLL_SYS_CTRL1_REG;
 
@@ -667,7 +669,8 @@ __STATIC_INLINE void hw_clk_enable_sysclk(sys_clk_is_t clk)
                 return;
         default:
                 /* An invalid clock is requested */
-                ASSERT_WARNING(0);
+//                ASSERT_WARNING(0);
+		DEBUGASSERT(0);
         }
 }
 
@@ -690,7 +693,8 @@ __STATIC_INLINE void hw_clk_disable_sysclk(sys_clk_is_t clk)
                 return;
         default:
                 /* An invalid clock is requested */
-                ASSERT_WARNING(0);
+//                ASSERT_WARNING(0);
+		DEBUGASSERT(0);
         }
 }
 
@@ -710,7 +714,8 @@ __STATIC_INLINE bool hw_clk_is_enabled_sysclk(sys_clk_is_t clk)
                 return hw_clk_check_pll_status();
         default:
                 /* An invalid clock is requested */
-                ASSERT_WARNING(0);
+//                ASSERT_WARNING(0);
+		DEBUGASSERT(0);
                 return false;
         }
 }
