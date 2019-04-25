@@ -25,6 +25,23 @@
 #include "sdk_defs.h"
 
 /**
+ * \enum HW_PD
+ * \brief Hardware power domains.
+ *
+ */
+typedef enum {
+        HW_PD_AON = 0,      /**< Aon power domain */
+        HW_PD_SYS,          /**< System power domain */
+        HW_PD_COM,          /**< Communication power domain */
+        HW_PD_MEM,          /**< Memory power domain */
+        HW_PD_TMR,          /**< Timers power domain */
+        HW_PD_PER,          /**< Peripherals power domain */
+        HW_PD_RAD,          /**< Radio power domain */
+        HW_PD_SYNTH,        /**< Synth power domain */
+        HW_PD_MAX           /**< Power domain max*/
+} HW_PD;
+
+/**
  * \brief Power up the Peripherals Power Domain.
  *
  */

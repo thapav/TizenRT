@@ -24,6 +24,7 @@
 #define HW_SYS_H_
 
 #include "sdk_defs.h"
+#include "hw_pd.h"
 
 #include "hw_memctrl.h"
 
@@ -170,10 +171,11 @@ __STATIC_INLINE void hw_sys_enable_reset_on_wup(void)
 }
 
 /**
- * \brief Set (part of) the preferred settings.
+ * \brief Set the preferred settings of a power domain.
  *
+ * \param [in] pd power domain
  */
-void hw_sys_set_preferred_values(void);
+void hw_sys_set_preferred_values(HW_PD pd);
 
 /**
  * \brief Set the GPIO used for the SW cursor to High-Z.
@@ -358,7 +360,38 @@ uint32_t *hw_sys_reg_get_num_of_config_entries(void);
  */
 __RETAINED_CODE void hw_sys_reg_apply_config(void);
 
-#endif /* HW_SYS_H_ */
+/**
+ * \brief Checks if there are trimmed values for XTAL32M for the following registers
+ *       - CLK_FREQ_TRIM_REG
+ *       - XTAL32M_CTRL0_REG
+ *       - XTAL32M_CTRL2_REG
+
+ * If there is not trimmed value for at least one of them, the function applies
+ * the appropriate values for all of them.
+ */
+void hw_sys_xtalm_if_not_trimmed_apply(void);
+
+/**
+ * \brief Calculates the PLL_MIN_CURRENT value needed for tuning the PLL lock time
+ *
+ * \note This function has to be called only once during startup.
+ */
+void hw_sys_pll_calculate_min_current(void);
+
+/**
+ * \brief Sets the PLL_MIN_CURRENT value needed for tuning the PLL lock time
+ *
+ * \note This function should be called every time the timers power domain powers off and on.
+ */
+void hw_sys_pll_set_min_current(void);
+
+/**
+ * \brief Configure pin to connect an external digital clock.
+ */
+void hw_sys_configure_ext32k_pins(void);
+
+#endif /* dg_configUSE_HW_SYS */
+
 
 /**
  * \}

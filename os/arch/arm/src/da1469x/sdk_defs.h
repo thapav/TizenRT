@@ -54,17 +54,17 @@ extern void _ttywrch(int ch);
 /************************
  * Includes from bsp_defaults.h
  ************************/
-#define dg_configUSE_AUTO_CHIP_DETECTION        (1)
-#define dg_configUSE_USB_ENUMERATION            ( 0 )
+//#define dg_configUSE_AUTO_CHIP_DETECTION        (1)
+//#define dg_configUSE_USB_ENUMERATION            ( 0 )
 
 #ifndef dg_configPMU_ADAPTER
 #define dg_configPMU_ADAPTER                    (0)
 #endif
-
+/*
 #ifndef dg_configOPTIMAL_RETRAM
 #define dg_configOPTIMAL_RETRAM                 (0)
 #endif
-
+*/
 
 //#define dg_configDEVICE DEVICE_D2522
 #define USE_BLE_SLEEP	0

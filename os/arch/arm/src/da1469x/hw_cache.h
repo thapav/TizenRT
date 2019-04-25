@@ -35,9 +35,11 @@
  *
  */
 typedef enum {
-        HW_CACHE_LINESZ_8_BYTES        = 0,
-        HW_CACHE_LINESZ_16_BYTES       = 1,
-        HW_CACHE_LINESZ_32_BYTES       = 2,
+        HW_CACHE_LINESZ_8_BYTES        =  0,
+        HW_CACHE_LINESZ_16_BYTES       =  1,
+        HW_CACHE_LINESZ_32_BYTES       =  2,
+        HW_CACHE_LINESZ_AS_IS          =  3,
+        HW_CACHE_LINESZ_INVALID,
 } HW_CACHE_LINESZ;
 
 /**
@@ -45,9 +47,11 @@ typedef enum {
  *
  */
 typedef enum {
-        HW_CACHE_ASSOC_1_WAY           = 0,
-        HW_CACHE_ASSOC_2_WAY           = 1,
-        HW_CACHE_ASSOC_4_WAY           = 2,
+        HW_CACHE_ASSOC_1_WAY           =  0,
+        HW_CACHE_ASSOC_2_WAY           =  1,
+        HW_CACHE_ASSOC_4_WAY           =  2,
+        HW_CACHE_ASSOC_AS_IS           =  3,
+        HW_CACHE_ASSOC_INVALID,
 } HW_CACHE_ASSOC;
 
 /**
@@ -112,8 +116,28 @@ __STATIC_INLINE int hw_cache_get_len(void)
 }
 
 /**
- * \brief Configure the cache (static configuration, requires
- *        a cache reset)
+ * \brief Enable cache
+ *
+ * \param [in] len The cacheable memory length, in 64KB blocks. The actual cacheable
+ *                 memory length will therefore be len * 64KB. Valid values: [1, 511]
+ *
+ */
+__STATIC_INLINE void hw_cache_enable(uint32_t len)
+{
+        hw_cache_set_len(len);
+}
+
+/**
+ * \brief Disable cache
+ *
+ */
+__STATIC_INLINE void hw_cache_disable(void)
+{
+        hw_cache_set_len(0);
+}
+/**
+ * \brief Configure the cache before reseting Cache Controller (static
+ *        configuration, requires a cache reset).
  *
  * \param [in] assoc Cache Associativity
  * \param [in] linesz Cache Line size
@@ -124,14 +148,14 @@ __STATIC_INLINE int hw_cache_get_len(void)
  *       needed for evaluation purposes.
  *
  */
-__STATIC_INLINE void hw_cache_config(HW_CACHE_ASSOC assoc, HW_CACHE_LINESZ linesz,
-        HW_CACHE_RAMSZ ramsz)
+__STATIC_INLINE void hw_cache_reset_config(HW_CACHE_ASSOC assoc, HW_CACHE_LINESZ linesz,
+                                           HW_CACHE_RAMSZ ramsz)
 {
         int cache_len = hw_cache_get_len();
         int val;
 
         /* Disable the cache */
-        hw_cache_set_len(0);
+        hw_cache_disable();
 
         /* Update the configuration */
         val = CACHE->CACHE_CTRL3_REG;
@@ -145,7 +169,7 @@ __STATIC_INLINE void hw_cache_config(HW_CACHE_ASSOC assoc, HW_CACHE_LINESZ lines
         REG_SETF(CACHE, CACHE_CTRL3_REG, CACHE_CONTROLLER_RESET, 0);
 
         /* Re-enable the cache */
-        hw_cache_set_len(cache_len);
+        hw_cache_enable(cache_len);
 }
 
 /**
@@ -198,6 +222,55 @@ __STATIC_INLINE void hw_cache_set_assoc(HW_CACHE_ASSOC assoc)
 __STATIC_INLINE HW_CACHE_ASSOC hw_cache_get_assoc(void)
 {
         return CACHE->CACHE_ASSOCCFG_REG;
+}
+
+/**
+ * \brief Configure the cache
+ *
+ * \param [in] assoc  Cache Associativity
+ * \param [in] linesz Cache Line size
+ * \param [in] len    Length of QSPI FLASH cacheable memory
+ *
+ */
+__STATIC_INLINE void hw_cache_config(HW_CACHE_ASSOC assoc, HW_CACHE_LINESZ linesz, uint32_t len)
+{
+        uint32_t configured_len = hw_cache_get_len();
+        uint32_t configured_assoc = hw_cache_get_assoc();
+        uint32_t configured_linesz = hw_cache_get_linesz();
+
+        if ((configured_assoc == assoc || configured_assoc == HW_CACHE_ASSOC_AS_IS) &&
+            (configured_linesz == linesz || configured_linesz == HW_CACHE_LINESZ_AS_IS) &&
+            configured_len == len) {
+                /* The configuration is the same. Do not reapply it */
+                return;
+        }
+
+        ASSERT_ERROR(assoc < HW_CACHE_ASSOC_INVALID && linesz < HW_CACHE_LINESZ_INVALID);
+
+        /* cache_len shouldn't set any bits that do not fit in CACHE_CTRL2_REG.CACHE_LEN */
+        ASSERT_ERROR((len & CACHE_CACHE_CTRL2_REG_CACHE_LEN_Msk) == len);
+
+        GLOBAL_INT_DISABLE();
+
+        /* Disable cache */
+        hw_cache_disable();
+
+        if ( assoc != HW_CACHE_ASSOC_AS_IS) {
+                /* override the set associativity setting */
+                hw_cache_set_assoc(assoc);
+        }
+
+        if (linesz != HW_CACHE_LINESZ_AS_IS) {
+                /* override the cache line setting */
+                hw_cache_set_linesz(linesz);
+        }
+
+        /* flush cache */
+        hw_cache_flush();
+
+        hw_cache_enable(len);
+
+        GLOBAL_INT_RESTORE();
 }
 
 /**

@@ -1,8 +1,9 @@
 /*
- * Copyright (C) 2017-2018 Dialog Semiconductor.
+ * Copyright (C) 2017-2019 Dialog Semiconductor.
  * This computer program includes Confidential, Proprietary Information
  * of Dialog Semiconductor. All Rights Reserved.
  */
+ #include "custom_config.h"
 
         .syntax unified
         .arch   armv7-m
@@ -20,6 +21,11 @@
         .equ FPCCR,     0xE000EF34
         .equ FPDSCR,    0xE000EF3C
 
+#if (dg_configENABLE_MTB)
+        .equ MTB_POSITION_REG,          0xE0043000
+        .equ MTB_MASTER_REG,            0xE0043004
+        .equ MTB_FLOW_REG,              0xE0043008
+#endif
 
 /*
  *  The processor state is stored here before going to deep sleep,
@@ -99,7 +105,11 @@ __retained_state:
 .stored_FPCCR:          .space  4
 .stored_FPDSCR:         .space  4
 
-
+#if (dg_configENABLE_MTB)
+.stored_MTB_POSITION:   .space  4
+.stored_MTB_MASTER:     .space  4
+.stored_MTB_FLOW:       .space  4
+#endif
 
         .size   __retained_state, . - __retained_state
 
@@ -128,7 +138,11 @@ __retained_state:
  *
  * Processor state is stored at __retained_state. The stack is not modified.
  */
+ #if (dg_configCODE_LOCATION == NON_VOLATILE_IS_NONE)
+        .section .text
+#else
         .section text_retained
+#endif
         .thumb
         .thumb_func
         .align  1
@@ -215,7 +229,12 @@ goto_deepsleep:
         ldr     r6, [r0, #(FPDSCR - SCB_BASE)]  // load FPDSCR
         stm     r3!, {r4-r6}
 
-
+#if (dg_configENABLE_MTB)
+        /* Store MTB  */
+        ldr     r0, =#MTB_POSITION_REG          // load MTB_POSITION_REG address
+        ldm     r0, {r4-r6}                     // value of MTB_POSITION_REG MTB_MASTER_REG, MTB_FLOW_REG
+        stm     r3!, {r4-r6}
+#endif
 
         /*
          *  Set RESET_STAT_REG = 0
@@ -316,7 +335,16 @@ wakeup_from_deepsleep:
         /* r6 = .stored_FPDSCR */
         str     r6, [r1, #(FPDSCR - SCB_BASE)]
 
-
+#if (dg_configENABLE_MTB)
+        /* restore MTB */
+        ldm     r0!, {r4-r6}
+        ldr     r2, =#MTB_MASTER_REG
+        str		r5,	[r2]
+        ldr     r2, =#MTB_POSITION_REG
+        str		r4,	[r2]
+        ldr     r2, =#MTB_FLOW_REG
+        str		r6,	[r2]
+#endif
 
         /* restore MSP, PSP, CONTROL */
         ldr     r0, =.stored_MSP

@@ -129,6 +129,8 @@ __STATIC_INLINE bool uart_needs_initialization(void)
 __USED
 int _write (int fd, char *ptr, int len)
 {
+        uint32_t tick_cur = 0;
+
         hw_sys_pd_com_enable();
         HW_GPIO_SET_PIN_FUNCTION(CONFIG_RETARGET_UART_TX);
         HW_GPIO_PAD_LATCH_ENABLE(CONFIG_RETARGET_UART_TX);
@@ -142,7 +144,9 @@ int _write (int fd, char *ptr, int len)
          * Return number of char written. */
         hw_uart_send(CONFIG_RETARGET_UART, ptr, len, NULL, NULL);
 
-        while (hw_uart_is_busy(CONFIG_RETARGET_UART)) {}
+	/* added timeout to prevent watchdog hold by this loop (jeongsup.jeong 190422) */
+        //while (hw_uart_is_busy(CONFIG_RETARGET_UART)) {}
+        while (hw_uart_is_busy(CONFIG_RETARGET_UART) && (40000000 > tick_cur++) ) {}
         HW_GPIO_PAD_LATCH_DISABLE(CONFIG_RETARGET_UART_TX);
         hw_sys_pd_com_disable();
 

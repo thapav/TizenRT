@@ -126,7 +126,7 @@ void *_sbrk(int incr)
                 volatile int stored_incr __UNUSED;
 
                 stored_incr = incr;
-                //ASSERT_ERROR(0);
+                ASSERT_ERROR(0);
 
                 errno = ENOMEM;
                 return (void *)-1;
@@ -429,34 +429,8 @@ static __RETAINED_CODE void configure_cache(void)
          * (Cached area len will be (cache_len * 64) KBytes, cache_len can be 0 to 512) */
         cache_len = active_fw_size >> 16;
 
-        /* cache_len shouldn't set any bits that do not fit in
-         * CACHE_CTRL2_REG.CACHE_LEN */
-        ASSERT_WARNING((cache_len & CACHE_CACHE_CTRL2_REG_CACHE_LEN_Msk) == cache_len);
+        hw_cache_config(dg_configCACHE_ASSOCIATIVITY, dg_configCACHE_LINESZ, cache_len);
 
-        GLOBAL_INT_DISABLE();
-
-        hw_cache_set_len(cache_len);
-
-        if (dg_configCACHE_ASSOCIATIVITY != CACHE_ASSOC_AS_IS) {
-                if (hw_cache_get_assoc() != dg_configCACHE_ASSOCIATIVITY) {
-                        /* override the set associativity setting */
-                        hw_cache_set_assoc(CACHE->CACHE_ASSOCCFG_REG);
-                }
-        }
-
-        if (dg_configCACHE_LINESZ != CACHE_LINESZ_AS_IS) {
-                if (hw_cache_get_linesz() != dg_configCACHE_LINESZ) {
-                        /* override the cache line setting */
-                        hw_cache_set_linesz(dg_configCACHE_LINESZ);
-                }
-        }
-
-        //REG_SETF(CACHE, CACHE_MRM_CTRL_REG, MRM_START, 1);
-
-        /* flush cache */
-        hw_cache_flush();
-
-        GLOBAL_INT_RESTORE();
 #endif /* (dg_configCODE_LOCATION == NON_VOLATILE_IS_FLASH) */
 }
 
@@ -534,6 +508,43 @@ static void configure_pdc(void)
 void SystemInitPre(void) __attribute__((section("text_reset")));
 void SystemInitPre(void)
 {
+        /*
+         * Enable MPU on the IVT
+         */
+#if (dg_configUSE_HW_MPU == 1)
+                hw_mpu_disable();
+                mpu_region_config region_cfg;
+                /* Set the ro_region as MPU region that allows
+                 * any RO access (privileged & unprivileged).
+                 * Only ro_region[32..63] is guaranteed to be configured by MPU. */
+                region_cfg.start_addr = (0x20000000UL) & 0xFFFFFFE0;
+                region_cfg.end_addr = (region_cfg.start_addr + 0x200 - 1) | 0x1F;
+                region_cfg.access_permissions = HW_MPU_AP_RO;
+                region_cfg.attributes = HW_MPU_ATTR_NORMAL;
+                region_cfg.execute_never = HW_MPU_XN_FALSE;
+
+                hw_mpu_config_region(HW_MPU_REGION_5, &region_cfg);
+
+                hw_mpu_enable(true);
+#endif
+        /*
+         * Enable M33 debugger.
+         */
+        if (dg_configENABLE_DEBUGGER) {
+                ENABLE_DEBUGGER;
+        } else {
+                DISABLE_DEBUGGER;
+        }
+
+        /*
+         * Enable CMAC debugger.
+         */
+        if (dg_configENABLE_CMAC_DEBUGGER) {
+                ENABLE_CMAC_DEBUGGER;
+        } else {
+                DISABLE_CMAC_DEBUGGER;
+        }
+
         /*
          * Bandgap has already been set by the bootloader.
          * Use fast clocks from now on.
@@ -672,7 +683,6 @@ void SystemInit(void)
         /*
          * Detect chip version (optionally).
          */
-/*
         if (dg_configUSE_AUTO_CHIP_DETECTION == 1) {
                 black_orca_chip_version = black_orca_get_chip_version();
 
@@ -680,7 +690,7 @@ void SystemInit(void)
                         //ASSERT_WARNING_UNINIT(0);
                 //}
         }
-*/
+
         REG_SETF(CRG_TOP, POWER_CTRL_REG, LDO_RADIO_ENABLE, 1); // Switch on the RF LDO
 
         /*
@@ -696,13 +706,6 @@ void SystemInit(void)
         SystemCoreClock = __SYSTEM_CLOCK;
         SystemLPClock = dg_configXTAL32K_FREQ;
 
-        /*
-         * Keep PD_COM and PD_PER enabled.
-         */
-        REG_SETF(CRG_TOP, PMU_CTRL_REG, COM_SLEEP, 0);
-        while (!REG_GETF(CRG_TOP, SYS_STAT_REG, COM_IS_UP));
-        REG_SETF(CRG_TOP, PMU_CTRL_REG, PERIPH_SLEEP, 0);
-        while (!REG_GETF(CRG_TOP, SYS_STAT_REG, PER_IS_UP));
 
 #if (dg_configENABLE_DA1469x_AA_SUPPORT)
         /*
@@ -715,47 +718,25 @@ void SystemInit(void)
         hw_sys_pd_com_disable();
 #endif
 
-        hw_qspi_disable_init(HW_QSPIC);             // Disable QSPI init after wakeup
-        qspi_automode_init();               // The bootloader may have left the Flash in wrong mode...
+#if ((dg_configCODE_LOCATION == NON_VOLATILE_IS_FLASH) && (dg_configEXEC_MODE == MODE_IS_CACHED))
+        /* Disable cache before reinitialize QSPI */
+        uint32_t cache_len = hw_cache_get_len();
+        hw_cache_disable();
+#endif
 
-        /* Already up in SystemInitPre() */
+        /* Disable QSPI init after power up */
+        hw_qspi_disable_init(HW_QSPIC);
+        /* The bootloader may have left the Flash in wrong mode */
+        qspi_automode_init();
+
+#if ((dg_configCODE_LOCATION == NON_VOLATILE_IS_FLASH) && (dg_configEXEC_MODE == MODE_IS_CACHED))
+        hw_cache_enable(cache_len);
+#endif
+
+        /* Already up in SystemInitPre()
+         * PD_TIM is kept active here in order to program XTAL and PLL registers*/
         ASSERT_WARNING(hw_pd_check_tim_status());
 
-#if dg_configUSE_CLOCK_MGR
-        cm_clk_init_low_level_internal();
-#else
-        hw_clk_xtalm_configure();
-        if (dg_configXTAL32M_SETTLE_TIME_IN_USEC != 0) {
-                hw_clk_set_xtalm_settling_time(XTAL32M_USEC_TO_256K_CYCLES(dg_configXTAL32M_SETTLE_TIME_IN_USEC)/8, false);
-        }
-#endif
-
-        configure_pdc();
-
-#if dg_configUSE_CLOCK_MGR
-        // Always enable the XTAL32M
-        cm_enable_xtalm();
-        while (!cm_poll_xtalm_ready());                 // Wait for XTAL32M to settle
-        hw_clk_set_sysclk(SYS_CLK_IS_XTAL32M);          // Set XTAL32M as sys_clk
-
-#if (dg_configENABLE_DA1469x_AA_SUPPORT)
-        /* Workaround for bug2522A_050: SW needed to overrule the XTAL calibration state machine */
-        hw_clk_perform_init_rcosc_calibration();        // Perform initial RCOSC calibration
-#endif
-
-        /*
-         * Note: If the LP clock is the RCX then we have to wait for the XTAL32M to settle
-         *       since we need to estimate the frequency of the RCX before continuing
-         *       (calibration procedure).
-         */
-        if ((dg_configLP_CLK_SOURCE == LP_CLK_IS_ANALOG) && (dg_configUSE_LP_CLK == LP_CLK_RCX)) {
-                cm_rcx_calibrate();
-                hw_clk_set_lpclk(LP_CLK_IS_RCX);        // Set RCX as the LP clock
-        }
-#else
-        /* perform clock initialization here, as there is no clock manager to do it later for us */
-        nortos_clk_setup();
-#endif
         /* enable OTP to read TCS values */
         hw_otpc_init();
         hw_otpc_set_speed(HW_OTPC_CLK_FREQ_32MHz);
@@ -792,15 +773,12 @@ void SystemInit(void)
         sys_tcs_apply_reg_pairs(SYS_TCS_GROUP_PD_MEM);
         sys_tcs_apply_reg_pairs(SYS_TCS_GROUP_PD_PER);
         /* In non baremetal apps PD_COMM will be opened by the  power manager */
-#if defined(OS_BAREMETAL)
+#ifdef OS_BAREMETAL
         hw_sys_pd_com_enable();
         sys_tcs_apply_reg_pairs(SYS_TCS_GROUP_PD_COMM);
 #endif
         sys_tcs_apply_reg_pairs(SYS_TCS_GROUP_PD_SYS);
-        /* PD_TMR may not be enabled in baremetal configuration */
-        if (REG_GETF(CRG_TOP, SYS_STAT_REG, TIM_IS_UP) == 1) {
-                sys_tcs_apply_reg_pairs(SYS_TCS_GROUP_PD_TMR);
-        }
+        sys_tcs_apply_reg_pairs(SYS_TCS_GROUP_PD_TMR);
 
         /*
          * Apply custom trim settings which don't require the respective block to be enabled
@@ -809,9 +787,59 @@ void SystemInit(void)
         sys_tcs_apply_custom_values(SYS_TCS_GROUP_GP_ADC_DIFF_MODE, sys_tcs_custom_values_system_cb, NULL);
 
         /*
+         * Apply trimmed values for xtal32m in case no entry exists in OTP
+         */
+        hw_sys_xtalm_if_not_trimmed_apply();
+
+        /*
          * Apply preferred settings on top of tcs settings.
          */
-        hw_sys_set_preferred_values();
+        hw_sys_set_preferred_values(HW_PD_AON);
+        hw_sys_set_preferred_values(HW_PD_SYS);
+        hw_sys_set_preferred_values(HW_PD_TMR);
+
+#if dg_configUSE_CLOCK_MGR
+        cm_clk_init_low_level_internal();
+#else
+        hw_clk_xtalm_configure();
+        if (dg_configXTAL32M_SETTLE_TIME_IN_USEC != 0) {
+                hw_clk_set_xtalm_settling_time(XTAL32M_USEC_TO_256K_CYCLES(dg_configXTAL32M_SETTLE_TIME_IN_USEC)/8, false);
+        }
+#endif
+
+        configure_pdc();
+
+#if dg_configUSE_CLOCK_MGR
+        // Always enable the XTAL32M
+        cm_enable_xtalm();
+        while (!cm_poll_xtalm_ready());                 // Wait for XTAL32M to settle
+        hw_clk_set_sysclk(SYS_CLK_IS_XTAL32M);          // Set XTAL32M as sys_clk
+
+#if (dg_configENABLE_DA1469x_AA_SUPPORT)
+        /* Workaround for bug2522A_050: SW needed to overrule the XTAL calibration state machine */
+        hw_clk_perform_init_rcosc_calibration();        // Perform initial RCOSC calibration
+#endif
+
+        /*
+         * Note: If the LP clock is the RCX then we have to wait for the XTAL32M to settle
+         *       since we need to estimate the frequency of the RCX before continuing
+         *       (calibration procedure).
+         */
+        if ((dg_configLP_CLK_SOURCE == LP_CLK_IS_ANALOG) && (dg_configUSE_LP_CLK == LP_CLK_RCX)) {
+                cm_rcx_calibrate();
+                hw_clk_set_lpclk(LP_CLK_IS_RCX);        // Set RCX as the LP clock
+        }
+#else
+        /* perform clock initialization here, as there is no clock manager to do it later for us */
+        nortos_clk_setup();
+#endif
+
+        /* Calculate pll_min_current value
+         * Apply value to PLL_SYS_CTRL3_REG
+         */
+        hw_sys_pll_calculate_min_current();
+        hw_sys_pll_set_min_current();
+
 #if (dg_configENABLE_DA1469x_AA_SUPPORT)
         /*
          * SDADC patch
@@ -893,7 +921,7 @@ uint32_t black_orca_phy_addr(uint32_t addr)
                          * In the remapped region, accesses are only allowed when
                          * 0 <= addr < flash_region_size.
                          */
-                        //ASSERT_ERROR(addr < flash_region_size);
+                        ASSERT_ERROR(addr < flash_region_size);
 
                         phy_addr = flash_region_base_offset + addr;
                 } else if (IS_QSPIF_ADDRESS(addr)) {
@@ -903,8 +931,8 @@ uint32_t black_orca_phy_addr(uint32_t addr)
                          *   AND
                          * addr < flash_region_base_offset + flash_region_base_offset
                          */
-                        //ASSERT_ERROR(addr >= flash_region_base_offset);
-                        //ASSERT_ERROR(addr < flash_region_base_offset + flash_region_size);
+                        ASSERT_ERROR(addr >= flash_region_base_offset);
+                        ASSERT_ERROR(addr < flash_region_base_offset + flash_region_size);
                         phy_addr = addr;
                 } else {
                         phy_addr = addr;
