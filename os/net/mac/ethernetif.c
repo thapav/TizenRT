@@ -27,15 +27,18 @@
 
 #ifdef CONFIG_NET_LWIP
 
-#include <net/lwip/netif.h>
-#include <net/lwip/opt.h>
-#include <net/lwip/debug.h>
-#include <net/lwip/def.h>
-#include <net/lwip/mem.h>
-#include <net/lwip/pbuf.h>
-#include <net/lwip/stats.h>
-#include <net/lwip/netif/etharp.h>
-#include <net/lwip/ipv4/ip_addr.h>
+#include "lwip/netif.h"
+#include "lwip/opt.h"
+#include "lwip/debug.h"
+#include "lwip/def.h"
+#include "lwip/mem.h"
+#include "lwip/pbuf.h"
+#include "lwip/stats.h"
+#include "lwip/ip_addr.h"
+#include "lwip/snmp.h"
+
+#include "lwip/netif/etharp.h"
+#include "lwip/ethip6.h"
 
 #define ETHERNET_MTU 1500
 
@@ -72,9 +75,11 @@ struct ethernetif {
 #ifdef LWIP_NETIF_STATUS_CALLBACK
 void ethernetif_status_callback(struct netif *netif)
 {
+#if 0
 	if (netif->flags & NETIF_FLAG_UP) {
-		printf("IP: %d.%d.%d.%d\n", ip4_addr1_16(&netif->ip_addr), ip4_addr2_16(&netif->ip_addr), ip4_addr3_16(&netif->ip_addr), ip4_addr4_16(&netif->ip_addr));
+		printf("IP: %d.%d.%d.%d\n", netif->ip_addr.addr, ip4_addr2_16(&netif->ip_addr), ip4_addr3_16(&netif->ip_addr), ip4_addr4_16(&netif->ip_addr));
 	}
+#endif
 }
 #endif
 
@@ -96,30 +101,32 @@ void ethernetif_status_callback(struct netif *netif)
 
 static err_t ethernetif_output(struct netif *netif, struct pbuf *p)
 {
-	struct pbuf *q;
-
-	netif->d_len = 0;
-	q = p;
-	while (q) {
-		/* Copy the data from the pbuf to the interface buf, one pbuf at a
-		   time. The size of the data in each pbuf is kept in the ->len
-		   variable. */
-		memcpy((void *)(&(netif->d_buf[netif->d_len])), q->payload, q->len);
-		netif->d_len += q->len;
-
-		/* Check if this is the last pbuf of the packet. If yes, then break */
-		if (q->len == q->tot_len) {
-			break;
-		} else {
-			q = q->next;
-		}
-	}
-	/* signal that packet should be sent */
-	netif->d_txavail(netif);
-
-	LINK_STATS_INC(link.xmit);
-
+/*  deprecated */
 	return ERR_OK;
+	/* struct pbuf *q; */
+
+	/* netif->d_len = 0; */
+	/* q = p; */
+	/* while (q) { */
+	/* 	/\* Copy the data from the pbuf to the interface buf, one pbuf at a */
+	/* 	   time. The size of the data in each pbuf is kept in the ->len */
+	/* 	   variable. *\/ */
+	/* 	memcpy((void *)(&(netif->d_buf[netif->d_len])), q->payload, q->len); */
+	/* 	netif->d_len += q->len; */
+
+	/* 	/\* Check if this is the last pbuf of the packet. If yes, then break *\/ */
+	/* 	if (q->len == q->tot_len) { */
+	/* 		break; */
+	/* 	} else { */
+	/* 		q = q->next; */
+	/* 	} */
+	/* } */
+	/* /\* signal that packet should be sent *\/ */
+	/* netif->d_txavail(netif); */
+
+	/* LINK_STATS_INC(link.xmit); */
+
+	/* return ERR_OK; */
 }
 
 /**
@@ -135,20 +142,18 @@ static err_t ethernetif_output(struct netif *netif, struct pbuf *p)
  * @return a pbuf filled with the received packet (including MAC header)
  *         NULL on memory error
  */
-int ethernetif_input(struct netif *netif)
+int ethernetif_input(struct netif *netif, uint8_t *buf, uint16_t buflen)
 {
 
-	LWIP_DEBUGF(NETIF_DEBUG, ("passing to LWIP layer, packet len %d \n", netif->d_len));
+	LWIP_DEBUGF(NETIF_DEBUG, ("passing to LWIP layer, packet len %d \n", buflen));
 	struct pbuf *p, *q;
-	u16_t len = 0;
-	u8_t *frame_ptr;
-	/* Receive the complete packet */
-	frame_ptr = &(netif->d_buf[0]);
-	/* Obtain the size of the packet and put it into the "len" variable. */
-	len = netif->d_len;
+	u16_t len = buflen; 	/* Obtain the size of the packet and put it into the "len" variable. */
+	u8_t *frame_ptr = buf; 	/* Receive the complete packet */
+
 	if (0 == len) {
 		return 0;
 	}
+
 	/* We allocate a pbuf chain of pbufs from the pool. */
 	p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL);
 
@@ -217,7 +222,14 @@ err_t ethernetif_init(struct netif *netif)
 	 * You can instead declare your own function an call etharp_output()
 	 * from it if you have to do some checks before sending (e.g. if link
 	 * is available...) */
+#if LWIP_IPV4 && LWIP_IPV6
 	netif->output = etharp_output;
+	netif->output_ip6 = ethip6_output;
+#elif LWIP_IPV4
+	netif->output = etharp_output;
+#else
+	netif->output_ip6 = ethip6_output;
+#endif
 	/* netif->linkoutput is set in enc_initialize function */
 	netif->linkoutput = ethernetif_output;
 	netif->mtu = ETHERNET_MTU;
@@ -249,9 +261,15 @@ err_t ethernetif_init(struct netif *netif)
 
 	memcpy(netif->d_mac.ether_addr_octet, netif->hwaddr, IFHWADDRLEN);
 #endif
-	netif->d_ipaddr = netif->ip_addr.addr;
-	netif->d_draddr = netif->gw.addr;
-	netif->d_netmask = netif->netmask.addr;
+#if CONFIG_NET_LWIP
+	netif->d_ipaddr = ip4_addr_get_u32(ip_2_ip4(&netif->ip_addr));
+	netif->d_draddr = ip4_addr_get_u32(ip_2_ip4(&netif->gw));
+	netif->d_netmask = ip4_addr_get_u32(ip_2_ip4(&netif->netmask));
+#else
+	netif->d_ipaddr = netif->ip_addr.s_addr.addr;
+	netif->d_draddr = netif->gw.s_addr.addr;
+	netif->d_netmask = netif->netmask.s_addr.addr;
+#endif
 	//memcpy(netif->d_mac.ether_addr_octet,netif->hwaddr, IFHWADDRLEN);
 	/* Do whatever else is needed to initialize interface. */
 	return ERR_OK;

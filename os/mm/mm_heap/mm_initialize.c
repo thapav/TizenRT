@@ -60,6 +60,7 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <tinyara/sched.h>
 #include <tinyara/mm/mm.h>
 
 /****************************************************************************
@@ -101,11 +102,15 @@ void mm_addregion(FAR struct mm_heap_s *heap, FAR void *heapstart, size_t heapsi
 	FAR struct mm_freenode_s *node;
 	uintptr_t heapbase;
 	uintptr_t heapend;
-#if CONFIG_MM_REGIONS > 1
+#if (CONFIG_KMM_REGIONS > 1) || (defined(CONFIG_MM_KERNEL_HEAP) && (CONFIG_KMM_REGIONS > 1))
 	int IDX = heap->mm_nregions;
 #else
 #define IDX 0
 #endif
+
+	if (!heapsize) {
+		return;
+	}
 
 	/* If the MCU handles wide addresses but the memory manager is configured
 	 * for a small heap, then verify that the caller is  not doing something
@@ -122,6 +127,20 @@ void mm_addregion(FAR struct mm_heap_s *heap, FAR void *heapstart, size_t heapsi
 
 	heapbase = MM_ALIGN_UP((uintptr_t)heapstart);
 	heapend  = MM_ALIGN_DOWN((uintptr_t)heapstart + (uintptr_t)heapsize);
+	if ((heapbase < (uintptr_t)heapstart)) {
+		/* heapbase cannot be smaller than heapstart.
+		 * If this happens, heapbase can be overflowed from alignment.
+		 */
+		return;
+	}
+
+	if (heapbase >= (uintptr_t)heapend) {
+		/* heapbase is aligned up from heapstart,
+		 * and heapend is the summation of heapstart and heapsize.
+		 * If heapsize is very small, align-up address can be equal to or greater than heapend.
+		 */
+		return;
+	}
 	heapsize = heapend - heapbase;
 
 	mlldbg("Region %d: base=%p size=%u\n", IDX + 1, heapstart, heapsize);
@@ -160,7 +179,7 @@ void mm_addregion(FAR struct mm_heap_s *heap, FAR void *heapstart, size_t heapsi
 
 #undef IDX
 
-#if CONFIG_MM_REGIONS > 1
+#if (CONFIG_KMM_REGIONS > 1) || (defined(CONFIG_MM_KERNEL_HEAP) && (CONFIG_KMM_REGIONS > 1))
 	heap->mm_nregions++;
 #endif
 
@@ -190,7 +209,9 @@ void mm_addregion(FAR struct mm_heap_s *heap, FAR void *heapstart, size_t heapsi
 
 void mm_initialize(FAR struct mm_heap_s *heap, FAR void *heapstart, size_t heapsize)
 {
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
 	int i;
+#endif
 
 	mlldbg("Heap: start=%p size=%u\n", heapstart, heapsize);
 
@@ -208,17 +229,13 @@ void mm_initialize(FAR struct mm_heap_s *heap, FAR void *heapstart, size_t heaps
 
 	heap->mm_heapsize = 0;
 
-#if CONFIG_MM_REGIONS > 1
+#if (CONFIG_KMM_REGIONS > 1) || (defined(CONFIG_MM_KERNEL_HEAP) && (CONFIG_KMM_REGIONS > 1))
 	heap->mm_nregions = 0;
 #endif
 
 	/* Initialize the node array */
 
-	memset(heap->mm_nodelist, 0, sizeof(struct mm_freenode_s) * MM_NNODES);
-	for (i = 1; i < MM_NNODES; i++) {
-		heap->mm_nodelist[i - 1].flink = &heap->mm_nodelist[i];
-		heap->mm_nodelist[i].blink = &heap->mm_nodelist[i - 1];
-	}
+	memset(heap->mm_nodelist, 0, sizeof(struct mm_freenode_s) * (MM_NNODES + 1));
 
 	/* Initialize the malloc semaphore to one (to support one-at-
 	 * a-time access to private data sets).
@@ -229,4 +246,13 @@ void mm_initialize(FAR struct mm_heap_s *heap, FAR void *heapstart, size_t heaps
 	/* Add the initial region of memory to the heap */
 
 	mm_addregion(heap, heapstart, heapsize);
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+	for (i = 0; i < CONFIG_MAX_TASKS; i++) {
+		heap->alloc_list[i].pid = HEAPINFO_INIT_INFO;
+	}
+	heap->total_alloc_size = heap->peak_alloc_size = 0;
+#ifdef CONFIG_HEAPINFO_USER_GROUP
+	heapinfo_update_group_info(INVALID_PROCESS_ID, HEAPINFO_INVALID_GROUPID, HEAPINFO_INIT_INFO);
+#endif
+#endif
 }

@@ -58,8 +58,12 @@
 
 #include <errno.h>
 #include <assert.h>
+#include <stdint.h>
 
+#include <sys/types.h>
 #include <tinyara/clock.h>
+#include <tinyara/sched.h>
+#include <tinyara/kmalloc.h>
 #include <arch/irq.h>
 
 #include "sched/sched.h"
@@ -98,7 +102,20 @@
  * 'denominator' for all CPU load calculations.
  */
 
-volatile uint32_t g_cpuload_total;
+static volatile uint32_t g_cpuload_total[SCHED_NCPULOAD];
+static volatile uint32_t g_cpuload_timeconstant[SCHED_NCPULOAD] = {
+#ifdef CONFIG_SCHED_MULTI_CPULOAD
+	CONFIG_SCHED_CPULOAD_TIMECONSTANT_SHORT,
+	CONFIG_SCHED_CPULOAD_TIMECONSTANT_MID,
+	CONFIG_SCHED_CPULOAD_TIMECONSTANT_LONG
+#else
+	CONFIG_SCHED_CPULOAD_TIMECONSTANT
+#endif
+};
+
+static int16_t g_cpusnap_head;
+static int16_t g_cpusnap_arr_size;
+static pid_t *g_cpusnap_arr;
 
 /************************************************************************
  * Private Functions
@@ -107,7 +124,81 @@ volatile uint32_t g_cpuload_total;
 /************************************************************************
  * Public Functions
  ************************************************************************/
+int sched_start_cpuload_snapshot(int ticks)
+{
+	irqstate_t flags;
 
+	flags = irqsave();
+	/* Allocate data buffer for CPU load measurements in time interval */
+	g_cpusnap_arr = (pid_t *)kmm_realloc(g_cpusnap_arr, ticks * sizeof(pid_t));
+	if (g_cpusnap_arr == NULL) {
+		irqrestore(flags);
+		return -ENOMEM;
+	}
+	g_cpusnap_arr_size = ticks;
+	g_cpusnap_head = 0;
+	irqrestore(flags);
+
+	return OK;
+}
+
+void sched_clear_cpuload_snapshot(void)
+{
+	if (g_cpusnap_arr) {
+		kmm_free(g_cpusnap_arr);
+	}
+	g_cpusnap_arr = NULL;
+	g_cpusnap_arr_size = 0;
+	g_cpusnap_head = 0;
+}
+
+void sched_get_cpuload_snapshot(pid_t *result_addr)
+{
+	int tick_index;
+
+	for (tick_index = 0; tick_index < g_cpusnap_arr_size; tick_index++) {
+		result_addr[tick_index] = g_cpusnap_arr[tick_index];
+	}
+}
+
+/************************************************************************
+ * Name: sched_clear_cpuload
+ *
+ * Description:
+ *	 Decrement the total CPU load count held by this thread from total
+ *   for all threads and reset the load count on this defunct thread.
+ *
+ * Inputs:
+ *	 pid - The task ID of the thread of interest.
+ *
+ * Return Value:
+ *	 None
+ *
+ * Assumptions:
+ *
+ ************************************************************************/
+
+void sched_clear_cpuload(pid_t pid)
+{
+	int hash_ndx;
+	int cpuload_idx;
+	irqstate_t flags;
+
+	hash_ndx = PIDHASH(pid);
+
+	flags = irqsave();
+	/* Decrement the total CPU load count held by this thread from the
+	 * total for all threads.  Then we can reset the count on this
+	 * defunct thread to zero.
+	 */
+	for (cpuload_idx = 0; cpuload_idx < SCHED_NCPULOAD; cpuload_idx++) {
+		g_cpuload_total[cpuload_idx] -= g_pidhash[hash_ndx].ticks[cpuload_idx];
+		g_pidhash[hash_ndx].ticks[cpuload_idx] = 0;
+	}
+	irqrestore(flags);
+}
+
+#ifndef CONFIG_SCHED_CPULOAD_EXTCLK
 /************************************************************************
  * Name: sched_process_cpuload
  *
@@ -131,6 +222,7 @@ void weak_function sched_process_cpuload(void)
 	FAR struct tcb_s *rtcb = this_task();
 	int hash_index;
 	int i;
+	int cpuload_idx;
 
 	/* Increment the count on the currently executing thread
 	 *
@@ -141,30 +233,39 @@ void weak_function sched_process_cpuload(void)
 	 * do this too, but this would require a little more overhead.
 	 */
 
+	if (g_cpusnap_arr) {
+		g_cpusnap_arr[g_cpusnap_head] = rtcb->pid;
+		if (++g_cpusnap_head >= g_cpusnap_arr_size) {
+			g_cpusnap_head = 0;
+		}
+	}
 	hash_index = PIDHASH(rtcb->pid);
-	g_pidhash[hash_index].ticks++;
 
-	/* Increment tick count.  If the accumulated tick value exceed a time
-	 * constant, then shift the accumulators.
-	 */
+	for (cpuload_idx = 0; cpuload_idx < SCHED_NCPULOAD; cpuload_idx++) {
+		g_pidhash[hash_index].ticks[cpuload_idx]++;
 
-	if (++g_cpuload_total > (CONFIG_SCHED_CPULOAD_TIMECONSTANT * CPULOAD_TICKSPERSEC)) {
-		uint32_t total = 0;
-
-		/* Divide the tick count for every task by two and recalculate the
-		 * total.
+		/* Increment tick count.  If the accumulated tick value exceed a time
+		 * constant, then shift the accumulators.
 		 */
 
-		for (i = 0; i < CONFIG_MAX_TASKS; i++) {
-			g_pidhash[i].ticks >>= 1;
-			total += g_pidhash[i].ticks;
+		if (++g_cpuload_total[cpuload_idx] > (g_cpuload_timeconstant[cpuload_idx] * CPULOAD_TICKSPERSEC)) {
+			uint32_t total = 0;
+
+			/* Divide the tick count for every task by two and recalculate the
+			 * total.
+			 */
+			for (i = 0; i < CONFIG_MAX_TASKS; i++) {
+				g_pidhash[i].ticks[cpuload_idx] >>= 1;
+				total += g_pidhash[i].ticks[cpuload_idx];
+			}
+
+			/* Save the new total. */
+
+			g_cpuload_total[cpuload_idx] = total;
 		}
-
-		/* Save the new total. */
-
-		g_cpuload_total = total;
 	}
 }
+#endif
 
 /****************************************************************************
  * Function:  clock_cpuload
@@ -185,13 +286,13 @@ void weak_function sched_process_cpuload(void)
  *
  ****************************************************************************/
 
-int clock_cpuload(int pid, FAR struct cpuload_s *cpuload)
+int clock_cpuload(int pid, int index, FAR struct cpuload_s *cpuload)
 {
 	irqstate_t flags;
 	int hash_index = PIDHASH(pid);
 	int ret = -ESRCH;
 
-	DEBUGASSERT(cpuload);
+	DEBUGASSERT(cpuload && index >= 0 && index < SCHED_NCPULOAD);
 
 	/* Momentarily disable interrupts.  We need (1) the task to stay valid
 	 * while we are doing these operations and (2) the tick counts to be
@@ -214,13 +315,12 @@ int clock_cpuload(int pid, FAR struct cpuload_s *cpuload)
 	 */
 
 	if (g_pidhash[hash_index].tcb && g_pidhash[hash_index].pid == pid) {
-		cpuload->total = g_cpuload_total;
-		cpuload->active = g_pidhash[hash_index].ticks;
+		cpuload->total = g_cpuload_total[index];
+		cpuload->active = g_pidhash[hash_index].ticks[index];
 		ret = OK;
 	}
 
 	irqrestore(flags);
 	return ret;
 }
-
 #endif							/* CONFIG_SCHED_CPULOAD */

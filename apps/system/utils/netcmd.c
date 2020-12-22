@@ -37,41 +37,39 @@
 #include <net/ethernet.h>
 #include <net/if.h>
 #include <arpa/inet.h>
+#include <ifaddrs.h>
 #include <netinet/in.h>
 #include <netinet/ether.h>
 
 #include <tinyara/clock.h>
 #include <tinyara/net/net.h>
-#include <net/lwip/netif.h>
-#include <net/lwip/dhcp.h>
-#include <net/lwip/stats.h>
 #include <tinyara/net/ip.h>
-#include <protocols/dhcpc.h>
-
 #ifdef CONFIG_NETUTILS_NETLIB
 #include <netutils/netlib.h>
 #endif
 
-#include <netutils/netlib.h>
 #include <protocols/tftp.h>
 
-#ifdef CONFIG_HAVE_GETHOSTBYNAME
 #include <netdb.h>
-#endif
 #include <protocols/dhcpc.h>
+
 #ifndef DNS_DEFAULT_PORT
 #define DNS_DEFAULT_PORT   53
 #endif
 
 #include "netcmd.h"
+#ifdef CONFIG_NET_PING_CMD
 #include "netcmd_ping.h"
+#endif
 #ifdef CONFIG_NETUTILS_DHCPD
 #include "netcmd_dhcpd.h"
 #endif
 #ifdef CONFIG_NETUTILS_TFTPC
 #include "netcmd_tftpc.h"
 #endif
-
+#ifdef CONFIG_NET_NETMON
+#include "netcmd_netmon.h"
+#endif
 #undef HAVE_PING
 #undef HAVE_PING6
 
@@ -79,20 +77,54 @@
 
 #define DEFAULT_PING_DATALEN 56
 
+struct ifconfig_cmd_info_s {
+	uint8_t mac[IFHWADDRLEN];
+	FAR char *intf;
+	FAR char *hostip;
+	FAR char *gwip;
+	FAR char *mask;
+	FAR char *dns;
+#ifdef CONFIG_NET_ETHERNET
+	FAR char *hw;
+#endif
+};
+
 #ifdef CONFIG_SYSTEM_NETDB
 extern int netdb_main(int argc, char *argv[]);
 #endif
 
+#define ARGC_CHECK(a, b)                        \
+	do {                                        \
+		if (a - 1 < b + 1) {                    \
+			printf(fmtargrequired, argv[0]);    \
+			ret = ERROR;                        \
+			goto endout;                        \
+		}                                       \
+	} while (0)
 static void nic_display_state(void)
 {
 	struct ifreq *ifr;
 	struct sockaddr_in *sin;
 	struct sockaddr *sa;
 	struct ifconf ifcfg;
+	int ret = -1;
 	int fd;
 	int numreqs = 3;
 	int num_nic = 0;
+
+	// to get ipv6 address call netlib_getifaddrs()
+	struct ifaddrs *ifa = NULL, *ifp = NULL;
+	ret = netlib_getifaddrs(&ifa);
+	if (ret < 0) {
+		printf("get ifaddrs fail\n");
+		return;
+	}
+
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		ndbg("fail %s:%d\n", __FUNCTION__, __LINE__);
+		return;
+	}
 	memset(&ifcfg, 0, sizeof(ifcfg));
 	ifcfg.ifc_buf = NULL;
 	ifcfg.ifc_len = sizeof(struct ifreq) * numreqs;
@@ -104,6 +136,7 @@ static void nic_display_state(void)
 	num_nic = ifcfg.ifc_len / sizeof(struct ifreq);
 	ifr = ifcfg.ifc_req;
 	int i = 0;
+
 	for (; i < num_nic; ifr++, i++) {
 		printf("%s\t", ifr->ifr_name);
 		sin = (struct sockaddr_in *)&ifr->ifr_addr;
@@ -112,23 +145,52 @@ static void nic_display_state(void)
 		} else {
 			struct ifreq tmp;
 			strncpy(tmp.ifr_name, ifr->ifr_name, IF_NAMESIZE);
-			ioctl(fd, SIOCGIFHWADDR, (unsigned long)&tmp);
-			sa = &tmp.ifr_hwaddr;
-			printf("Link encap: %s\t", ether_ntoa((struct ether_addr *)sa->sa_data));
+			ret = ioctl(fd, SIOCGIFHWADDR, (unsigned long)&tmp);
+			if (ret < 0) {
+				ndbg("fail %s:%d\n", __FUNCTION__, __LINE__);
+			} else {
+				sa = &tmp.ifr_hwaddr;
+				printf("Link encap: %s\t", ether_ntoa((struct ether_addr *)sa->sa_data));
+			}
 
-			ioctl(fd, SIOCGIFFLAGS, (unsigned long)ifr);
-			printf("RUNNING: %s\n", (ifr->ifr_flags & IFF_UP) ? "UP" : "DOWN");
+			ret = ioctl(fd, SIOCGIFFLAGS, (unsigned long)ifr);
+			if (ret < 0) {
+				ndbg("fail %s:%d\n", __FUNCTION__, __LINE__);
+			} else {
+				printf("RUNNING: %s\n", (ifr->ifr_flags & IFF_UP) ? "UP" : "DOWN");
+			}
 		}
 		printf("\tinet addr: %s\t", inet_ntoa(sin->sin_addr));
 
-		ioctl(fd, SIOCGIFNETMASK, (unsigned long)ifr);
-		sin = (struct sockaddr_in *)&ifr->ifr_addr;
-		printf("Mask: %s\t", inet_ntoa(sin->sin_addr));
-		ioctl(fd, SIOCGIFMTU, (unsigned long)ifr);
-		printf("MTU: %d\n", ifr->ifr_mtu);
+		ret = ioctl(fd, SIOCGIFNETMASK, (unsigned long)ifr);
+		if (ret < 0) {
+			ndbg("fail %s:%d\n", __FUNCTION__, __LINE__);
+		} else {
+			sin = (struct sockaddr_in *)&ifr->ifr_addr;
+			printf("Mask: %s\t", inet_ntoa(sin->sin_addr));
+		}
+
+		ret = ioctl(fd, SIOCGIFMTU, (unsigned long)ifr);
+		if (ret < 0) {
+			ndbg("fail %s:%d\n", __FUNCTION__, __LINE__);
+		} else {
+			printf("MTU: %d\n", ifr->ifr_mtu);
+		}
+
+		for (ifp = ifa; ifp; ifp = ifp->ifa_next) {
+			if (ifp->ifa_addr && ifp->ifa_addr->sa_family == AF_INET6
+				&& !strncmp(ifr->ifr_name, ifp->ifa_name, IFNAMSIZ)) {
+				struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)ifp->ifa_addr;
+				char ipaddr[INET6_ADDRSTRLEN + 1] = {0,};
+				memset(ipaddr, 0, INET6_ADDRSTRLEN + 1);
+				inet_ntop(AF_INET6, (void *)&(sin6->sin6_addr), ipaddr, INET6_ADDRSTRLEN);
+				printf("\tinet6: %s\n", ipaddr);
+			}
+		}
 		printf("\n");
 	}
 DONE:
+	netlib_freeifaddrs(ifa);
 	free(ifcfg.ifc_buf);
 	close(fd);
 }
@@ -167,23 +229,218 @@ int cmd_ifdown(int argc, char **argv)
 	return ret;
 }
 
+static int _cmd_ifconfig_parse(int argc, char **argv, struct ifconfig_cmd_info_s *info)
+{
+	int ret = OK;
+	int i = 0;
+	FAR char *tmp;
+
+	if (argc <= 2) {
+		printf(fmtargrequired, argv[0]);
+		ret = ERROR;
+		goto endout;
+	}
+
+	info->intf = argv[1];
+
+	for (i = 2; i < argc; i++) {
+		tmp = argv[i];
+		if (!strcmp(tmp, "dr") || !strcmp(tmp, "gw") || !strcmp(tmp, "gateway")) {
+			ARGC_CHECK(argc, i);
+			info->gwip = argv[i + 1];
+			i++;
+		} else if (!strcmp(tmp, "netmask")) {
+			ARGC_CHECK(argc, i);
+			info->mask = argv[i + 1];
+			i++;
+#ifdef CONFIG_NET_ETHERNET
+		/* REVISIT: How will we handle Ethernet and SLIP networks together? */
+		} else if (!strcmp(tmp, "hw")) {
+			ARGC_CHECK(argc, i);
+			info->hw = argv[i + 1];
+			i++;
+			if (!netlib_hwmacconv(info->hw, info->mac)) {
+				ret = ERROR;
+				goto endout;
+			}
+#endif
+		} else if (!strcmp(tmp, "dns")) {
+			ARGC_CHECK(argc, i);
+			info->dns = argv[i + 1];
+			i++;
+		} else {
+			if (i == 2) {
+				info->hostip = argv[i];
+			}
+		}
+	}
+
+endout:
+	return ret;
+}
+
+#ifdef CONFIG_NET_ETHERNET
+static int _cmd_ifconfig_setmacaddr(struct ifconfig_cmd_info_s *info)
+{
+	int ret = OK;
+	/* Set Hardware Ethernet MAC address */
+	/* REVISIT: How will we handle Ethernet and SLIP networks together? */
+	if (info->hw) {
+		ndbg("HW MAC: %s\n", info->hw);
+		ret = netlib_setmacaddr(info->intf, info->mac);
+		if (ret < 0) {
+			ndbg("Set mac address fail\n");
+			return ret;
+		}
+	}
+
+	return ret;
+}
+#endif
+
+static int _ipv4_set_gateway_netmask(struct ifconfig_cmd_info_s *info, struct in_addr *addr)
+{
+	int ret = OK;
+	in_addr_t gip = 0;
+
+	if (info->gwip) {
+		ndbg("Gateway: %s\n", info->gwip);
+		addr->s_addr = inet_addr(info->gwip);
+	} else {
+		ndbg("Gateway: default\n");
+		gip = NTOHL(addr->s_addr);
+		gip &= ~0x000000ff;
+		gip |= 0x00000001;
+		gip = HTONL(gip);
+
+		addr->s_addr = gip;
+	}
+	ret = netlib_set_dripv4addr(info->intf, addr);
+	if (ret < 0) {
+		ndbg("Set IPv4 route fail %s:%d\n", __FUNCTION__, __LINE__);
+		return ret;
+	}
+
+	if (info->mask) {
+		ndbg("Netmask: %s\n", info->mask);
+		addr->s_addr = inet_addr(info->mask);
+	} else {
+		ndbg("Netmask: default\n");
+		addr->s_addr = inet_addr("255.255.255.0");
+	}
+	ret = netlib_set_ipv4netmask(info->intf, addr);
+	if (ret < 0) {
+		ndbg("Set IPv4 netmask fail %s:%d\n", __FUNCTION__, __LINE__);
+		return ret;
+	}
+
+	return ret;
+}
+
+static int _cmd_ifconfig_setipaddr(struct ifconfig_cmd_info_s *info)
+{
+	int ret;
+	char *hostip = info->hostip;
+	char *intf = info->intf;
+	struct in_addr addr;
+
+	if (hostip != NULL) {
+		if (!strcmp(hostip, "dhcp")) {
+			/* Set DHCP addr */
+			addr.s_addr = 0;
+			ndbg("DHCPC Mode\n");
+			ret = netlib_getmacaddr(intf, info->mac);
+			if (ret < 0) {
+				ndbg("get mac fail %s:%d\n", __FUNCTION__, __LINE__);
+				return ret;
+			}
+
+			ret = dhcp_client_start(intf);
+			if (ret != OK) {
+				ndbg("get IP address fail\n");
+				return ret;
+			}
+
+			ret = netlib_get_ipv4addr(intf, &addr);
+			if (ret != OK) {
+				ndbg("get IP address fail\n");
+				return ret;
+			}
+			ndbg("get IP address %s\n", inet_ntoa(addr));
+		} else {
+			/* Set manual host IP address */
+			ndbg("Host IP: %s\n", hostip);
+			if (strstr(hostip, ".") != NULL) {
+				addr.s_addr = inet_addr(hostip);
+				netlib_set_ipv4addr(intf, &addr);
+#ifdef CONFIG_NET_IPv6
+			} else if (strstr(hostip, ":") != NULL) {
+				struct in6_addr addr6;
+				inet_pton(AF_INET6, hostip, &addr6);
+				netlib_set_ipv6addr(intf, &addr6);
+#endif /* CONFIG_NET_IPv6 */
+			} else {
+				ndbg("hostip is not valid\n");
+				return ERROR;
+			}
+		}
+
+		/* Gateway and Netmask setting */
+		ret = _ipv4_set_gateway_netmask(info, &addr);
+		if (ret < 0) {
+			ndbg("failed to set Gateway and Netmask\n");
+			return ret;
+		}
+	}
+	return OK;
+}
+
+static int _cmd_ifconfig_setdns(struct ifconfig_cmd_info_s *info)
+{
+	int ret = OK;
+	struct in_addr addr;
+	struct req_lwip_data req;
+	int sock;
+
+	if (info->dns) {
+		ndbg("DNS: %s\n", info->dns);
+		addr.s_addr = inet_addr(info->dns);
+#ifdef CONFIG_NET_LWIP    // this is temporal fix. it should be modified later
+		ip_addr_t dns_addr;
+		IP_SET_TYPE_VAL(dns_addr, IPADDR_TYPE_V4);
+#ifdef CONFIG_NET_IPv6
+		dns_addr.u_addr.ip4.addr = addr.s_addr;
+#else
+		dns_addr.addr = addr.s_addr;
+#endif
+		sock = socket(AF_INET, SOCK_DGRAM, 0);
+		if (sock < 0) {
+			ndbg("dnsclient : socket() failed with errno: %d\n", errno);
+			return ERROR;
+		}
+
+		memset(&req, 0, sizeof(req));
+		req.type = DNSSETSERVER;
+		req.num_dns = 0;
+		req.dns_server = &dns_addr;
+
+		ret = ioctl(sock, SIOCLWIP, (unsigned long)&req);
+		if (ret == ERROR) {
+			ndbg("dnsclient : ioctl() failed with errno: %d\n", errno);
+			close(sock);
+			return ret;
+		}
+		close(sock);
+#endif /*  CONFIG_NET_LWIP */
+	}
+
+	return ret;
+}
 int cmd_ifconfig(int argc, char **argv)
 {
-	struct in_addr addr;
-	in_addr_t gip;
-	int i;
-	FAR char *intf = NULL;
-	FAR char *hostip = NULL;
-	FAR char *gwip = NULL;
-	FAR char *mask = NULL;
-	FAR char *tmp = NULL;
-#ifdef CONFIG_NET_ETHERNET
-	FAR char *hw = NULL;
-#endif
-	FAR char *dns = NULL;
-	bool badarg = false;
-	uint8_t mac[IFHWADDRLEN];
-	struct netif *netif;
+	int ret;
+	struct ifconfig_cmd_info_s info;
+	memset(&info, 0, sizeof(struct ifconfig_cmd_info_s));
 
 	/* With one or no arguments, ifconfig simply shows the status of Ethernet
 	 * device:
@@ -202,168 +459,29 @@ int cmd_ifconfig(int argc, char **argv)
 	 *
 	 *    ifconfig nic_name ip_address
 	 */
+	ret = _cmd_ifconfig_parse(argc, argv, &info);
+	if (ret != OK) {
+		return ret;
+	}
 
-	if (argc > 2) {
-		for (i = 0; i < argc; i++) {
-			if (i == 1) {
-				intf = argv[i];
-			} else if (i == 2) {
-				hostip = argv[i];
-			} else {
-				tmp = argv[i];
-				if (!strcmp(tmp, "dr") || !strcmp(tmp, "gw") || !strcmp(tmp, "gateway")) {
-					if (argc - 1 >= i + 1) {
-						gwip = argv[i + 1];
-						i++;
-					} else {
-						badarg = true;
-					}
-				} else if (!strcmp(tmp, "netmask")) {
-					if (argc - 1 >= i + 1) {
-						mask = argv[i + 1];
-						i++;
-					} else {
-						badarg = true;
-					}
-				}
 #ifdef CONFIG_NET_ETHERNET
-				/* REVISIT: How will we handle Ethernet and SLIP networks together? */
-
-				else if (!strcmp(tmp, "hw")) {
-					if (argc - 1 >= i + 1) {
-						hw = argv[i + 1];
-						i++;
-						badarg = !netlib_hwmacconv(hw, mac);
-					} else {
-						badarg = true;
-					}
-				}
-#endif
-				else if (!strcmp(tmp, "dns")) {
-					if (argc - 1 >= i + 1) {
-						dns = argv[i + 1];
-						i++;
-					} else {
-						badarg = true;
-					}
-				}
-			}
-			netif = netif_find(intf);
-		}
-	}
-
-	if (badarg) {
-		printf(fmtargrequired, argv[0]);
-		return ERROR;
-	}
-#ifdef CONFIG_NET_ETHERNET
-	/* Set Hardware Ethernet MAC address */
-	/* REVISIT: How will we handle Ethernet and SLIP networks together? */
-
-	if (hw) {
-		ndbg("HW MAC: %s\n", hw);
-		netlib_setmacaddr(intf, mac);
+	/* MAC address setting */
+	ret = _cmd_ifconfig_setmacaddr(&info);
+	if (ret != OK) {
+		return ret;
 	}
 #endif
 
-	if (hostip != NULL) {
-		if (!strcmp(hostip, "dhcp")) {
-			/* Set DHCP addr */
-
-			ndbg("DHCPC Mode\n");
-			gip = addr.s_addr = 0;
-		} else {
-			/* Set host IP address */
-			ndbg("Host IP: %s\n", hostip);
-			gip = addr.s_addr = inet_addr(hostip);
-		}
-
-		netlib_set_ipv4addr(intf, &addr);
-
-	} else {
-		printf("hostip is not provided\n");
-		return ERROR;
+	/* IP addr setting */
+	ret = _cmd_ifconfig_setipaddr(&info);
+	if (ret != OK) {
+		return ret;
 	}
 
-	/* Get the MAC address of the NIC */
-	if (!gip) {
-		FAR void *handle;
-		netlib_getmacaddr(intf, mac);
-		struct dhcpc_state ds;
-		int ret;
-
-		/* Set up the DHCPC modules */
-
-		handle = dhcpc_open(intf);
-
-		/* Get an IP address.  Note that there is no logic for renewing the IP
-		 * address in this example.  The address should be renewed in
-		 * ds.lease_time/2 seconds.
-		 */
-
-		if (!handle) {
-			return ERROR;
-		}
-
-		ret = dhcpc_request(handle, &ds);
-		if (ret < 0) {
-			dhcpc_close(handle);
-			return ERROR;
-		}
-
-		netlib_set_ipv4addr(intf, &ds.ipaddr);
-
-		if (ds.netmask.s_addr != 0) {
-			netlib_set_ipv4netmask(intf, &ds.netmask);
-		}
-
-		if (ds.default_router.s_addr != 0) {
-			netlib_set_dripv4addr(intf, &ds.default_router);
-		}
-		printf("IP address %s\n", inet_ntoa(ds.ipaddr));
-		printf("Netmask %s\n", inet_ntoa(ds.netmask));
-		printf("Gateway %s\n", inet_ntoa(ds.default_router));
-#if defined(CONFIG_NETDB_DNSCLIENT) && defined(CONFIG_NETDB_DNSSERVER_BY_DHCP)
-		printf("Default DNS %s\n", inet_ntoa(ds.dnsaddr));
-#endif
-		dhcpc_close(handle);
-
-		return OK;
-	}
-
-	/* Set gateway */
-	if (gwip) {
-		ndbg("Gateway: %s\n", gwip);
-		gip = addr.s_addr = inet_addr(gwip);
-	} else {
-		if (gip) {
-			ndbg("Gateway: default\n");
-			gip = NTOHL(gip);
-			gip &= ~0x000000ff;
-			gip |= 0x00000001;
-			gip = HTONL(gip);
-		}
-
-		addr.s_addr = gip;
-	}
-	netlib_set_dripv4addr(intf, &addr);
-
-	/* Set network mask */
-	if (mask) {
-		ndbg("Netmask: %s\n", mask);
-		addr.s_addr = inet_addr(mask);
-	} else {
-		ndbg("Netmask: Default\n");
-		addr.s_addr = inet_addr("255.255.255.0");
-	}
-	netlib_set_ipv4netmask(intf, &addr);
-
-	if (dns) {
-		ndbg("DNS: %s\n", dns);
-		addr.s_addr = inet_addr(dns);
-	} else {
-		ndbg("DNS: Default\n");
-		addr.s_addr = gip;
+	/* DNS server setting */
+	ret = _cmd_ifconfig_setdns(&info);
+	if (ret != OK) {
+		return ret;
 	}
 
 	return OK;
@@ -379,7 +497,15 @@ const static tash_cmdlist_t net_utilcmds[] = {
 #ifdef NET_LWIP_STATS_DISPLAY
 	{"lwip_stats", stats_display, TASH_EXECMD_ASYNC},
 #endif
-	{"ping", cmd_ping, TASH_EXECMD_SYNC},
+#ifdef CONFIG_NET_NETMON
+	{"netmon", cmd_netmon, TASH_EXECMD_ASYNC},
+#endif
+#ifdef CONFIG_NET_PING_CMD
+	{"ping", cmd_ping, TASH_EXECMD_ASYNC},
+#ifdef CONFIG_NET_IPv6
+	{"ping6", cmd_ping6, TASH_EXECMD_ASYNC},
+#endif
+#endif
 #ifdef CONFIG_NETUTILS_TFTPC
 	{"tftpc", cmd_tftpc, TASH_EXECMD_SYNC},
 #endif

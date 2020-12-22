@@ -88,8 +88,8 @@
  * @{
  */
 #ifdef CONFIG_USEC_PER_TICK
-#define CLK_TCK           (1000000/CONFIG_USEC_PER_TICK)
-#define CLOCKS_PER_SEC    (1000000/CONFIG_USEC_PER_TICK)
+#define CLK_TCK           (1000000 / CONFIG_USEC_PER_TICK)
+#define CLOCKS_PER_SEC    (1000000 / CONFIG_USEC_PER_TICK)
 #else
 #define CLK_TCK           (100)
 #define CLOCKS_PER_SEC    (100)
@@ -127,21 +127,29 @@
 /**
  * @ingroup TIME_KERNEL
  * @brief  POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #define localtime(c)       gmtime(c)
 /**
  * @ingroup TIME_KERNEL
  * @brief  POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #define localtime_r(c, r)  gmtime_r(c, r)
 #endif
+
+/* tm_year of struct tm means years since 1900 */
+#define TM_YEAR_BASE       1900
 
 /********************************************************************************
  * Public Types
  ********************************************************************************/
 
+/* Some libc represents time_t intenally as long type.
+ * However, type long supports year value within the interval (1901, 2038),
+ * whereas  type unsigned int supports the interval (1970, 2106).
+ * Therefore, we represent time_t internally as type uint32_t.
+ */
 typedef uint32_t time_t;		/* Holds time in seconds */
 typedef uint8_t clockid_t;		/* Identifies one time base source */
 typedef FAR void *timer_t;		/* Represents one POSIX timer */
@@ -171,12 +179,12 @@ struct timezone {
  * @ingroup TIME_KERNEL
  * @brief Structure containing a calendar date and time */
 struct tm {
-	int tm_sec;					/* second (0-61, allows for leap seconds) */
-	int tm_min;					/* minute (0-59) */
+	int tm_sec;				/* second (0-61, allows for leap seconds) */
+	int tm_min;				/* minute (0-59) */
 	int tm_hour;				/* hour (0-23) */
 	int tm_mday;				/* day of the month (1-31) */
-	int tm_mon;					/* month (0-11) */
-	int tm_year;				/* years since 1900 */
+	int tm_mon;				/* month (0-11) */
+	int tm_year;				/* years since 1900, TM_YEAR_BASE */
 #if defined(CONFIG_LIBC_LOCALTIME) || defined(CONFIG_TIME_EXTENDED)
 	int tm_wday;				/* day of the week (0-6) */
 	int tm_yday;				/* day of the year (0-365) */
@@ -202,8 +210,13 @@ struct sigevent;
 /********************************************************************************
  * Public Data
  ********************************************************************************/
+#ifdef CONFIG_LIBC_LOCALTIME
+/* tzname[] - Timezone strings
+ * Setup by tzset()
+ */
 
-/* extern char *tznames[]; not supported */
+extern char *tznames[2];
+#endif
 
 /********************************************************************************
  * Public Function Prototypes
@@ -223,7 +236,7 @@ extern "C" {
  * @details @b #include <time.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int clock_settime(clockid_t clockid, FAR const struct timespec *tp);
 /**
@@ -232,7 +245,7 @@ int clock_settime(clockid_t clockid, FAR const struct timespec *tp);
  * @details @b #include <time.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int clock_gettime(clockid_t clockid, FAR struct timespec *tp);
 /**
@@ -241,16 +254,26 @@ int clock_gettime(clockid_t clockid, FAR struct timespec *tp);
  * @details @b #include <time.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int clock_getres(clockid_t clockid, FAR struct timespec *res);
 
 /**
  * @ingroup TIME_KERNEL
+ * @brief returns the implementation's best approximation to the
+ * processor time used by the process since the beginning of a
+ * implementation-defined era related only to the process invocation.
+ * @details @b #include <time.h> \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v2.0
+ */
+clock_t clock(void);
+/**
+ * @ingroup TIME_KERNEL
  * @brief convert broken-down time into time since the Epoch
  * @details @b #include <time.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 time_t mktime(FAR struct tm *tp);
 /**
@@ -258,7 +281,7 @@ time_t mktime(FAR struct tm *tp);
  * @brief convert a time value to a broken-down UTC time
  * @details @b #include <time.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 FAR struct tm *gmtime(FAR const time_t *timer);
 /**
@@ -266,7 +289,7 @@ FAR struct tm *gmtime(FAR const time_t *timer);
  * @brief convert a time value to a broken-down UTC time
  * @details @b #include <time.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 FAR struct tm *gmtime_r(FAR const time_t *timer, FAR struct tm *result);
 
@@ -276,7 +299,7 @@ FAR struct tm *gmtime_r(FAR const time_t *timer, FAR struct tm *result);
  * @brief convert a time value to a broken-down local time
  * @details @b #include <time.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 FAR struct tm *localtime(FAR const time_t *timer);
 /**
@@ -284,7 +307,7 @@ FAR struct tm *localtime(FAR const time_t *timer);
  * @brief convert a time value to a broken-down local time
  * @details @b #include <time.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 FAR struct tm *localtime_r(FAR const time_t *timer, FAR struct tm *result);
 
@@ -294,7 +317,7 @@ FAR struct tm *localtime_r(FAR const time_t *timer, FAR struct tm *result);
  * @brief convert date and time to a string
  * @details @b #include <time.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 size_t strftime(char *s, size_t max, FAR const char *format, FAR const struct tm *tm);
 
@@ -324,23 +347,26 @@ FAR char *ctime_r(FAR const time_t *timep, FAR char *buf);
  * @endcond
  */
 
-#ifdef CONFIG_ENABLE_IOTIVITY
 /**
- * @cond
- * @internal
+ * @ingroup TIME_KERNEL
+ * @brief convert a time string to a time tm structure
+ * @details @b #include <time.h> \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v2.0
  */
 char *strptime(const char *buf, const char *fmt, struct tm *tm);
+
 /**
- * @internal
+ * @ingroup TIME_KERNEL
+ * @brief calculate time difference
+ * @details @b #include <time.h> \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v2.0
  */
 #ifdef CONFIG_HAVE_DOUBLE
 double difftime(time_t time1, time_t time0);
 #else
 float difftime(time_t time1, time_t time0);
-#endif
-/**
- * @endcond
- */
 #endif
 
 /**
@@ -348,7 +374,7 @@ float difftime(time_t time1, time_t time0);
  * @brief get time
  * @details @b #include <time.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 time_t time(FAR time_t *tloc);
 
@@ -358,7 +384,7 @@ time_t time(FAR time_t *tloc);
  * @details @b #include <time.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int timer_create(clockid_t clockid, FAR struct sigevent *evp, FAR timer_t *timerid);
 /**
@@ -367,7 +393,7 @@ int timer_create(clockid_t clockid, FAR struct sigevent *evp, FAR timer_t *timer
  * @details @b #include <time.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int timer_delete(timer_t timerid);
 /**
@@ -376,7 +402,7 @@ int timer_delete(timer_t timerid);
  * @details @b #include <time.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int timer_settime(timer_t timerid, int flags, FAR const struct itimerspec *value, FAR struct itimerspec *ovalue);
 /**
@@ -385,7 +411,7 @@ int timer_settime(timer_t timerid, int flags, FAR const struct itimerspec *value
  * @details @b #include <time.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int timer_gettime(timer_t timerid, FAR struct itimerspec *value);
 /**
@@ -409,10 +435,24 @@ int timer_getoverrun(timer_t timerid);
  *                 remaining in the interval (the requested time minus the time
  *                 actually slept)
  * @return On success, remaining time is returned. On failure, ERROR is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int nanosleep(FAR const struct timespec *rqtp, FAR struct timespec *rmtp);
 
+/**
+ * @cond
+ * @internal
+ * @ingroup TIME_KERNEL
+ * @brief set time conversion information
+ * @details @b #include <time.h> \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ */
+#ifdef CONFIG_LIBC_LOCALTIME
+void tzset(void);
+#endif
+/**
+ * @endcond
+ */
 #undef EXTERN
 #if defined(__cplusplus)
 }

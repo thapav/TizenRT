@@ -384,13 +384,6 @@ kconfig.bat
      -   option env="APPSDIR"
      +   default "../apps"
 
-formatter.sh
----------
-
-  This script can be used to indent .c and .h files in a manner similar
-  to my coding TinyAra coding style.  It doesn't do a really good job,
-  however (see the comments at the top of the formatter.sh file).
-
 refresh.sh
 ----------
 
@@ -407,7 +400,7 @@ refresh.sh
   The steps to refresh the file are:
 
   1. Make tools/cmpconfig if it is not already built.
-  2. Copy the the defconfig file to the top-level TinyAra
+  2. Copy the defconfig file to the top-level TinyAra
      directory as .config (being careful to save any previous
      .config file that you might want to keep!).
   3. Execute 'make oldconfig' to update the configuration.

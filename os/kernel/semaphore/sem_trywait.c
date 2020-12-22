@@ -65,6 +65,10 @@
 #include "sched/sched.h"
 #include "semaphore/semaphore.h"
 
+#ifdef CONFIG_SEMAPHORE_HISTORY
+#include <tinyara/debug/sysdbg.h>
+#endif
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -121,7 +125,7 @@ int sem_trywait(FAR sem_t *sem)
 
 	DEBUGASSERT(sem != NULL && up_interrupt_context() == false);
 
-	if (sem != NULL) {
+	if ((sem != NULL) && ((sem->flags & FLAGS_INITIALIZED) != 0)) {
 		/* The following operations must be performed with interrupts disabled
 		 * because sem_post() may be called from an interrupt handler.
 		 */
@@ -136,6 +140,9 @@ int sem_trywait(FAR sem_t *sem)
 			sem->semcount--;
 			sem_addholder(sem);
 			rtcb->waitsem = NULL;
+#ifdef CONFIG_SEMAPHORE_HISTORY
+			save_semaphore_history(sem, (void *)rtcb, SEM_ACQUIRE);
+#endif
 			ret = OK;
 		} else {
 			/* Semaphore is not available */

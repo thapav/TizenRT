@@ -58,9 +58,15 @@
 #ifdef CONFIG_HAVE_LONG_DOUBLE
 long double asinl(long double x)
 {
-	long double y, y_sin, y_cos;
+	long double y;
+	long double y_sin;
+	long double y_cos;
 
 	y = 0;
+
+	if (isnan(x) || x < -1.0 || x > 1.0) {
+		return NAN;
+	}
 
 	while (1) {
 		y_sin = sinl(y);

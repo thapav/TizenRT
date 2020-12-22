@@ -27,7 +27,7 @@
 
 #ifdef __TIZENRT__
 #include <tinyara/config.h>
-#include <uio.h>
+#include <sys/uio.h>
 #endif
 
 #include "iotivity_config.h"
@@ -64,8 +64,8 @@
 #endif
 
 #ifdef __TIZENRT__
-#include <uio.h>
-#include <mqueue.h>
+#include <net/if.h>
+#include <tinyara/lwnl/lwnl.h>
 #endif
 #include <coap/pdu.h>
 #include "caipinterface.h"
@@ -79,7 +79,7 @@
 #include "oic_string.h"
 
 #define USE_IP_MREQN
-#if defined(_WIN32)
+#if defined(_WIN32) || defined (__TIZENRT__)
 #undef USE_IP_MREQN
 #endif
 
@@ -90,7 +90,6 @@
 #define TAG IP_SERVER_TAG
 
 #ifdef __TIZENRT__
-mqd_t g_nwevent_mqfd;
 #ifdef CONFIG_NET_LWIP
 #define SOCK_CLOEXEC 0
 #else
@@ -281,22 +280,6 @@ static void CAFindReadyMessage()
         return;
     }
 
-#ifdef __TIZENRT__
-    u_arraylist_t *iflist = CAFindInterfaceChange();
-    if (iflist)
-    {
-        uint32_t listLength = u_arraylist_length(iflist);
-        for (uint32_t i = 0; i < listLength; i++)
-        {
-            CAInterface_t *ifitem = (CAInterface_t *)u_arraylist_get(iflist, i);
-            if (ifitem)
-            {
-                CAProcessNewInterface(ifitem);
-            }
-        }
-        u_arraylist_destroy(iflist);
-    }
-#endif
     if (0 < ret)
     {
         CASelectReturned(&readFds, ret);
@@ -325,7 +308,6 @@ static void CASelectReturned(fd_set *readFds, int ret)
         else ISSET(m4s, readFds, CA_MULTICAST | CA_IPV4 | CA_SECURE)
         else if ((caglobals.ip.netlinkFd != OC_INVALID_SOCKET) && FD_ISSET(caglobals.ip.netlinkFd, readFds))
         {
-#ifndef __TIZENRT__
             u_arraylist_t *iflist = CAFindInterfaceChange();
             if (iflist)
             {
@@ -341,7 +323,6 @@ static void CASelectReturned(fd_set *readFds, int ret)
                 u_arraylist_destroy(iflist);
             }
             break;
-#endif
         }
 #ifndef __TIZENRT__
         else if (FD_ISSET(caglobals.ip.shutdownFds[0], readFds))
@@ -592,7 +573,7 @@ static CAResult_t CAReceiveMessage(CASocketFd_t fd, CATransportFlags_t flags)
         struct cmsghdr cmsg;
         unsigned char data[CMSG_SPACE(sizeof (struct in6_pktinfo))];
     } cmsg;
-
+#if defined (CONFIG_NET_IPv6)
     if (flags & CA_IPV6)
     {
         namelen = sizeof (struct sockaddr_in6);
@@ -601,6 +582,7 @@ static CAResult_t CAReceiveMessage(CASocketFd_t fd, CATransportFlags_t flags)
         len = sizeof (struct in6_pktinfo);
     }
     else
+#endif
     {
         namelen = sizeof (struct sockaddr_in);
         level = IPPROTO_IP;
@@ -641,6 +623,7 @@ static CAResult_t CAReceiveMessage(CASocketFd_t fd, CATransportFlags_t flags)
     } cmsg;
     memset(&cmsg, 0, sizeof(cmsg));
 
+#if defined (CONFIG_NET_IPv6)
     if (flags & CA_IPV6)
     {
         namelen  = sizeof (struct sockaddr_in6);
@@ -648,6 +631,7 @@ static CAResult_t CAReceiveMessage(CASocketFd_t fd, CATransportFlags_t flags)
         type = IPV6_PKTINFO;
     }
     else
+#endif
     {
         namelen = sizeof (struct sockaddr_in);
         level = IPPROTO_IP;
@@ -769,6 +753,7 @@ static CASocketFd_t CACreateSocket(int family, uint16_t *port, bool isMulticast)
     struct sockaddr_storage sa = { .ss_family = family };
     socklen_t socklen = 0;
 
+#if defined (CONFIG_NET_IPv6)
     if (family == AF_INET6)
     {
         int on = 1;
@@ -794,6 +779,7 @@ static CASocketFd_t CACreateSocket(int family, uint16_t *port, bool isMulticast)
         socklen = sizeof (struct sockaddr_in6);
     }
     else
+#endif /* CONFIG_NET_IPv6 */
     {
         if (isMulticast && *port) // only do this for multicast ports
         {
@@ -893,16 +879,11 @@ static void CAInitializeNetlink()
             CHECKFD(caglobals.ip.netlinkFd);
         }
     }
-#elif defined (__TIZENRT__) // pkmsgq
-	struct mq_attr lq_attr;
-	lq_attr.mq_maxmsg = 10;
-	lq_attr.mq_msgsize = 4;
-	lq_attr.mq_flags = 0;
-	g_nwevent_mqfd = mq_open("netlink_evtq", O_RDWR | O_NONBLOCK | O_CREAT, 0666, &lq_attr);
-	if (g_nwevent_mqfd == (mqd_t) - 1)
-	{
-		OIC_LOG_V(ERROR, TAG,"RECV mq_open failed\n");
-		return ;
+#elif defined (__TIZENRT__)
+	caglobals.ip.netlinkFd = socket(AF_LWNL, SOCK_RAW, LWNL_ROUTE);
+	if (caglobals.ip.netlinkFd < 0) {
+		OIC_LOG_V(ERROR, TAG, "netlink socket failed: %s", strerror(errno));
+		return;
 	}
 #endif
 }
@@ -1187,7 +1168,7 @@ static void applyMulticast6(int fd, struct in6_addr *addr, uint32_t ifindex)
             OIC_LOG_V(ERROR, TAG, "IPv6 IPV6_JOIN_GROUP failed: %s", CAIPS_GET_ERROR);
         }
     }
-#endif
+#endif /* ! __TIZENRT__ */
 }
 
 static void applyMulticastToInterface6(uint32_t ifindex)
@@ -1423,6 +1404,7 @@ static void sendMulticastData6(const u_arraylist_t *iflist,
                                CAEndpoint_t *endpoint,
                                const void *data, uint32_t datalen)
 {
+#ifndef __TIZENRT__
     if (!endpoint)
     {
         OIC_LOG(DEBUG, TAG, "endpoint is null");
@@ -1477,15 +1459,14 @@ static void sendMulticastData6(const u_arraylist_t *iflist,
             return;
         }
 
-#ifndef __TIZENRT__
         // Set multicast packet TTL; default TTL is 1
         if (setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &multicastTTL, sizeof(multicastTTL)))
         {
             OIC_LOG_V(ERROR, TAG, "IPV6_MULTICAST_HOPS failed: %s", CAIPS_GET_ERROR);
         }
-#endif
         sendData(fd, endpoint, data, datalen, "multicast", "ipv6");
     }
+#endif /* ! __TIZENRT__*/
 }
 
 static void sendMulticastData4(const u_arraylist_t *iflist,

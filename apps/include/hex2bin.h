@@ -114,7 +114,7 @@
 #ifdef CONFIG_SYSTEM_HEX2BIN_DEBUG
 #define hex2bin_debug(format, ...) fprintf(stderr, format, ##__VA_ARGS__)
 #else
-#define hex2bin_debug(x...)
+#define hex2bin_debug(...)
 #endif
 #else
 #ifdef CONFIG_SYSTEM_HEX2BIN_DEBUG
@@ -244,7 +244,7 @@ int fhex2mem(FAR FILE * instream, uint32_t baseaddr, uint32_t endpaddr, enum hex
  * Name: hex2bin_main
  *
  * Description:
- *   Main entry point when hex2bin is built as an NSH built-in task.
+ *   Main entry point when hex2bin is built as an TASH built-in task.
  *
  * Input Parameters:
  *   Standard task inputs
@@ -262,7 +262,7 @@ int hex2bin_main(int argc, char **argv);
  * Name: hex2mem_main
  *
  * Description:
- *   Main entry point when hex2mem is built as an NSH built-in task.
+ *   Main entry point when hex2mem is built as an TASH built-in task.
  *
  * Input Parameters:
  *   Standard task inputs

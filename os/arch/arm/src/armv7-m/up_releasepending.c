@@ -62,6 +62,14 @@
 
 #include "sched/sched.h"
 #include "up_internal.h"
+#ifdef CONFIG_ARMV7M_MPU
+#include "mpu.h"
+#include <tinyara/mpu.h>
+#endif
+
+#ifdef CONFIG_TASK_SCHED_HISTORY
+#include <tinyara/debug/sysdbg.h>
+#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -70,7 +78,9 @@
 /****************************************************************************
  * Private Data
  ****************************************************************************/
-
+#ifdef CONFIG_SUPPORT_COMMON_BINARY
+extern uint32_t *g_umm_app_id;
+#endif
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
@@ -118,8 +128,37 @@ void up_release_pending(void)
 			rtcb = this_task();
 			sllvdbg("New Active Task TCB=%p\n", rtcb);
 
-			/* Then switch contexts */
+#ifdef CONFIG_TASK_SCHED_HISTORY
+			/* Save the task name which will be scheduled */
+			save_task_scheduling_status(rtcb);
+#endif
 
+			/* Restore the MPU registers in case we are switching to an application task */
+#ifdef CONFIG_ARMV7M_MPU
+			/* Condition check : Update MPU registers only if this is not a kernel thread. */
+			if ((rtcb->flags & TCB_FLAG_TTYPE_MASK) != TCB_FLAG_TTYPE_KERNEL) {
+#if defined(CONFIG_APP_BINARY_SEPARATION)
+				for (int i = 0; i < MPU_REG_NUMBER * MPU_NUM_REGIONS; i += MPU_REG_NUMBER) {
+					up_mpu_set_register(&rtcb->mpu_regs[i]);
+				}
+#endif
+			}
+#ifdef CONFIG_MPU_STACK_OVERFLOW_PROTECTION
+			up_mpu_set_register(rtcb->stack_mpu_regs);
+#endif
+#endif
+
+#ifdef CONFIG_SUPPORT_COMMON_BINARY
+			if (g_umm_app_id) {
+				*g_umm_app_id = rtcb->app_id;
+			}
+#endif
+#ifdef CONFIG_TASK_MONITOR
+			/* Update rtcb active flag for monitoring. */
+			rtcb->is_active = true;
+#endif
+
+			/* Then switch contexts */
 			up_restorestate(rtcb->xcp.regs);
 		}
 
@@ -131,6 +170,10 @@ void up_release_pending(void)
 			 */
 
 			struct tcb_s *nexttcb = this_task();
+#ifdef CONFIG_TASK_SCHED_HISTORY
+			/* Save the task name which will be scheduled */
+			save_task_scheduling_status(nexttcb);
+#endif
 			up_switchcontext(rtcb->xcp.regs, nexttcb->xcp.regs);
 
 			/* up_switchcontext forces a context switch to the task at the

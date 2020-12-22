@@ -57,7 +57,9 @@
  ****************************************************************************/
 
 #include <tinyara/config.h>
+#ifndef NXFUSE_HOST_BUILD
 #include <tinyara/compiler.h>
+#endif
 
 #include <sys/types.h>
 #include <stdarg.h>
@@ -84,6 +86,20 @@
 #define __FS_FLAG_UBF   (1 << 3)       /* Buffer allocated by caller of setvbuf */
 #ifndef CONFIG_MOUNT_POINT
 #define CONFIG_MOUNT_POINT "/mnt/"
+#endif
+
+#ifdef CONFIG_FS_PROCFS
+#define PROCFS_FSTYPE "procfs"
+#define PROCFS_MOUNT_POINT "/proc"
+#endif
+
+#ifdef CONFIG_FS_TMPFS
+#define TMPFS_FSTYPE "tmpfs"
+#define TMPFS_MOUNT_POINT "/tmp"
+#endif
+#ifdef NXFUSE_HOST_BUILD
+#define  O_WROK    1
+#define  O_RDOK    2
 #endif
 
 /****************************************************************************
@@ -190,6 +206,7 @@ struct mountpt_operations {
 	int (*sync)(FAR struct file *filep);
 	int (*dup)(FAR const struct file *oldp, FAR struct file *newp);
 	int (*fstat)(FAR const struct file *filep, FAR struct stat *buf);
+	int (*truncate)(FAR struct file *filep, off_t length);
 
 	/* Directory operations */
 
@@ -272,6 +289,9 @@ struct inode {
 struct file {
 	int f_oflags;				/* Open mode flags */
 	off_t f_pos;				/* File position */
+#ifdef NXFUSE_HOST_BUILD
+	off_t f_seekpos;                        /* File seek position */
+#endif
 	FAR struct inode *f_inode;	/* Driver interface */
 	void *f_priv;				/* Per file driver private data */
 };
@@ -286,14 +306,14 @@ struct filelist {
 #endif
 
 /* The following structure defines the list of files used for standard C I/O.
- * Note that TinyAra can support the standard C APIs without or without buffering
+ * Note that TinyAra can support the standard C APIs with or without buffering
  *
- * When buffering us used, the following described the usage of the I/O buffer.
+ * When buffering is used, the following describes the usage of the I/O buffer.
  * The buffer can be used for reading or writing -- but not both at the same time.
- * An fflush is implied between each change in directionof access.
+ * A fflush is implied between each change in direction of access.
  *
  * The field fs_bufread determines whether the buffer is being used for reading or
- * for writing as fillows:
+ * for writing as follows:
  *
  *              BUFFER
  *     +----------------------+ <- fs_bufstart Points to the beginning of the buffer.
@@ -308,7 +328,7 @@ struct filelist {
  *     | RD: Available        |                WR: =bufstart buffer used for writing.
  *     |                      |                RD: Pointer to last buffered read char+1
  *     +----------------------+
- *                              <- fs_bufend   Points to end end of the buffer+1
+ *                              <- fs_bufend   Points to the end of the buffer+1
  */
 
 #if CONFIG_NFILE_STREAMS > 0
@@ -359,7 +379,7 @@ extern "C" {
 #define EXTERN extern
 #endif
 
-/* fs_inode.c ***************************************************************/
+/* fs_initialize.c ***************************************************************/
 /****************************************************************************
  * Name: fs_initialize
  *
@@ -370,6 +390,16 @@ extern "C" {
  ****************************************************************************/
 
 void fs_initialize(void);
+
+/****************************************************************************
+ * Name: fs_auto_mount
+ *
+ * Description:
+ *   This is called from the OS initialization logic to auto mount
+ *   arch-independent file systems.
+ *
+ ****************************************************************************/
+void fs_auto_mount(void);
 
 /* fs_foreachmountpoint.c ***************************************************/
 /****************************************************************************
@@ -576,6 +606,74 @@ int fs_dupfd2(int fd1, int fd2);
 #endif
 #endif
 
+/****************************************************************************
+ * Name: file_open
+ *
+ * Description:
+ *   file_open() is similar to the standard 'open' interface except that it
+ *   returns an instance of 'struct file' rather than a file descriptor.  It
+ *   also is not a cancellation point and does not modify the errno variable.
+ *
+ * Input Parameters:
+ *   filep  - The caller provided location in which to return the 'struct
+ *            file' instance.
+ *   path   - The full path to the file to be open.
+ *   oflags - open flags
+ *   ...    - Variable number of arguments, may include 'mode_t mode'
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success.  On failure, a negated errno value is
+ *   returned.
+ *
+ ****************************************************************************/
+
+int file_open(FAR struct file *filep, FAR const char *path, int oflags, ...);
+
+/****************************************************************************
+ * Name: file_detach
+ *
+ * Description:
+ *   This function is used to device drivers to create a task-independent
+ *   handle to an entity in the file system.  file_detach() duplicates the
+ *   'struct file' that underlies the file descriptor, then closes the file
+ *   descriptor.
+ *
+ *   This function will fail if fd is not a valid file descriptor.  In
+ *   particular, it will fail if fd is a socket descriptor.
+ *
+ * Input Parameters:
+ *   fd    - The file descriptor to be detached.  This descriptor will be
+ *           closed and invalid if the file was successfully detached.
+ *   filep - A pointer to a user provided memory location in which to
+ *           received the duplicated, detached file structure.
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success; A negated errno value is returned on
+ *   any failure to indicate the nature of the failure.
+ *
+ ****************************************************************************/
+
+int file_detach(int fd, FAR struct file *filep);
+
+/****************************************************************************
+ * Name: file_close
+ *
+ * Description:
+ *   Close a file that was previously opened with file_open() (or detached
+ *   with file_detach()).
+ *
+ * Input Parameters:
+ *   filep - A pointer to a user provided memory location containing the
+ *           open file data returned by file_detach().
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success; A negated errno value is returned on
+ *   any failure to indicate the nature of the failure.
+ *
+ ****************************************************************************/
+
+int file_close(FAR struct file *filep);
+
 /* fs_openblockdriver.c *****************************************************/
 /****************************************************************************
  * Name: open_blockdriver
@@ -698,28 +796,57 @@ int lib_flushall(FAR struct streamlist *list);
  *   file.  NOTE that this function will currently fail if it is provided
  *   with a socket descriptor.
  *
- * Parameters:
- *   fd - The file descriptor
+ * Input Parameters:
+ *   fd    - The file descriptor
+ *   filep - The location to return the struct file instance
  *
- * Return:
- *   A point to the corresponding struct file instance is returned on
- *   success.  On failure,  NULL is returned and the errno value is
- *   set appropriately (EBADF).
+ * Returned Value:
+ *   Zero (OK) is returned on success; a negated errno value is returned on
+ *   any failure.
  *
  ****************************************************************************/
 
 #if CONFIG_NFILE_DESCRIPTORS > 0
-FAR struct file *fs_getfilep(int fd);
+int fs_getfilep(int fd, FAR struct file **filep);
 #endif
 
-/* fs/fs_read.c *************************************************************/
+/****************************************************************************
+ * Name: vopen
+ *
+ * Description:
+ *   vopen() is identical to 'open' except that it accepts a va_list
+ *   as an argument versus taking a variable length list of arguments.
+ *
+ *   vopen() is an internal TizenRT interface and should not be called from
+ *   applications.
+ *
+ * Returned Value:
+ *   The new file descriptor is returned on success; a negated errno value is
+ *   returned on any failure.
+ *
+ ****************************************************************************/
+int vopen(FAR const char *path, int oflags, va_list ap);
+
 /****************************************************************************
  * Name: file_read
  *
  * Description:
- *   Equivalent to the standard read() function except that is accepts a
- *   struct file instance instead of a file descriptor.  Currently used
- *   only by net_sendfile() and aio_read();
+ *   file_read() is an internal OS interface.  It is functionally similar to
+ *   the standard read() interface except:
+ *
+ *    - It does not modify the errno variable,
+ *    - It is not a cancellation point,
+ *    - It does not handle socket descriptors, and
+ *    - It accepts a file structure instance instead of file descriptor.
+ *
+ * Input Parameters:
+ *   filep  - File structure instance
+ *   buf    - User-provided to save the data
+ *   nbytes - The maximum size of the user-provided buffer
+ *
+ * Returned Value:
+ *   The positive non-zero number of bytes read on success, 0 on if an
+ *   end-of-file condition, or a negated errno value on any failure.
  *
  ****************************************************************************/
 
@@ -727,14 +854,29 @@ FAR struct file *fs_getfilep(int fd);
 ssize_t file_read(FAR struct file *filep, FAR void *buf, size_t nbytes);
 #endif
 
-/* fs/fs_write.c ************************************************************/
 /****************************************************************************
  * Name: file_write
  *
  * Description:
  *   Equivalent to the standard write() function except that is accepts a
- *   struct file instance instead of a file descriptor.  Currently used
- *   only by aio_write();
+ *   struct file instance instead of a file descriptor.  It is functionally
+ *   equivalent to write() except that in addition to the differences in
+ *   input paramters:
+ *
+ *  - It does not modify the errno variable,
+ *  - It is not a cancellation point, and
+ *  - It does not handle socket descriptors.
+ *
+ * Input Parameters:
+ *   filep  - Instance of struct file to use with the write
+ *   buf    - Data to write
+ *   nbytes - Length of data to write
+ *
+ * Returned Value:
+ *  On success, the number of bytes written are returned (zero indicates
+ *  nothing was written).  On any failure, a negated errno value is returned
+ *  (see comments withwrite() for a description of the appropriate errno
+ *  values).
  *
  ****************************************************************************/
 
@@ -802,6 +944,26 @@ off_t file_seek(FAR struct file *filep, off_t offset, int whence);
 int file_fsync(FAR struct file *filep);
 #endif
 
+/****************************************************************************
+ * Name: file_ioctl
+ *
+ * Description:
+ *   Perform device specific operations.
+ *
+ * Input Parameters:
+ *   file     File structure instance
+ *   req      The ioctl command
+ *   arg      The argument of the ioctl cmd
+ *
+ * Returned Value:
+ *   Returns a non-negative number on success;  A negated errno value is
+ *   returned on any failure (see comments ioctl() for a list of appropriate
+ *   errno values).
+ *
+ ****************************************************************************/
+
+int file_ioctl(FAR struct file *filep, int req, unsigned long arg);
+
 /* fs/fs_fcntl.c ************************************************************/
 /****************************************************************************
  * Name: file_vfcntl
@@ -815,6 +977,60 @@ int file_fsync(FAR struct file *filep);
 
 #if CONFIG_NFILE_DESCRIPTORS > 0
 int file_vfcntl(FAR struct file *filep, int cmd, va_list ap);
+#endif
+
+/****************************************************************************
+ * Name: file_poll
+ *
+ * Description:
+ *   Low-level poll operation based on struct file.  This is used both to (1)
+ *   support detached file, and also (2) by fdesc_poll() to perform all
+ *   normal operations on file descriptors descriptors.
+ *
+ * Input Parameters:
+ *   file     File structure instance
+ *   fds   - The structure describing the events to be monitored, OR NULL if
+ *           this is a request to stop monitoring events.
+ *   setup - true: Setup up the poll; false: Teardown the poll
+ *
+ * Returned Value:
+ *  0: Success; Negated errno on failure
+ *
+ ****************************************************************************/
+
+int file_poll(FAR struct file *filep, FAR struct pollfd *fds, bool setup);
+
+/****************************************************************************
+ * Name: fdesc_poll
+ *
+ * Description:
+ *   The standard poll() operation redirects operations on file descriptors
+ *   to this function.
+ *
+ * Input Parameters:
+ *   fd    - The file descriptor of interest
+ *   fds   - The structure describing the events to be monitored, OR NULL if
+ *           this is a request to stop monitoring events.
+ *   setup - true: Setup up the poll; false: Teardown the poll
+ *
+ * Returned Value:
+ *  0: Success; Negated errno on failure
+ *
+ ****************************************************************************/
+
+int fdesc_poll(int fd, FAR struct pollfd *fds, bool setup);
+
+/* fs/driver/block/fs_blockproxy.c ******************************************/
+/****************************************************************************
+ * Name: unique_chardev_initialize
+ *
+ * Description:
+ *  Initialize a semphore for unique character device.
+ *
+ ****************************************************************************/
+
+#if !defined(CONFIG_DISABLE_PSEUDOFS_OPERATIONS) && !defined(CONFIG_DISABLE_MOUNTPOINT)
+void unique_chardev_initialize(void);
 #endif
 
 /* drivers/dev_null.c *******************************************************/
@@ -936,6 +1152,17 @@ ssize_t bchlib_read(FAR void *handle, FAR char *buffer, size_t offset, size_t le
  ****************************************************************************/
 
 ssize_t bchlib_write(FAR void *handle, FAR const char *buffer, size_t offset, size_t len);
+
+/* drivers/pipes/pipe.c ***********************************************/
+/****************************************************************************
+ * Name: pipe_initialize
+ *
+ * Description:
+ *   Initialize a semaphore for pipe
+ *
+ ****************************************************************************/
+
+void pipe_initialize(void);
 
 #undef EXTERN
 #if defined(__cplusplus)

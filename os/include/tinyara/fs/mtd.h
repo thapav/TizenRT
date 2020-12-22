@@ -18,7 +18,7 @@
 /****************************************************************************
  * Memory Technology Device (MTD) interface
  *
- *   Copyright (C) 2009-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2013, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -62,10 +62,17 @@
 #include <sys/types.h>
 #include <stdint.h>
 
+#ifndef NXFUSE_HOST_BUILD
+#include <tinyara/spi/spi.h>
+#endif
+
 /****************************************************************************
  * Pre-Processor Definitions
  ****************************************************************************/
 
+#ifdef CONFIG_MTD_PARTITION_NAMES
+#define MTD_PARTNAME_LEN       15
+#endif
 /* Macros to hide implementation */
 
 #define MTD_ERASE(d, s, n)     ((d)->erase  ? (d)->erase(d, s, n)     : (-ENOSYS))
@@ -90,10 +97,10 @@
  */
 
 struct mtd_geometry_s {
-	uint32_t blocksize:14;		/* Size of one read/write block.  Largest: 16KB-1 */
-	uint32_t erasesize:18;		/* Size of one erase blocks -- must be a multiple
-								 * of blocksize.  Largest: 512KB-1 */
-	size_t neraseblocks;		/* Number of erase blocks */
+	uint32_t blocksize;		/* Size of one read/write block. */
+	uint32_t erasesize;		/* Size of one erase blocks -- must be a multiple
+					 * of blocksize. */
+	uint32_t neraseblocks;		/* Number of erase blocks */
 };
 
 /* The following defines the information for writing bytes to a sector
@@ -169,6 +176,8 @@ enum mtd_partition_tag_s {
 	MTD_OTA = 3,
 	MTD_ROMFS = 4
 };
+
+struct spi_dev_s;
 
 /****************************************************************************
  * Public Data
@@ -267,6 +276,26 @@ int ftl_initialize(int minor, FAR struct mtd_dev_s *mtd);
 ****************************************************************************/
 
 FAR struct mtd_dev_s *m25p_initialize(FAR struct spi_dev_s *dev);
+
+/****************************************************************************
+ * Name: w25_initialize
+ *
+ * Description:
+ *   Initializes the driver for SPI-based W25x16, x32, and x64 and W25q16,
+ *   q32, q64, and q128 FLASH
+ *
+ ****************************************************************************/
+
+FAR struct mtd_dev_s *w25_initialize(FAR struct spi_dev_s *dev);
+
+/****************************************************************************
+ * Name: jedec_initialize
+ *
+ * Description:
+ *   Initializes the driver which uses jedec interface for SPI-based.
+ *
+ ****************************************************************************/
+FAR struct mtd_dev_s *jedec_initialize(FAR struct spi_dev_s *dev);
 
 /* MTD Support **************************************************************/
 

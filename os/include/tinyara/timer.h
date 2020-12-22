@@ -104,11 +104,20 @@
  * range.
  */
 
-#define TCIOC_START		_TCIOC(0x0001)
-#define TCIOC_STOP		_TCIOC(0x0002)
-#define TCIOC_GETSTATUS		_TCIOC(0x0003)
-#define TCIOC_SETTIMEOUT	_TCIOC(0x0004)
-#define TCIOC_NOTIFICATION	_TCIOC(0x0005)
+#define TCIOC_START         _TCIOC(0x0001)
+#define TCIOC_STOP          _TCIOC(0x0002)
+#define TCIOC_GETSTATUS     _TCIOC(0x0003)
+#define TCIOC_SETTIMEOUT    _TCIOC(0x0004)
+#define TCIOC_NOTIFICATION  _TCIOC(0x0005)
+#define TCIOC_SETDIV        _TCIOC(0x0006)
+#define TCIOC_GETDIV        _TCIOC(0x0007)
+#define TCIOC_SETMODE       _TCIOC(0x0008)
+#define TCIOC_SETRESOLUTION _TCIOC(0x0009)
+#ifdef CONFIG_ARCH_IRQPRIO
+#define TCIOC_SETIRQPRIO    _TCIOC(0x000A)
+#endif
+#define TCIOC_SETCLKSRC     _TCIOC(0x000B)
+#define TCIOC_GETLIFETIME   _TCIOC(0x000C)
 
 /* Bit Settings *************************************************************/
 /* Bit settings for the struct timer_status_s flags field */
@@ -120,6 +129,29 @@
 /****************************************************************************
  * Public Types
  ****************************************************************************/
+
+/* This is the type of the argument passed to the TCIOC_SETMODE ioctl 
+ * Depending on the argument passed, 
+ * it is decided whether to operate as ALARM or Free running Timer.
+ */
+
+ enum timer_mode_e {
+	MODE_ALARM = 0x01,
+	MODE_FREERUN = 0x02
+};
+
+/* This is the type of the argument passed to the TCIOC_RESOLUTION ioctl 
+ * Whether or not Timer's resolution works as us or ms is determined, 
+ * and it is a unit of timer that the user is notified through the getstatus() function.
+ */
+
+enum timer_resolution_e {
+	TIME_RESOLUTION_US = 0x01,
+	TIME_RESOLUTION_MS = 0x02
+};
+
+typedef enum timer_mode_e timer_mode_t;
+typedef enum timer_resolution_e timer_resolution_t;
 
 /* Upper half callback prototype. Returns true to reload the timer, and the
  * function can modify the next interval if desired.
@@ -136,6 +168,10 @@ struct timer_status_s {
 	uint32_t timeout;  /* The current timeout setting (in microseconds) */
 	uint32_t timeleft; /* Time left until the timer expiration
 			    * (in microseconds) */
+#if defined(CONFIG_ARCH_BOARD_IMXRT1020_EVK) || defined(CONFIG_ARCH_BOARD_IMXRT1050_EVK)
+	uint32_t clock_freq;
+	uint32_t ticks;
+#endif
 };
 
 /* This is the type of the argument passed to the TCIOC_NOTIFICATION ioctl */
@@ -143,7 +179,6 @@ struct timer_status_s {
 struct timer_notify_s {
 	FAR void *arg;   /* An argument to pass with the signal */
 	pid_t     pid;   /* The ID of the task/thread to receive the signal */
-	uint8_t   signo; /* The signal number to use in the notification */
 };
 
 /* This structure provides the "lower-half" driver operations available to

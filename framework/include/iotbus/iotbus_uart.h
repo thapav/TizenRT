@@ -32,6 +32,24 @@
 #define IOTBUS_UART_H_
 
 #include <stdint.h>
+#include <stdbool.h>
+#include <tinyara/iotbus_sig.h>
+#include <iotbus/iotbus_error.h>
+
+
+/**
+ * @brief Enumeration of UART state
+ * @details
+ * Enumeration Details:
+ * IOTBUS_UART_RDY = 1, < adc device is ready 
+ * IOTBUS_UART_BUSY = 2, < adc device is busy
+ */
+typedef enum {
+	IOTBUS_UART_NONE = 0,
+	IOTBUS_UART_RDY, /** uart device is ready to use */
+	IOTBUS_UART_BUSY, /** uart device is busy */
+	IOTBUS_UART_STOP, /** uart device is busy */
+} iotbus_uart_state_e;
 
 /**
  * @brief Enumeration of UART parity type
@@ -50,23 +68,37 @@ typedef enum {
 struct _iotbus_uart_s;
 
 /**
- * @brief Pointer definition to the internal struct _iotbus_uart_s
+ * @brief Pointer definition to the internal struct _iotbus_uart_wrapper_s
  */
-typedef struct _iotbus_uart_s *iotbus_uart_context_h;
+typedef struct _iotbus_uart_wrapper_s *iotbus_uart_context_h;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+typedef void (*uart_isr_cb)(iotbus_int_type_e evt, void *arg);
+typedef void (*uart_write_cb)(iotbus_uart_context_h hnd, iotbus_error_e ret);
+typedef void (*iotbus_uart_cb)(iotbus_uart_context_h);
+
 /**
- * @brief initializes uart_context.
+ * @brief initializes uart_context with path.
  *
  * @details @b #include <iotbus/iotbus_uart.h>
  * @param[in] path uart device node path
  * @return On success, handle of uart_context is returned. On failure, NULL is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 iotbus_uart_context_h iotbus_uart_init(const char *path);
+
+/**
+ * @brief initializes uart_context with device number.
+ *
+ * @details @b #include <iotbus/iotbus_uart.h>
+ * @param[in] path uart device node number
+ * @return On success, handle of uart_context is returned. On failure, NULL is returned.
+ * @since TizenRT v1.0
+ */
+iotbus_uart_context_h iotbus_uart_open(int device);
 
 /**
  * @brief closes uart_context.
@@ -74,17 +106,18 @@ iotbus_uart_context_h iotbus_uart_init(const char *path);
  * @details @b #include <iotbus/iotbus_uart.h>
  * @param[in] hnd handle of uart_context
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_uart_stop(iotbus_uart_context_h hnd);
 
+#ifdef CONFIG_SERIAL_TERMIOS
 /**
  * @brief flushes uart buffer.
  *
  * @details @b #include <iotbus/iotbus_uart.h>
  * @param[in] hnd handle of uart_context
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_uart_flush(iotbus_uart_context_h hnd);
 
@@ -95,7 +128,7 @@ int iotbus_uart_flush(iotbus_uart_context_h hnd);
  * @param[in] hnd handle of uart_context
  * @param[in] baud uart baud rate
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_uart_set_baudrate(iotbus_uart_context_h hnd, unsigned int baud);
 
@@ -108,7 +141,7 @@ int iotbus_uart_set_baudrate(iotbus_uart_context_h hnd, unsigned int baud);
  * @param[in] parity uart parity type
  * @param[in] stopbits uart stop bits
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_uart_set_mode(iotbus_uart_context_h hnd, int bytesize, iotbus_uart_parity_e parity, int stopbits);
 
@@ -120,9 +153,10 @@ int iotbus_uart_set_mode(iotbus_uart_context_h hnd, int bytesize, iotbus_uart_pa
  * @param[in] xonxoff ixon/ixoff
  * @param[in] rtscts rts/cts
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_uart_set_flowcontrol(iotbus_uart_context_h hnd, int xonxoff, int rtscts);
+#endif /* CONFIG_SERIAL_TERMIOS */
 
 /**
  * @brief reads data over uart bus.
@@ -132,7 +166,7 @@ int iotbus_uart_set_flowcontrol(iotbus_uart_context_h hnd, int xonxoff, int rtsc
  * @param[in] buf the pointer of data buffer
  * @param[in] length size to read
  * @return On success, size is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_uart_read(iotbus_uart_context_h hnd, char *buf, unsigned int length);
 
@@ -144,9 +178,21 @@ int iotbus_uart_read(iotbus_uart_context_h hnd, char *buf, unsigned int length);
  * @param[in] buf the pointer of data buffer
  * @param[in] length size to write
  * @return On success, size is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_uart_write(iotbus_uart_context_h hnd, const char *buf, unsigned int length);
+
+#ifdef CONFIG_IOTDEV
+/**
+ * @brief Get uart device number.
+ *
+ * @details @b #include <iotbus/iotbus_uart.h>
+ * @param[in] hnd handle of uart_context
+ * @return On success, the device number is returned. On failure, a negative value is returned.
+ * @since TizenRT v2.0
+ */
+int iotbus_uart_get_device(iotbus_uart_context_h hnd);
+#endif
 
 #ifdef __cplusplus
 }

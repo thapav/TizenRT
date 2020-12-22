@@ -70,7 +70,6 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-
 #define MAXLN 128
 
 #ifndef MIN
@@ -80,6 +79,12 @@
 #ifndef MAX
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #endif
+
+#define HH_MOD -2
+#define H_MOD  -1
+#define NO_MOD  0
+#define L_MOD   1
+#define LL_MOD  2
 
 /****************************************************************************
  * Private Type Declarations
@@ -169,6 +174,147 @@ static int findwidth(FAR const char *buf, FAR const char *fmt)
  ****************************************************************************/
 
 /****************************************************************************
+ * Function:  findscanset
+ *
+ * Description:
+ *    Fill in the given table from the scanset at the given format.
+ *    Return a pointer to the character the closing ']'.
+ *    The table has a 1 wherever characters should be considered part of the
+ *    scanset.
+ *
+ *    Function findscanset based on source function __sccl of FreeBSD
+ *   (https://github.com/lattera/freebsd/blob/master/sys/kern/subr_scanf.c)
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_LIBC_SCANSET
+static FAR const char *findscanset(FAR const char *fmt,
+					FAR unsigned char set[32])
+{
+	int c;
+	int n;
+	int v;
+	int i;
+
+	fmt++;           /* Skip '[' */
+
+	/* First `clear' the whole table */
+
+	c = *fmt++;      /* First char hat => negated scanset */
+	if (c == '^') {
+		v = 1;       /* Default => accept */
+		c = *fmt++;  /* Get new first char */
+	} else {
+		v = 0;       /* Default => reject */
+	}
+
+	memset(set, 0, 32);
+	if (c == 0) {
+		goto doexit;
+	}
+
+	/* Now set the entries corresponding to the actual scanset
+	* to the opposite of the above.
+	*
+	* The first character may be ']' (or '-') without being special;
+	* the last character may be '-'.
+	*/
+
+	for (;;) {
+		set[c / 8] |= (1 << (c % 8));  /* Take character c */
+
+doswitch:
+		n = *fmt++;    /* Examine the next */
+		switch (n) {
+		case 0:      /* Format ended too soon */
+		case ']':    /* End of scanset */
+			goto doexit;
+
+		case '-':
+			/* A scanset of the form
+			*
+			*  [01+-]
+			*
+			* is defined as "the digit 0, the digit 1, the character +, the
+			* character -", but the effect of a scanset such as
+			*
+			*  [a-zA-Z0-9]
+			*
+			* is implementation defined.  The V7 Unix scanf treats "a-z" as
+			* "the letters a through z", but treats "a-a" as "the letter a,
+			* the character -, and the letter a".
+			*
+			* For compatibility, the `-' is not considerd to define a range
+			* if the character following it is either a close bracket
+			* (required by ANSI) or is not numerically greater than the
+			* character* we just stored in the table (c).
+			*/
+
+			n = *fmt;
+			if (n == ']' || n < c) {
+				c = '-';
+				break;  /* Resume the for(;;) */
+			}
+
+			fmt++;
+			do {
+				/* Fill in the range */
+
+				c++;
+				set[c / 8] |= (1 << (c % 8));  /* Take character c */
+			} while (c < n);
+
+			/* Alas, the V7 Unix scanf also treats formats such as [a-c-e] as
+			* "the letters a through e".  This too is permitted by the
+			* standard.
+			*/
+
+			goto doswitch;
+
+		default:    /* Just another character */
+			c = n;
+			break;
+		}
+	}
+
+doexit:
+	if (v) { /* Default => accept */
+		for (i = 0; i < 32; i++) {  /* Invert all */
+			set[i] ^= 0xFF;
+		}
+	}
+
+	return (fmt - 1);
+}
+#endif
+
+/****************************************************************************
+ * Function:  scansetwidth
+ ****************************************************************************/
+
+#ifdef CONFIG_LIBC_SCANSET
+static int scansetwidth(FAR const char *buf,
+			FAR const unsigned char set[32])
+{
+	FAR const char *next = buf;
+	int c;
+
+	while (*next) {
+		c = *next;
+		if ((set[c / 8] & (1 << (c % 8))) == 0) {
+			break;
+		}
+
+		next++;
+	}
+
+	return (next - buf);
+}
+#endif
+
+
+
+/****************************************************************************
  * Function:  sscanf
  *
  * Description:
@@ -200,12 +346,23 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 	FAR const char *bufstart;
 	FAR char *tv;
 	FAR const char *tc;
-	bool lflag;
+	int modifier;
 	bool noassign;
 	int count;
 	int width;
+	int fwidth;
 	int base = 10;
 	char tmp[MAXLN];
+#ifdef CONFIG_LIBC_LONG_LONG
+	unsigned long long *plonglong = NULL;
+#endif
+	unsigned long  *plong  = NULL;
+	unsigned int   *pint   = NULL;
+	unsigned short *pshort = NULL;
+	unsigned char  *pchar  = NULL;
+#ifdef CONFIG_LIBC_SCANSET
+	unsigned char   set[32]; /* Bit field (256 / 8) */
+#endif
 
 	lvdbg("vsscanf: buf=\"%s\" fmt=\"%s\"\n", buf, fmt);
 
@@ -220,7 +377,7 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 	count = 0;
 	width = 0;
 	noassign = false;
-	lflag = false;
+	modifier = NO_MOD;
 
 	/* Loop until all characters in the fmt string have been processed.  We
 	 * may have to continue loop after reaching the end the input data in
@@ -243,23 +400,36 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 
 			fmt++;
 			for (; *fmt; fmt++) {
-				lvdbg("vsscanf: Processing %c\n", *fmt);
-
+				lvdbg("vsscanf: Processing %c (next %c)\n", *fmt, *(fmt + 1));
+#ifdef CONFIG_LIBC_SCANSET
+				if (strchr("dibouxcsefgn[%", *fmt)) {
+#else
 				if (strchr("dibouxcsefgn%", *fmt)) {
+#endif
 					break;
 				}
 
 				if (*fmt == '*') {
 					noassign = true;
 				} else if (*fmt == 'l' || *fmt == 'L') {
-					/* NOTE: Missing check for long long ('ll') */
+					modifier = L_MOD;
 
-					lflag = true;
+					if (*(fmt + 1) == 'l' || *(fmt + 1) == 'L') {
+						modifier = LL_MOD;
+						fmt++;
+					}
+				} else if (*fmt == 'h' || *fmt == 'H') {
+					modifier = H_MOD;
+
+					if (*(fmt + 1) == 'h' || *(fmt + 1) == 'H') {
+						modifier = HH_MOD;
+						fmt++;
+					}
 				} else if (*fmt >= '1' && *fmt <= '9') {
 					for (tc = fmt; isdigit(*fmt); fmt++);
 					strncpy(tmp, tc, fmt - tc);
 					tmp[fmt - tc] = '\0';
-					width = MIN(sizeof(tmp) - 1, atoi(tmp));
+					width = atol(tmp);
 					fmt--;
 				}
 			}
@@ -291,14 +461,19 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 						buf++;
 					}
 
-					/* Was a fieldwidth specified? */
+					/* Guess a field width using some heuristics */
 
-					if (!width) {
-						/* No... Guess a field width using some heuristics */
+					fwidth = findwidth(buf, fmt);
 
-						int tmpwidth = findwidth(buf, fmt);
-						width = MIN(sizeof(tmp) - 1, tmpwidth);
+					/* Use the actual field's width if 1) no fieldwidth
+					 * specified or 2) the actual field's width is smaller
+					 * than fieldwidth specified
+					 */
+
+					if (!width || fwidth < width) {
+						width  = fwidth;
 					}
+
 
 					/* Copy the string (if we are making an assignment) */
 
@@ -313,6 +488,65 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 					buf += width;
 				}
 			}
+
+#ifdef CONFIG_LIBC_SCANSET
+			/* Process %[:  Scanset conversion */
+
+			if (*fmt == '[') {
+				lvdbg("vsscanf: Performing scanset conversion\n");
+
+				fmt = findscanset(fmt, set); /* find scanset */
+
+				/* Get a pointer to the char * value.  We need to do this even
+				* if we have reached the end of the input data in order to
+				* update the 'ap' variable.
+				*/
+
+				tv = NULL;      /* To avoid warnings about begin uninitialized */
+				if (!noassign) {
+					tv    = va_arg(ap, FAR char *);
+					tv[0] = '\0';
+				}
+
+				/* But we only perform the data conversion is we still have
+				* bytes remaining in the input data stream.
+				*/
+
+				if (*buf) {
+					/* Skip over white space */
+
+					while (isspace(*buf)) {
+						buf++;
+					}
+
+					/* Guess a field width using some heuristics */
+
+					fwidth = scansetwidth(buf, set);
+
+					/* Use the actual field's width if 1) no fieldwidth
+					* specified or 2) the actual field's width is smaller
+					* than fieldwidth specified
+					*/
+
+					if (!width || fwidth < width) {
+						width  = fwidth;
+					}
+
+
+					/* Copy the string (if we are making an assignment) */
+
+					if (!noassign) {
+						strncpy(tv, buf, width);
+						tv[width] = '\0';
+						count++;
+					}
+
+					/* Update the buffer pointer past the string in the input */
+
+					buf += width;
+				}
+			}
+#endif
 
 			/* Process %c:  Character conversion */
 
@@ -347,7 +581,6 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 
 					if (!noassign) {
 						strncpy(tv, buf, width);
-						tv[width] = '\0';
 						count++;
 					}
 
@@ -362,8 +595,6 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 			/* Process %d, %o, %b, %x, %u:  Various integer conversions */
 
 			else if (strchr("dobxu", *fmt)) {
-				FAR long *plong = NULL;
-				FAR int *pint = NULL;
 				bool sign;
 
 				lvdbg("vsscanf: Performing integer conversion\n");
@@ -378,12 +609,30 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 					 * int.
 					 */
 
-					if (lflag) {
-						plong = va_arg(ap, long *);
-						*plong = 0;
-					} else {
-						pint = va_arg(ap, int *);
+					switch (modifier) {
+					case HH_MOD:
+						pchar = va_arg(ap, unsigned char *);
+						*pchar = 0;
+						break;
+					case H_MOD:
+						pshort = va_arg(ap, unsigned short *);
+						*pshort = 0;
+						break;
+					case NO_MOD:
+						pint = va_arg(ap, unsigned int *);
 						*pint = 0;
+						break;
+#ifdef CONFIG_LIBC_LONG_LONG
+					case LL_MOD:
+						plonglong = va_arg(ap, unsigned long long *);
+						*plonglong = 0;
+						break;
+#endif
+					case L_MOD:
+					default:
+						plong = va_arg(ap, unsigned long *);
+						*plong = 0;
+						break;
 					}
 				}
 
@@ -394,7 +643,10 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 				if (*buf) {
 					FAR char *endptr;
 					int errsave;
-					long tmplong;
+					unsigned long tmplong = 0;
+#ifdef CONFIG_LIBC_LONG_LONG
+					unsigned long long tmplonglong = 0;
+#endif
 
 					/* Skip over any white space before the integer string */
 
@@ -455,10 +707,29 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 
 					errsave = get_errno();
 					set_errno(0);
-					if (sign) {
-						tmplong = strtol(tmp, &endptr, base);
-					} else {
-						tmplong = strtoul(tmp, &endptr, base);
+
+					switch (modifier) {
+					case HH_MOD:
+					case H_MOD:
+					case NO_MOD:
+					case L_MOD:
+					default:
+						if (sign) {
+							tmplong = strtol(tmp, &endptr, base);
+						} else {
+							tmplong = strtoul(tmp, &endptr, base);
+						}
+						break;
+
+#ifdef CONFIG_LIBC_LONG_LONG
+					case LL_MOD:
+						if (sign) {
+							tmplonglong = strtoll(tmp, &endptr, base);
+						} else {
+							tmplonglong = strtoull(tmp, &endptr, base);
+						}
+						break;
+#endif
 					}
 
 					/* Check if the number was successfully converted */
@@ -477,12 +748,30 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 						 * or an int.
 						 */
 
-						if (lflag) {
-							lvdbg("vsscanf: Return %ld to 0x%p\n", tmplong, plong);
+						switch (modifier) {
+						case HH_MOD:
+							lvdbg("Return %ld to 0x%p\n", tmplong, pchar);
+							*pchar = (unsigned char)tmplong;
+							break;
+						case H_MOD:
+							lvdbg("Return %ld to 0x%p\n", tmplong, pshort);
+							*pshort = (unsigned short)tmplong;
+							break;
+						case NO_MOD:
+							lvdbg("Return %ld to 0x%p\n", tmplong, pint);
+							*pint = (unsigned int)tmplong;
+							break;
+#ifdef CONFIG_LIBC_LONG_LONG
+						case LL_MOD:
+							lvdbg("Return %ld to 0x%p\n", tmplonglong, plonglong);
+							*plonglong = tmplonglong;
+							break;
+#endif
+						case L_MOD:
+						default:
+							lvdbg("Return %ld to 0x%p\n", tmplong, plong);
 							*plong = tmplong;
-						} else {
-							lvdbg("vsscanf: Return %ld to 0x%p\n", tmplong, pint);
-							*pint = (int)tmplong;
+							break;
 						}
 
 						count++;
@@ -490,9 +779,11 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 				}
 			}
 
-			/* Process %f:  Floating point conversion */
+			/* Process %a, %A, %f, %F, %e, %E, %g, and %G:  Floating point
+			 * conversions
+			 */
 
-			else if (*fmt == 'f' || *fmt == 'F') {
+			else if (strchr("aAfFeEgG", *fmt) != NULL) {
 #ifdef CONFIG_HAVE_DOUBLE
 				FAR double_t *pd = NULL;
 #endif
@@ -511,7 +802,7 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 					 */
 
 #ifdef CONFIG_HAVE_DOUBLE
-					if (lflag) {
+					if (modifier >= L_MOD) {
 						pd = va_arg(ap, double_t *);
 						*pd = 0.0;
 					} else
@@ -527,6 +818,13 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 				 */
 
 				if (*buf) {
+					FAR char *endptr;
+					int errsave;
+#ifdef CONFIG_HAVE_DOUBLE
+					double dvalue;
+#endif
+					float fvalue;
+
 					/* Skip over any white space before the real string */
 
 					while (isspace(*buf)) {
@@ -536,57 +834,63 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 					/* Was a fieldwidth specified? */
 
 					if (!width) {
-						/* No... Lets calculate the width */
+						/* No... Guess a field width using some heuristics */
 
-						while (isdigit(*(buf + width)) || *(buf + width) == '.') {
-							width++;
-						}
+						int tmpwidth = findwidth(buf, fmt);
+						width = MIN(sizeof(tmp) - 1, tmpwidth);
 					}
 
 					/* Copy the real string into a temporary working buffer. */
 
 					strncpy(tmp, buf, width);
 					tmp[width] = '\0';
-					buf += width;
 
 					lvdbg("vsscanf: tmp[]=\"%s\"\n", tmp);
 
+					/* Preserve the errno value */
+
+					errsave = get_errno();
+					set_errno(0);
+
 					/* Perform the floating point conversion */
 
-					if (!noassign) {
-						/* strtod always returns a double */
+#ifdef CONFIG_HAVE_DOUBLE
+					if (modifier >= L_MOD) {
+						/* Get the converted double value */
 
-						FAR char *endptr;
-						int errsave;
-						double_t dvalue;
-
-						/* Preserve the errno value */
-
-						errsave = get_errno();
-						set_errno(0);
 						dvalue = strtod(tmp, &endptr);
+					} else
+#endif
+					{
+						fvalue = strtof(tmp, &endptr);
+					}
 
-						/* Check if the number was successfully converted */
+					/* Check if the number was successfully converted */
 
-						if (tmp == endptr || get_errno() == ERANGE) {
-							return count;
-						}
+					if (tmp == endptr || get_errno() == ERANGE) {
+						return count;
+					}
 
-						set_errno(errsave);
+					/* Move by the actual number of characters converted */
+
+					buf += (endptr - tmp);
+					set_errno(errsave);
+
+					if (!noassign) {
 
 						/* We have to check whether we need to return a float
 						 * or a double.
 						 */
 
 #ifdef CONFIG_HAVE_DOUBLE
-						if (lflag) {
+						if (modifier >= L_MOD) {
 							lvdbg("vsscanf: Return %f to %p\n", dvalue, pd);
 							*pd = dvalue;
 						} else
 #endif
 						{
-							lvdbg("vsscanf: Return %f to %p\n", dvalue, pf);
-							*pf = (float)dvalue;
+							lvdbg("vsscanf: Return %f to %p\n", (double)fvalue, pf);
+							*pf = fvalue;
 						}
 
 						count++;
@@ -605,19 +909,37 @@ int vsscanf(FAR const char *buf, FAR const char *fmt, va_list ap)
 
 					/* Note %n does not count as a conversion */
 
-					if (lflag) {
-						FAR long *plong = va_arg(ap, long *);
-						*plong = (long)nchars;
-					} else {
-						FAR int *pint = va_arg(ap, int *);
-						*pint = (int)nchars;
+					switch (modifier) {
+					case HH_MOD:
+						pchar = va_arg(ap, unsigned char *);
+						*pchar = (unsigned char)nchars;
+						break;
+					case H_MOD:
+						pshort = va_arg(ap, unsigned short *);
+						*pshort = (unsigned short)nchars;
+						break;
+					case NO_MOD:
+						pint = va_arg(ap, unsigned int *);
+						*pint = (unsigned int)nchars;
+						break;
+#ifdef CONFIG_LIBC_LONG_LONG
+					case LL_MOD:
+						plonglong = va_arg(ap, unsigned long long *);
+						*plonglong = (unsigned long long)nchars;
+						break;
+#endif
+					case L_MOD:
+					default:
+						plong = va_arg(ap, unsigned long *);
+						*plong = (unsigned long)nchars;
+						break;
 					}
 				}
 			}
 
 			width = 0;
 			noassign = false;
-			lflag = false;
+			modifier = NO_MOD;
 
 			fmt++;
 		}

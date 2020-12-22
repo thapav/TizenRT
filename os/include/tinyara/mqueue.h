@@ -17,7 +17,7 @@
  ****************************************************************************/
 /****************************************************************************
  *
- *   Copyright (C) 2007, 2009, 2011, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2011, 2014-2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,7 +57,9 @@
  ****************************************************************************/
 
 #include <tinyara/config.h>
+#ifndef NXFUSE_HOST_BUILD
 #include <tinyara/compiler.h>
+#endif
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -83,15 +85,11 @@ struct mq_des;					/* forward reference */
 struct mqueue_inode_s {
 	FAR struct inode *inode;	/* Containing inode */
 	sq_queue_t msglist;			/* Prioritized message list */
-	int16_t maxmsgs;			/* Maximum number of messages in the queue */
-	int16_t nmsgs;				/* Number of message in the queue */
+	uint16_t maxmsgs;			/* Maximum number of messages in the queue */
+	uint16_t nmsgs;				/* Number of message in the queue */
 	int16_t nwaitnotfull;		/* Number tasks waiting for not full */
 	int16_t nwaitnotempty;		/* Number tasks waiting for not empty */
-#if CONFIG_MQ_MAXMSGSIZE < 256
-	uint8_t maxmsgsize;			/* Max size of message in message queue */
-#else
-	uint16_t maxmsgsize;		/* Max size of message in message queue */
-#endif
+	size_t maxmsgsize;			/* Max size of message in message queue */
 #ifndef CONFIG_DISABLE_SIGNALS
 	FAR struct mq_des *ntmqdes;	/* Notification: Owning mqdes (NULL if none) */
 	pid_t ntpid;				/* Notification: Receiving Task's PID */
@@ -124,6 +122,10 @@ extern "C" {
 #else
 #define EXTERN extern
 #endif
+
+struct mq_attr;       /* Forward reference */
+struct tcb_s;         /* Forward reference */
+struct task_group_s;  /* Forward reference */
 
 /************************************************************************
  * Name: mq_msgqfree
@@ -164,7 +166,6 @@ void mq_msgqfree(FAR struct mqueue_inode_s *msgq);
  *
  ****************************************************************************/
 
-struct mq_attr;
 FAR struct mqueue_inode_s *mq_msgqalloc(mode_t mode, FAR struct mq_attr *attr);
 
 /****************************************************************************
@@ -184,11 +185,31 @@ FAR struct mqueue_inode_s *mq_msgqalloc(mode_t mode, FAR struct mq_attr *attr);
  *
  ****************************************************************************/
 
-struct tcb_s;
 mqd_t mq_descreate(FAR struct tcb_s *mtcb, FAR struct mqueue_inode_s *msgq, int oflags);
 
 /****************************************************************************
- * Name: mq_desclose
+ * Name: mq_close_group
+ *
+ * Description:
+ *   This function is used to indicate that all threads in the group are
+ *   finished with the specified message queue mqdes.  The mq_close_group()
+ *   deallocates any system resources allocated by the system for use by
+ *   this task for its message queue.
+ *
+ * Parameters:
+ *   mqdes - Message queue descriptor.
+ *   group - Group that has the open descriptor.
+ *
+ * Return Value:
+ *   0 (OK) if the message queue is closed successfully,
+ *   otherwise, -1 (ERROR).
+ *
+ ****************************************************************************/
+
+int mq_close_group(mqd_t mqdes, FAR struct task_group_s *group);
+
+/****************************************************************************
+ * Name: mq_desclose_group
  *
  * Description:
  *   This function performs the portion of the mq_close operation related
@@ -196,16 +217,18 @@ mqd_t mq_descreate(FAR struct tcb_s *mtcb, FAR struct mqueue_inode_s *msgq, int 
  *
  * Parameters:
  *   mqdes - Message queue descriptor.
+ *   group - Group that has the open descriptor.
  *
  * Return Value:
- *   None
+ *   None.
  *
  * Assumptions:
  * - Called only from mq_close() with the scheduler locked.
  *
  ****************************************************************************/
 
-void mq_desclose(mqd_t mqdes);
+void mq_desclose_group(mqd_t mqdes, FAR struct task_group_s *group);
+
 
 #undef EXTERN
 #ifdef __cplusplus

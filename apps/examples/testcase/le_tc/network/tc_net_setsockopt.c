@@ -460,6 +460,7 @@ static void tc_net_setsockopt_reuseaddr_p(int s)
 
 }
 
+#if 0
 /**
    * @testcase		   :tc_net_setsockopt_reuseport_p
    * @brief		   :
@@ -479,6 +480,7 @@ static void tc_net_setsockopt_reuseport_p(int s)
 	TC_SUCCESS_RESULT();
 
 }
+#endif
 
 /**
 * @fn                   :tc_net_setsockopt_rcvbuf_p
@@ -666,14 +668,17 @@ static void tc_net_setsockopt_invalid_opt_name_n(int s)
  * Name: setsockopt()
  ****************************************************************************/
 
-int net_setsockopt_main(void)
+void net_setsockopt_main(void)
 {
 	int fd = -1;
 	//char *mip = "239.255.255.255";
 	//char *ip = "192.168.1.100";
 
 	fd = socket(AF_INET, SOCK_STREAM, 0);
-
+	if (fd < 0) {
+		printf("socket creation error (%s) line:%d\n", __FUNCTION__, __LINE__);
+		return;
+	}
 	//tc_net_setsockopt_invalid_opt_name_n(fd);
 	tc_net_setsockopt_invalid_level_n(fd);
 	tc_net_setsockopt_invalid_filedesc_n();
@@ -682,7 +687,7 @@ int net_setsockopt_main(void)
 	//tc_net_setsockopt_ipproto_ip_ip_pktinfo_p(fd);
 	tc_net_setsockopt_keepalive_p(fd);
 	//tc_net_setsockopt_rcvbuf_p(fd);
-	tc_net_setsockopt_reuseport_p(fd);
+	//tc_net_setsockopt_reuseport_p(fd);
 	tc_net_setsockopt_reuseaddr_p(fd);
 	tc_net_setsockopt_rcvtimo_p(fd);
 	//tc_net_setsockopt_sndtimo_p(fd);
@@ -703,5 +708,5 @@ int net_setsockopt_main(void)
 	//tc_net_setsockopt_multicast_ttl_p(fd);
 
 	close(fd);
-	return 0;
+	return;
 }

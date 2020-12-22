@@ -57,12 +57,11 @@
 
 #include <tinyara/config.h>
 #ifdef CONFIG_NET
-#ifdef CONFIG_ENABLE_IOTIVITY
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <errno.h>
-#include <uio.h>
 
 #include "socket/socket.h"
 
@@ -94,11 +93,11 @@ ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags)
 	uint8_t *buf = (uint8_t *)(msg->msg_iov->iov_base);
 	size_t len = msg->msg_iov->iov_len;
 	struct sockaddr *from = (struct sockaddr *)msg->msg_name;
-	int *addrlen = &(msg->msg_namelen);
+	socklen_t *addrlen = &(msg->msg_namelen);
+	msg->msg_controllen = 0;
 
 	//printf("\n[Received IOTIVITY Packet][%s:%d] \n", __FUNCTION__, __LINE__);
 
-	return recvfrom(sockfd, buf, len, flags, from, (socklen_t *) addrlen);
+	return recvfrom(sockfd, buf, len, flags, from, addrlen);
 }
-#endif							/* CONFIG_ENABLE_IOTIVITY */
 #endif							/* CONFIG_NET */

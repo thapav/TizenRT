@@ -65,10 +65,20 @@
 #include <tinyara/kmalloc.h>
 #include <tinyara/kthread.h>
 #include <tinyara/ttrace.h>
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+#include <tinyara/mm/mm.h>
+#ifdef CONFIG_HEAPINFO_USER_GROUP
+#include <tinyara/sched.h>
+#include <string.h>
+#endif
+#endif
 
 #include "sched/sched.h"
 #include "group/group.h"
 #include "task/task.h"
+#ifdef CONFIG_BINARY_MANAGER
+#include "binary_manager/binary_manager.h"
+#endif
 
 /****************************************************************************
  * Preprocessor Definitions
@@ -105,9 +115,7 @@
  *   priority   - Priority of the new task
  *   stack_size - size (in bytes) of the stack needed
  *   entry      - Entry point of a new task
- *   arg        - A pointer to an array of input parameters. Up to
- *                CONFIG_MAX_TASK_ARG parameters may be provided.  If fewer
- *                than CONFIG_MAX_TASK_ARG parameters are passed, the list
+ *   arg        - A pointer to an array of input parameters. The array
  *                should be terminated with a NULL argv[] value. If no
  *                parameters are required, argv may be NULL.
  *
@@ -184,6 +192,13 @@ static int thread_create(FAR const char *name, uint8_t ttype, int priority, int 
 		errcode = get_errno();
 		goto errout_with_tcb;
 	}
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+	/* Update the pid information in stack node */
+	struct mm_allocnode_s *node;
+
+	node = (struct mm_allocnode_s *)(tcb->cmn.stack_alloc_ptr - SIZEOF_MM_ALLOCNODE);
+	node->pid = (-1) * (tcb->cmn.pid);
+#endif
 
 	/* Setup to pass parameters to the new task */
 
@@ -202,6 +217,17 @@ static int thread_create(FAR const char *name, uint8_t ttype, int priority, int 
 	/* Get the assigned pid before we start the task */
 
 	pid = (int)tcb->cmn.pid;
+
+#ifdef CONFIG_BINARY_MANAGER
+	FAR struct tcb_s *rtcb = this_task();
+	tcb->cmn.group->tg_binidx = rtcb->group->tg_binidx;
+	/* Add tcb to binary thread list */
+	binary_manager_add_binlist(&tcb->cmn);
+#endif
+
+#ifdef CONFIG_HEAPINFO_USER_GROUP
+	heapinfo_check_group_list(pid, tcb->cmn.name);
+#endif
 
 	/* Activate the task */
 
@@ -244,9 +270,7 @@ errout:
  *   priority   - Priority of the new task
  *   stack_size - size (in bytes) of the stack needed
  *   entry      - Entry point of a new task
- *   arg        - A pointer to an array of input parameters. Up to
- *                CONFIG_MAX_TASK_ARG parameters may be provided.  If fewer
- *                than CONFIG_MAX_TASK_ARG parameters are passed, the list
+ *   arg        - A pointer to an array of input parameters. The array
  *                should be terminated with a NULL argv[] value. If no
  *                parameters are required, argv may be NULL.
  *
@@ -264,6 +288,12 @@ errout:
 #ifndef CONFIG_BUILD_KERNEL
 int task_create(FAR const char *name, int priority, int stack_size, main_t entry, FAR char *const argv[])
 {
+#ifdef CONFIG_BINARY_MANAGER
+	if (BM_PRIORITY_MIN - 1 < priority && priority < BM_PRIORITY_MAX + 1) {
+		sdbg("Invalid priority %d, it should be lower than %d or higher than %d\n", priority, BM_PRIORITY_MIN, BM_PRIORITY_MAX);
+		return EPERM;
+	}
+#endif
 	return thread_create(name, TCB_FLAG_TTYPE_TASK, priority, stack_size, entry, argv);
 }
 #endif

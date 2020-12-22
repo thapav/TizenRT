@@ -101,7 +101,7 @@
  *   Terminate execution of a thread started with pthread_create.
  *
  * Parameters:
- *   exit_valie
+ *   exit_value
  *
  * Returned Value:
  *   None
@@ -141,6 +141,10 @@ void pthread_exit(FAR void *exit_value)
 #ifdef CONFIG_PTHREAD_CLEANUP
 	/* Perform any stack pthread clean-up callbacks */
 	pthread_cleanup_popall((FAR struct pthread_tcb_s *)tcb);
+#endif
+
+#if CONFIG_NPTHREAD_KEYS > 0
+	pthread_key_destroy((struct pthread_tcb_s *)tcb);
 #endif
 
 	/* Complete pending join operations */

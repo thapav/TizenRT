@@ -60,7 +60,7 @@
 
 #include <tinyara/mm/mm.h>
 
-#if defined(CONFIG_MM_KERNEL_HEAP) && defined(CONFIG_DEBUG)
+#if defined(CONFIG_MM_KERNEL_HEAP)
 
 /************************************************************************
  * Pre-processor definition
@@ -97,40 +97,24 @@
  *   must be a member of the user-space heap (unchecked)
  *
  ************************************************************************/
-
 bool kmm_heapmember(FAR void *mem)
 {
-#if CONFIG_MM_REGIONS > 1
-	int i;
+	struct mm_heap_s *kheap = kmm_get_heap();
+	struct mm_heap_s *pheap = mm_get_heap(mem);
 
-	/* A valid address from the kernel heap for this region would have to lie
-	 * between the region's two guard nodes.
+	/* mm_get_heap will return either the kernel heap (if no app loaded)
+	 * or app heap (if app is loaded and running) or NULL (if app heap is
+	 * de-activated and app is reloading)
 	 */
+	int kheap_idx;
 
-	for (i = 0; i < g_kmmheap.mm_nregions; i++) {
-		if (mem > (FAR void *)g_kmmheap.mm_heapstart[i] && mem < (FAR void *)g_kmmheap.mm_heapend[i]) {
+	for (kheap_idx = 0; kheap_idx < CONFIG_KMM_NHEAPS; kheap_idx++) {
+		if (&kheap[kheap_idx] == pheap) {
 			return true;
 		}
 	}
 
-	/* The address does not like any any region assigned to kernel heap */
-
 	return false;
-
-#else
-	/* A valid address from the kernel heap would have to lie between the
-	 * two guard nodes.
-	 */
-
-	if (mem > (FAR void *)g_kmmheap.mm_heapstart[0] && mem < (FAR void *)g_kmmheap.mm_heapend[0]) {
-		return true;
-	}
-
-	/* Otherwise, the address does not lie in the kernel heap */
-
-	return false;
-
-#endif
 }
 
 #endif							/* CONFIG_MM_KERNEL_HEAP && CONFIG_DEBUG */

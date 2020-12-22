@@ -66,13 +66,12 @@
 #include "sched/sched.h"
 #include "group/group.h"
 #include "timer/timer.h"
-#if defined(CONFIG_ENABLE_STACKMONITOR) && defined(CONFIG_DEBUG)
-#include <apps/system/utils.h>
+#ifdef CONFIG_BINARY_MANAGER
+#include "binary_manager/binary_manager.h"
 #endif
-
-/************************************************************************
- * Private Functions
- ************************************************************************/
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+#include <tinyara/mm/mm.h>
+#endif
 
 /************************************************************************
  * Name:  sched_releasepid
@@ -94,13 +93,10 @@ static void sched_releasepid(pid_t pid)
 	g_pidhash[hash_ndx].pid = INVALID_PROCESS_ID;
 
 #ifdef CONFIG_SCHED_CPULOAD
-	/* Decrement the total CPU load count held by this thread from the
-	 * total for all threads.  Then we can reset the count on this
-	 * defunct thread to zero.
+	/* Decrement the total CPU load count held by this thread from total
+	 * for all threads and reset the load count on this defunct thread
 	 */
-
-	g_cpuload_total -= g_pidhash[hash_ndx].ticks;
-	g_pidhash[hash_ndx].ticks = 0;
+	sched_clear_cpuload(pid);
 #endif
 	/* Decrement the alive task count as task is exiting */
 	g_alive_taskcount--;
@@ -136,32 +132,27 @@ int sched_releasetcb(FAR struct tcb_s *tcb, uint8_t ttype)
 	int ret = OK;
 
 	if (tcb) {
-#if defined(CONFIG_ENABLE_STACKMONITOR) && defined(CONFIG_DEBUG)
-		stkmon_logging(tcb);
-#endif
-
-#ifndef CONFIG_DISABLE_POSIX_TIMERS
-		/* Release any timers that the task might hold.  We do this
-		 * before release the PID because it may still be trying to
-		 * deliver signals (although interrupts are should be
-		 * disabled here).
-		 */
-
-#ifdef CONFIG_HAVE_WEAKFUNCTIONS
-		if (timer_deleteall != NULL)
-#endif
-		{
-			timer_deleteall(tcb->pid);
-		}
-#endif
-
-		/* Release the task's process ID if one was assigned.  PID
-		 * zero is reserved for the IDLE task.  The TCB of the IDLE
+		/* Release the some of task's resources if PID was assigned.
+		 * PID zero is reserved for the IDLE task.  The TCB of the IDLE
 		 * task is never release so a value of zero simply means that
 		 * the process ID was never allocated to this TCB.
 		 */
-
 		if (tcb->pid) {
+#ifndef CONFIG_DISABLE_POSIX_TIMERS
+			/* Release any timers that the task might hold.  We do this
+			 * before release the PID because it may still be trying to
+			 * deliver signals (although interrupts are should be
+			 * disabled here).
+			 */
+
+#ifdef CONFIG_HAVE_WEAKFUNCTIONS
+			if (timer_deleteall != NULL)
+#endif
+			{
+				timer_deleteall(tcb->pid);
+			}
+#endif
+
 			sched_releasepid(tcb->pid);
 		}
 

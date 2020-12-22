@@ -16,87 +16,83 @@
 #
 ###########################################################################
 
+ifeq ($(CONFIG_ST_THINGS), y)
 THINGS_LIB_DIR = $(TOPDIR)/../framework/src/st_things
 THINGS_STACK_DIR = $(TOPDIR)/../framework/src/st_things/things_stack
+THINGS_INC_DIR = $(TOPDIR)/../framework/include/st_things
 IOTIVITY_RELEASE=${shell echo $(CONFIG_IOTIVITY_RELEASE_VERSION) | sed 's/"//g'}
 IOTIVITY_BASE_DIR = $(TOPDIR)/../external/iotivity/iotivity_$(IOTIVITY_RELEASE)
 
-CSRCS += st_things.c st_things_util.c st_things_request_handler.c st_things_request_handler_collection.c st_things_representation.c st_things_logger.c 
+CSRCS += st_things.c st_things_request_handler.c st_things_representation.c
+
+ifeq ($(CONFIG_ST_THINGS_COLLECTION), y)
+CSRCS += st_things_request_handler_collection.c 
+endif
 
 CFLAGS += -D__TIZENRT__
-CFLAGS += -D__TINYARA__
 CFLAGS += -D__ST_THINGS_RTOS__
-CFLAGS += -DUSE_LOG_NO_NEWLINE
 CFLAGS += -std=c99
-CFLAGS += -w
+CFLAGS += -Wall -Wno-error
 
 ####################################
 # LIBS
 ####################################
-CFLAGS += -I$(THINGS_STACK_DIR)/src/common/inc
-CFLAGS += -I$(THINGS_STACK_DIR)/src/common/cloud/inc
-CFLAGS += -I$(THINGS_STACK_DIR)/src/common/easy-setup/inc
-CFLAGS += -I$(THINGS_STACK_DIR)/src/common/framework/inc
-CFLAGS += -I$(THINGS_STACK_DIR)/src/common/logging/inc
-CFLAGS += -I$(THINGS_STACK_DIR)/src/common/memory/inc
-CFLAGS += -I$(THINGS_STACK_DIR)/src/common/security/inc
-CFLAGS += -I$(THINGS_STACK_DIR)/src/common/utils/inc
-CFLAGS += -I$(THINGS_STACK_DIR)/src/common/stack
-CFLAGS += -I$(THINGS_STACK_DIR)/inc
-CFLAGS += -I$(THINGS_STACK_DIR)/src/common/security/ssCrypto/include
-CFLAGS += -I$(THINGS_STACK_DIR)/src/common/framework/inc
+ifeq ($(CONFIG_ST_THINGS),y)
+CFLAGS += -I$(THINGS_LIB_DIR)
+CFLAGS += -I$(THINGS_STACK_DIR)
+CFLAGS += -I$(THINGS_INC_DIR)
+endif
 
-
-#
+####################################
 # THINGS STACK
-#
+####################################
 CFLAGS += -DWITH_POSIX -DIP_ADAPTER
 CFLAGS += -DWITH_BWT
-#CFLAGS += -D_EXCLUDE_TEST_KEY_
 
 include $(THINGS_STACK_DIR)/Make.defs
-include $(THINGS_STACK_DIR)/src/stack/Make.defs
-include $(THINGS_STACK_DIR)/src/common/utils/Make.defs
-include $(THINGS_STACK_DIR)/src/common/framework/Make.defs
-include $(THINGS_STACK_DIR)/src/common/easy-setup/Make.defs
-include $(THINGS_STACK_DIR)/src/common/cloud/Make.defs
-include $(THINGS_STACK_DIR)/src/common/security/ssCrypto/src/Make.defs
-include $(THINGS_STACK_DIR)/src/common/logging/Make.defs
-include $(THINGS_STACK_DIR)/src/common/memory/Make.defs
+include $(THINGS_STACK_DIR)/utils/Make.defs
+include $(THINGS_STACK_DIR)/framework/Make.defs
+include $(THINGS_STACK_DIR)/easy-setup/Make.defs
+include $(THINGS_STACK_DIR)/cloud/Make.defs
+include $(THINGS_STACK_DIR)/security/Make.defs
+ifeq ($(CONFIG_SVR_DB_SECURESTORAGE),y)
+include $(THINGS_STACK_DIR)/security/sss_security/Make.defs
+endif
+include $(THINGS_STACK_DIR)/logging/Make.defs
+ifeq ($(CONFIG_ST_THINGS_FOTA),y)
+include $(THINGS_STACK_DIR)/fota/Make.defs
+endif
 
 ####################################
 # IOTIVITY
 ####################################
+CFLAGS += -I$(IOTIVITY_BASE_DIR)/extlibs/mbedtls/mbedtls/include 
 CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/c_common
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/connectivity/api
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/connectivity/common/inc
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/logger/include
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/security/include
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/security/include/internal
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/stack/include
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/extlibs/mbedtls/mbedtls/include
 CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/c_common/oic_malloc/include
 CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/c_common/oic_string/include
 CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/c_common/ocrandom/include
 CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/c_common/oic_time/include
 CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/connectivity/api
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/service/notification/src/common/
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/service/notification/include/
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/service/notification/src/provider/
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/resource-directory/include/
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/connectivity/lib/libcoap-4.1.1/include/
-CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/stack/include/internal/
-
+CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/connectivity/common/inc
+CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/security/include
+CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/security/include/internal
+CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/stack/include
+CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/stack/include/internal
+CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/logger/include
+CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/resource-directory/include
+CFLAGS += -I$(IOTIVITY_BASE_DIR)/resource/csdk/connectivity/lib/libcoap-4.1.1/include
+CFLAGS += -I$(IOTIVITY_BASE_DIR)/service/notification/include
+CFLAGS += -I$(IOTIVITY_BASE_DIR)/service/notification/src/provider
+CFLAGS += -I$(IOTIVITY_BASE_DIR)/service/notification/src/common
 
 ifeq ($(CONFIG_IOTIVITY_ROUTING),"EP")
 CFLAGS += -DROUTING_EP
 else
-CFLAGS += -DROUTING_GW
+CFLAGS += -DROUTING_GATEWAY
 endif
 
 ifeq ($(CONFIG_ENABLE_IOTIVITY_SECURED),y)
 CFLAGS += -D__WITH_DTLS__
-CFLAGS += -D__ST_THINGS_RTOS_LOCAL_SECURED__
 endif
 
 ifeq ($(CONFIG_ENABLE_IOTIVITY_CLOUD),y)
@@ -104,8 +100,8 @@ CFLAGS += -DWITH_CLOUD
 CFLAGS += -D__WITH_TLS__
 CFLAGS += -D__SECURED__
 CFLAGS += -DTCP_ADAPTER
-CFLAGS += -D__ST_THINGS_RTOS_CLOUD__
 endif
 
 DEPPATH += --dep-path src/st_things
 VPATH += :src/st_things
+endif

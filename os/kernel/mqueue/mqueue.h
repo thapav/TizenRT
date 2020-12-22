@@ -108,11 +108,7 @@ struct mqueue_msg_s {
 	FAR struct mqueue_msg_s *next;	/* Forward link to next message */
 	uint8_t type;					/* (Used to manage allocations) */
 	uint8_t priority;				/* priority of message */
-#if MQ_MAX_BYTES < 256
-	uint8_t msglen;					/* Message data length */
-#else
-	uint16_t msglen;				/* Message data length */
-#endif
+	size_t msglen;					/* Message data length */
 	char mail[MQ_MAX_BYTES];		/* Message data */
 };
 
@@ -150,6 +146,9 @@ EXTERN sq_queue_t g_desfree;
  * Public Function Prototypes
  ****************************************************************************/
 
+struct tcb_s;        /* Forward reference */
+struct task_group_s; /* Forward reference */
+
 /* Functions defined in mq_initialize.c ************************************/
 
 void weak_function mq_initialize(void);
@@ -177,7 +176,6 @@ int mq_dosend(mqd_t mqdes, FAR struct mqueue_msg_s *mqmsg, FAR const char *msg, 
 
 /* mq_release.c ************************************************************/
 
-struct task_group_s;			/* Forward reference */
 void mq_release(FAR struct task_group_s *group);
 
 /* mq_recover.c ************************************************************/

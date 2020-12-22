@@ -59,12 +59,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <assert.h>
 
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
 #include <tinyara/sched.h>
 #endif
 #include <tinyara/mm/mm.h>
+#include "mm_node.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -107,13 +107,13 @@ FAR void *mm_realloc(FAR struct mm_heap_s *heap, FAR void *oldmem, size_t size)
 #endif
 {
 	FAR struct mm_allocnode_s *oldnode;
-#ifndef CONFIG_DISABLE_REALLOC_NEIGHBOR_EXTENSION
+#ifndef CONFIG_REALLOC_DISABLE_NEIGHBOR_EXTENSION
 	FAR struct mm_freenode_s  *prev;
 	FAR struct mm_freenode_s  *next;
 #endif
 	size_t newsize;
 	size_t oldsize;
-#ifndef CONFIG_DISABLE_REALLOC_NEIGHBOR_EXTENSION
+#ifndef CONFIG_REALLOC_DISABLE_NEIGHBOR_EXTENSION
 	size_t prevsize = 0;
 	size_t nextsize = 0;
 #endif
@@ -136,6 +136,13 @@ FAR void *mm_realloc(FAR struct mm_heap_s *heap, FAR void *oldmem, size_t size)
 		return NULL;
 	}
 
+	if (size > MM_ALIGN_DOWN(MMSIZE_MAX) - SIZEOF_MM_ALLOCNODE) {
+		mdbg("Because of mm_allocnode, %u cannot be allocated. The maximum \
+			 allocable size is (MM_ALIGN_DOWN(MMSIZE_MAX) - SIZEOF_MM_ALLOCNODE) \
+			 : %u\n.", size, (MM_ALIGN_DOWN(MMSIZE_MAX) - SIZEOF_MM_ALLOCNODE));
+		return NULL;
+	}
+
 	/* Adjust the size to account for (1) the size of the allocated node and
 	 * (2) to make sure that it is an even multiple of our granule size.
 	 */
@@ -154,7 +161,6 @@ FAR void *mm_realloc(FAR struct mm_heap_s *heap, FAR void *oldmem, size_t size)
 
 	oldsize = oldnode->size;
 
-#ifndef CONFIG_DISABLE_REALLOC_NEIGHBOR_EXTENSION
 	if (newsize <= oldsize) {
 		/* Handle the special case where we are not going to change the size
 		 * of the allocation.
@@ -163,8 +169,8 @@ FAR void *mm_realloc(FAR struct mm_heap_s *heap, FAR void *oldmem, size_t size)
 		if (newsize < oldsize) {
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
 			/* modify the current allocated size of old node */
-			heapinfo_subtract_size(oldnode->pid, oldsize);
-			heapinfo_update_total_size(heap, (-1) * oldsize);
+			heapinfo_subtract_size(heap, oldnode->pid, oldsize);
+			heapinfo_update_total_size(heap, (-1) * oldsize, oldnode->pid);
 #endif
 
 			mm_shrinkchunk(heap, oldnode, newsize);
@@ -172,8 +178,8 @@ FAR void *mm_realloc(FAR struct mm_heap_s *heap, FAR void *oldmem, size_t size)
 			/* update the chunk to realloc task information */
 			heapinfo_update_node(oldnode, caller_retaddr);
 
-			heapinfo_add_size(oldnode->pid, oldnode->size);
-			heapinfo_update_total_size(heap, oldnode->size);
+			heapinfo_add_size(heap, oldnode->pid, oldnode->size);
+			heapinfo_update_total_size(heap, oldnode->size, oldnode->pid);
 #endif
 		}
 
@@ -183,6 +189,7 @@ FAR void *mm_realloc(FAR struct mm_heap_s *heap, FAR void *oldmem, size_t size)
 		return oldmem;
 	}
 
+#ifndef CONFIG_REALLOC_DISABLE_NEIGHBOR_EXTENSION
 	/* This is a request to increase the size of the allocation,  Get the
 	 * available sizes before and after the oldnode so that we can make the
 	 * best decision
@@ -207,8 +214,8 @@ FAR void *mm_realloc(FAR struct mm_heap_s *heap, FAR void *oldmem, size_t size)
 
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
 		/* modify the current allocated size of old node */
-		heapinfo_subtract_size(oldnode->pid, oldsize);
-		heapinfo_update_total_size(heap, (-1) * oldsize);
+		heapinfo_subtract_size(heap, oldnode->pid, oldsize);
+		heapinfo_update_total_size(heap, (-1) * oldsize, oldnode->pid);
 #endif
 
 		/* Check if we can extend into the previous chunk and if the
@@ -267,11 +274,7 @@ FAR void *mm_realloc(FAR struct mm_heap_s *heap, FAR void *oldmem, size_t size)
 			 * there may not be a successor node.
 			 */
 
-			DEBUGASSERT(prev->blink);
-			prev->blink->flink = prev->flink;
-			if (prev->flink) {
-				prev->flink->blink = prev->blink;
-			}
+			REMOVE_NODE_FROM_LIST(prev);
 
 			/* Extend the node into the previous free chunk */
 			/* Did we consume the entire preceding chunk? */
@@ -325,11 +328,7 @@ FAR void *mm_realloc(FAR struct mm_heap_s *heap, FAR void *oldmem, size_t size)
 			 * may not be a successor node.
 			 */
 
-			DEBUGASSERT(next->blink);
-			next->blink->flink = next->flink;
-			if (next->flink) {
-				next->flink->blink = next->blink;
-			}
+			REMOVE_NODE_FROM_LIST(next);
 
 			/* Extend the node into the next chunk */
 			/* Did we consume the entire preceding chunk? */
@@ -358,8 +357,8 @@ FAR void *mm_realloc(FAR struct mm_heap_s *heap, FAR void *oldmem, size_t size)
 		/* update the chunk to realloc task information */
 		heapinfo_update_node(oldnode, caller_retaddr);
 
-		heapinfo_add_size(oldnode->pid, oldnode->size);
-		heapinfo_update_total_size(heap, oldnode->size);
+		heapinfo_add_size(heap, oldnode->pid, oldnode->size);
+		heapinfo_update_total_size(heap, oldnode->size, oldnode->pid);
 #endif
 
 		mm_givesemaphore(heap);
@@ -381,7 +380,7 @@ FAR void *mm_realloc(FAR struct mm_heap_s *heap, FAR void *oldmem, size_t size)
 		newmem = (FAR void *)mm_malloc(heap, size);
 #endif
 		if (newmem) {
-			memcpy(newmem, oldmem, oldsize);
+			memcpy(newmem, oldmem, oldsize - SIZEOF_MM_ALLOCNODE);
 			mm_free(heap, oldmem);
 		}
 

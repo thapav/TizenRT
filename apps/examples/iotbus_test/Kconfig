@@ -10,15 +10,21 @@ config EXAMPLES_IOTBUS_TEST
 		Enable the Iotbus example example
 
 if EXAMPLES_IOTBUS_TEST
+config EXAMPLES_IOTBUS_TEST_RED_LED_GPIO_NUM
+	int "GPIO number of RED LED"
+	default 45
 
-config EXAMPLES_IOTBUS_TEST_PROGNAME
-	string "Program name"
-	default "iotbus_test"
-	depends on BUILD_KERNEL
-	---help---
-		This is the name of the program that will be use when the NSH ELF
-		program is installed.
+config EXAMPLES_IOTBUS_TEST_BLUE_LED_GPIO_NUM
+	int "GPIO number of BLUE LED"
+	default 49
 
+config EXAMPLES_IOTBUS_TEST_LEFT_BUTTON_GPIO_NUM
+	int "GPIO number of left button"
+	default 42
+
+config EXAMPLES_IOTBUS_TEST_RIGHT_BUTTON_GPIO_NUM
+	int "GPIO number of right button"
+	default 44
 endif
 
 config USER_ENTRYPOINT

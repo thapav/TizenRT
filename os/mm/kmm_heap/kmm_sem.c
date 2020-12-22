@@ -55,6 +55,8 @@
  ************************************************************************/
 
 #include <tinyara/config.h>
+#include <debug.h>
+#include <errno.h>
 
 #include <tinyara/mm/mm.h>
 
@@ -93,10 +95,14 @@
  *   OK on success; a negated errno on failure
  *
  ************************************************************************/
-
-int kmm_trysemaphore(void)
+int kmm_trysemaphore(void *dummy_addr)
 {
-	return mm_trysemaphore(&g_kmmheap);
+	struct mm_heap_s *kheap = mm_get_heap(dummy_addr);
+	if (kheap) {
+		return mm_trysemaphore(kheap);
+	}
+	mdbg("Invalid Heap address given, Fail to try to take sem.\n");
+	return -EFAULT;
 }
 
 /************************************************************************
@@ -108,14 +114,15 @@ int kmm_trysemaphore(void)
  * Parameters:
  *   None
  *
- * Return Value:
- *   OK on success; a negated errno on failure
- *
  ************************************************************************/
-
-void kmm_givesemaphore(void)
+void kmm_givesemaphore(void *dummy_addr)
 {
-	return mm_givesemaphore(&g_kmmheap);
+	struct mm_heap_s *kheap = mm_get_heap(dummy_addr);
+	if (kheap) {
+		mm_givesemaphore(kheap);
+	} else {
+		mdbg("Invalid Heap address given, Fail to give sem.\n");
+	}
 }
 
 #endif							/* CONFIG_MM_KERNEL_HEAP */

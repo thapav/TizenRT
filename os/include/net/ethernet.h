@@ -59,11 +59,26 @@
 
 #include <stdint.h>
 
+#ifdef CONFIG_NET_LWIP
+#include "lwip/opt.h"
+#include "lwip/pbuf.h"
+#include "lwip/prot/ethernet.h"
+#endif
+
 /****************************************************************************
  * Pre-Processor Definitions
  ****************************************************************************/
 
 #define ETHER_ADDR_LEN  6
+
+/** The 24-bit IANA IPv4-multicast OUI is 01-00-5e: */
+#define LL_IP4_MULTICAST_ADDR_0 0x01
+#define LL_IP4_MULTICAST_ADDR_1 0x00
+#define LL_IP4_MULTICAST_ADDR_2 0x5e
+
+/** IPv6 multicast uses this prefix */
+#define LL_IP6_MULTICAST_ADDR_0 0x33
+#define LL_IP6_MULTICAST_ADDR_1 0x33
 
 /****************************************************************************
  * Public Type Definitions
@@ -83,4 +98,20 @@ struct ether_header {
  * Public Function Prototypes
  ****************************************************************************/
 
-#endif							/*  __INCLUDE_NET_ETHERNET_H */
+#if defined(CONFIG_NET_LWIP) && (LWIP_ARP || LWIP_ETHERNET)
+
+/** Define this to 1 and define LWIP_ARP_FILTER_NETIF_FN(pbuf, netif, type)
+ * to a filter function that returns the correct netif when using multiple
+ * netifs on one hardware interface where the netif's low-level receive
+ * routine cannot decide for the correct netif (e.g. when mapping multiple
+ * IP addresses to one hardware interface).
+ */
+#ifndef LWIP_ARP_FILTER_NETIF
+#define LWIP_ARP_FILTER_NETIF 0
+#endif
+
+extern const struct eth_addr ethbroadcast, ethzero;
+
+#endif	/* defined(CONFIG_NET_LWIP) && (LWIP_ARP || LWIP_ETHERNET) */
+
+#endif	/*  __INCLUDE_NET_ETHERNET_H */

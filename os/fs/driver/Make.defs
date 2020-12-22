@@ -63,7 +63,9 @@ CSRCS_DRIVER += block/fs_registerblockdriver.c block/fs_unregisterblockdriver.c
 CSRCS_DRIVER += block/fs_findblockdriver.c block/fs_openblockdriver.c block/fs_closeblockdriver.c block/ramdisk.c
 
 ifneq ($(CONFIG_DISABLE_PSEUDOFS_OPERATIONS),y)
+ifeq ($(CONFIG_BCH),y)
 CSRCS_DRIVER += block/fs_blockproxy.c
+endif
 endif
 endif
 
@@ -112,6 +114,13 @@ ifeq ($(CONFIG_MTD_M25P),y)
 CSRCS_DRIVER += mtd/m25px/m25px.c
 endif
 
+ifeq ($(CONFIG_MTD_W25),y)
+CSRCS_DRIVER += mtd/w25.c
+endif
+
+ifeq ($(CONFIG_MTD_JEDEC),y)
+CSRCS_DRIVER += mtd/mtd_jedec.c
+endif
 endif
 
 CSRCS += $(notdir $(CSRCS_DRIVER))

@@ -66,6 +66,11 @@ static void tc_net_dup_p(void)
 		return;
 	}
 	int fd = dup(sock);
+	if (fd < 0) {
+		printf("socket dup error line:%d\n", __LINE__);
+		close(sock);
+		return;
+	}
 	close(sock);
 	close(fd);
 	TC_ASSERT_GT("dup", fd, 0);
@@ -107,6 +112,8 @@ static void tc_net_dup2_p(void)
 	int sock_new = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock_new == -1) {
 		UTC_NET_LOGE("get new socket error (%d)\n", errno);
+		close(sock_old);
+		return;
 	}
 	int res = dup2(sock_old, sock_new);
 	close(sock_old);

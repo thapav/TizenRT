@@ -13,3 +13,20 @@ config EXAMPLES_WIFIMANAGER_TEST
 config USER_ENTRYPOINT
 	string
 	default "wm_test_main" if ENTRY_WIFIMANAGER_TEST
+
+
+if EXAMPLES_WIFIMANAGER_TEST
+config EXAMPLES_WIFIMANAGER_STRESS_TOOL
+	bool "Enable Sterss Tool for WiFi Manager"
+	default n
+	depends on STRESS_TOOL
+
+if EXAMPLES_WIFIMANAGER_STRESS_TOOL
+config WIFIMANAGER_TEST_TRIAL
+	int "Number of test trial"
+	default 5
+	---help---
+		Number of test trial
+
+endif #if EXAMPLES_WIFIMANAGER_STRESS_TOOL
+endif #if EXAMPLES_WIFIMANAGER_TEST

@@ -55,33 +55,13 @@
  ****************************************************************************/
 
 #include <tinyara/config.h>
-
 #include <stdlib.h>
-
+#include <string.h>
 #include <tinyara/mm/mm.h>
-
-#if !defined(CONFIG_BUILD_PROTECTED) || !defined(__KERNEL__)
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-
-#if defined(CONFIG_ARCH_ADDRENV) && defined(CONFIG_BUILD_KERNEL)
-/* In the kernel build, there a multiple user heaps; one for each task
- * group.  In this build configuration, the user heap structure lies
- * in a reserved region at the beginning of the .bss/.data address
- * space (CONFIG_ARCH_DATA_VBASE).  The size of that region is given by
- * ARCH_DATA_RESERVE_SIZE
- */
-
-#include <tinyara/addrenv.h>
-#define USR_HEAP (&ARCH_DATA_RESERVE->ar_usrheap)
-
-#else
-/* Otherwise, the user heap data structures are in common .bss */
-
-#define USR_HEAP &g_mmheap
-#endif
 
 /****************************************************************************
  * Private Data
@@ -94,21 +74,6 @@
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
-#ifdef CONFIG_DEBUG_MM_HEAPINFO
-/****************************************************************************
- * Name: mm_get_heap_info
- *
- * Description:
- *   mallinfo returns a copy of updated current heap information for the
- *   user heap.
- *
- ****************************************************************************/
-struct mm_heap_s *mm_get_heap_info(void)
-{
-	return USR_HEAP;
-
-}
-#endif
 /****************************************************************************
  * Name: mallinfo
  *
@@ -122,8 +87,14 @@ struct mm_heap_s *mm_get_heap_info(void)
 
 struct mallinfo mallinfo(void)
 {
+	int heap_idx;
 	struct mallinfo info;
-	mm_mallinfo(USR_HEAP, &info);
+#if CONFIG_KMM_NHEAPS > 1
+	memset(&info, 0, sizeof(struct mallinfo));
+#endif
+	for (heap_idx = 0; heap_idx < CONFIG_KMM_NHEAPS; heap_idx++) {
+		mm_mallinfo(&BASE_HEAP[heap_idx], &info);
+	}
 	return info;
 }
 
@@ -131,8 +102,11 @@ struct mallinfo mallinfo(void)
 
 int mallinfo(struct mallinfo *info)
 {
-	return mm_mallinfo(USR_HEAP, info);
+	int heap_idx;
+	for (heap_idx = 0; heap_idx < CONFIG_KMM_NHEAPS; heap_idx++) {
+		mm_mallinfo(&BASE_HEAP[heap_idx], info);
+	}
+	return OK;
 }
 
 #endif							/* CONFIG_CAN_PASS_STRUCTS */
-#endif							/* !CONFIG_BUILD_PROTECTED || !__KERNEL__ */

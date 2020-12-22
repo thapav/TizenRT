@@ -1,9 +1,14 @@
 ## MPU
-* It supports 12 or 16 memory regions, depending on the configuration(ARMv7-R has 12 memory regions).
-* Each region should be programmed with a base address and size.
+It supports 12 or 16 memory regions, depending on the configuration. The configuration is so chosen, considering that ARMv7-R has 12 memory regions.
+Each region should be programmed with a base address and size.
 
-### MPU Initialization and Memory Region Setup
-Initialzation of MPU is done by setting up memory regions. Memory regions are set up by using the functions in below table and each function requires 2 arguments which are _Region Base Address_ and _Region Size_ to setup a memory region.
+## Contents
+- [MPU Initialization and Memory Region Setup](#mpu-initialization-and-memory-region-setup)
+- [Memory Region Setup Functions](#memory-region-setup-functions)
+- [Example](#example)
+
+## MPU Initialization and Memory Region Setup
+Initialization of MPU is done by setting up memory regions. Memory regions are set up by using the functions in below table and each function requires two arguments which are _Region Base Address_ and _Region Size_ to setup a memory region.
 
 The functions with name ```_priv_``` are used to configure the _kernel_(Privileged) MPU regions whereas the ```_user_``` functions are called to configure the _user_(Un-Privileged) MPU regions.
 
@@ -16,7 +21,7 @@ MPU region setup related macros and functions are defined in **[mpu.h](../os/arc
 RNUM:	int32 - Region Number
 RBASE:	int32 - Region Base Address
 RSIZE:	int32 - Region Size
-RATTR:	int32 - Region Attirbute
+RATTR:	int32 - Region Attribute
 -----------------------------------
 ```
 
@@ -24,7 +29,7 @@ RATTR:	int32 - Region Attirbute
 ------------------------------------------------------------------
             MPU Init or Memory Region Setup Functions
 ------------------------------------------------------------------
-mpu_control() : This function is used to Enable or Diable the MPU.
+mpu_control() : This function is used to Enable or Disable the MPU.
 ------------------------------------------------------------------
                        Memory Region Access Permission Attributes
                              Privileged      Un-Privileged
@@ -43,13 +48,13 @@ mpu_user_intsram_wb()      : Read Write        Read Write
 ------------------------------------------------------------------
 ```
 
-### Memory Region Setup Functions
+## Memory Region Setup Functions
 
 ```mpu_priv_stronglyordered()``` - This function is used to configure a memory region as strongly ordered memory with _not cacheable_, _not bufferable_ and _shareable_ attributes.
 
 ```mpu_priv_noncache()``` - This function is used to configure a memory region as internal memory with _not cacheable_, _not bufferable_, _shareable_ and _instruction access disable_ attributes.
 
-```mpu_peripheral()``` - This function is used to configure a memory region as periperal address space with _shareable_, _bufferable_ and _instruction access disable_ attributes.
+```mpu_peripheral()``` - This function is used to configure a memory region as peripheral address space with _shareable_, _bufferable_ and _instruction access disable_ attributes.
 
 ```mpu_priv_flash()``` - This function is used to configure a memory region as privileged program flash with _cacheable_ attributes.
 
@@ -67,7 +72,7 @@ mpu_user_intsram_wb()      : Read Write        Read Write
 
 ```mpu_user_intsram_wb()``` - This function is similar to mpu_user_intsram() but with WB/WA cache policy. 
 
-### Example:
+## Example
 ```
 #ifdef CONFIG_ARMV7M_MPU
 int s5j_mpu_initialize(void)

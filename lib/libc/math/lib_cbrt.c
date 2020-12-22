@@ -96,7 +96,10 @@ double cbrt(double x)
 	} u = {
 		x
 	};
-	double r, s, t, w;
+	double r;
+	double s;
+	double t;
+	double w;
 	uint32_t hx = u.i >> 32 & 0x7fffffff;
 
 	if (hx >= 0x7ff00000) {		/* cbrt(NaN,INF) is itself */
@@ -129,7 +132,7 @@ double cbrt(double x)
 		hx = hx / 3 + B1;
 	}
 	u.i &= 1ULL << 63;
-	u.i |= (uint64_t) hx << 32;
+	u.i |= (uint64_t)hx << 32;
 	t = u.f;
 
 	/*

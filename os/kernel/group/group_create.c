@@ -60,6 +60,9 @@
 #include <assert.h>
 #include <errno.h>
 #include <debug.h>
+#if defined(CONFIG_PREFERENCE) && CONFIG_TASK_NAME_SIZE > 0
+#include <string.h>
+#endif
 
 #include <tinyara/kmalloc.h>
 
@@ -254,7 +257,9 @@ int group_allocate(FAR struct task_tcb_s *tcb, uint8_t ttype)
 #ifndef CONFIG_DISABLE_PTHREAD
 	(void)sem_init(&group->tg_joinsem, 0, 1);
 #endif
-
+#if defined(CONFIG_SCHED_WAITPID) && !defined(CONFIG_SCHED_HAVE_PARENT)
+	(void)sem_init(&group->tg_exitsem, 0, 0);
+#endif
 	return OK;
 }
 
@@ -319,7 +324,13 @@ int group_initialize(FAR struct task_tcb_s *tcb)
 	irqrestore(flags);
 
 #endif
+#if defined(CONFIG_PREFERENCE) && CONFIG_TASK_NAME_SIZE > 0
+	/* The values of private preference are managed by task group.
+	 * Set a name of task group, tg_name for private preference. */
 
+	strncpy(group->tg_name, tcb->cmn.name, strlen(tcb->cmn.name) + 1);
+
+#endif
 	/* Save the ID of the main task within the group of threads.  This needed
 	 * for things like SIGCHILD.  It ID is also saved in the TCB of the main
 	 * task but is also retained in the group which may persist after the main
@@ -328,6 +339,17 @@ int group_initialize(FAR struct task_tcb_s *tcb)
 
 #if !defined(CONFIG_DISABLE_PTHREAD) && defined(CONFIG_SCHED_HAVE_PARENT)
 	group->tg_task = tcb->cmn.pid;
+#endif
+#if defined(CONFIG_SCHED_ATEXIT) && !defined(CONFIG_SCHED_ONEXIT)
+	/* atexit support *********************************************************** */
+
+	sq_init(&(group->tg_atexitfunc));
+#endif
+
+#ifdef CONFIG_SCHED_ONEXIT
+	/* on_exit support ********************************************************** */
+
+	sq_init(&(group->tg_onexitfunc));
 #endif
 
 	/* Mark that there is one member in the group, the main task */

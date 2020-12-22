@@ -50,38 +50,76 @@
 #include <float.h>
 
 /************************************************************************
+ * Pre-processor Definitions
+ ************************************************************************/
+
+#define FLT_MAX_EXP_X         88.0F
+
+/* To avoid looping forever in particular corner cases, every LOGF_MAX_ITER
+ * the error criteria is relaxed by a factor LOGF_RELAX_MULTIPLIER.
+ * todo: might need to adjust the double floating point version too.
+ */
+
+#define LOGF_MAX_ITER         10
+#define LOGF_RELAX_MULTIPLIER 2
+
+/************************************************************************
  * Public Functions
  ************************************************************************/
 
 float logf(float x)
 {
-	float y, y_old, ey, epsilon;
+	float y;
+	float y_old;
+	float ey;
+	float epsilon;
+	int relax_factor;
+	int iter;
 
 	y = 0.0;
 	y_old = 1.0;
 	epsilon = FLT_EPSILON;
 
-	while (y > y_old + epsilon || y < y_old - epsilon) {
-		y_old = y;
-		ey = exp(y);
-		y -= (ey - x) / ey;
+	iter = 0;
+	relax_factor = 1;
 
-		if (y > 700.0) {
-			y = 700.0;
-		}
-
-		if (y < -700.0) {
-			y = -700.0;
-		}
-
-		epsilon = (fabsf(y) > 1.0) ? fabsf(y) * FLT_EPSILON : FLT_EPSILON;
+	if (isnan(x) || x < 0.0) {
+		return NAN;
 	}
 
-	if (y == 700.0) {
+	if (x == 0.0) {
+		return -INFINITY;
+	}
+
+	while (y > y_old + epsilon || y < y_old - epsilon) {
+		y_old = y;
+		ey = expf(y);
+		y -= (ey - x) / ey;
+
+		if (y > FLT_MAX_EXP_X) {
+			y = FLT_MAX_EXP_X;
+		}
+
+		if (y < -FLT_MAX_EXP_X) {
+			y = -FLT_MAX_EXP_X;
+		}
+		epsilon = (fabsf(y) > 1.0) ? fabsf(y) * FLT_EPSILON : FLT_EPSILON;
+
+		if (++iter >= LOGF_MAX_ITER) {
+			relax_factor *= LOGF_RELAX_MULTIPLIER;
+			iter = 0;
+		}
+
+		if (relax_factor > 1) {
+			epsilon *= relax_factor;
+		}
+	}
+
+	if (y == FLT_MAX_EXP_X) {
 		return INFINITY;
 	}
 
-	if (y == -700.0) {
+	if (y == -FLT_MAX_EXP_X) {
 		return INFINITY;
 	}
 

@@ -102,6 +102,8 @@
 #define WDIOC_SETTIMEOUT _WDIOC(0x004)
 #define WDIOC_CAPTURE    _WDIOC(0x005)
 #define WDIOC_KEEPALIVE  _WDIOC(0x006)
+#define WDIOC_PAUSE      _WDIOC(0x007)
+#define WDIOC_RESUME     _WDIOC(0x008)
 
 #define WDIOC_MINTIME    _WDIOC(0x080)
 
@@ -112,6 +114,7 @@
 #define WDFLAGS_RESET    (1 << 1)	/* 1=Reset when the watchog timer expires */
 #define WDFLAGS_CAPTURE  (1 << 2)	/* 1=Call the user function when the
 									 *   watchdog timer expires */
+#define WDFLAGS_WAIT     (1 << 3)	/* When watchdog is suspended */
 
 /****************************************************************************
  * Public Types
@@ -269,27 +272,6 @@ void watchdog_unregister(FAR void *handle);
 /****************************************************************************
  * Architecture-specific Application Interfaces
  ****************************************************************************/
-
-/****************************************************************************
- * Name: up_wdginitialize()
- *
- * Description:
- *   Perform architecture-specific initialization of the Watchdog hardware.
- *   This interface should be provided by all configurations using
- *   to avoid exposed platform-dependent logic.
- *
- *   At a minimum, this function should call watchdog_register() which is
- *   described above.
- *
- * Input parameters:
- *   None
- *
- * Returned Value:
- *   Zero on success; a negated errno value on failure.
- *
- ****************************************************************************/
-
-int up_wdginitialize(void);
 
 #undef EXTERN
 #ifdef __cplusplus

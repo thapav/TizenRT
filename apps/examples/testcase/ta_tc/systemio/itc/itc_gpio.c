@@ -302,7 +302,7 @@ static void itc_systemio_gpio_register_unregister_callback_p(void)
 	ret = iotbus_gpio_set_direction(g_gpio_h2, IOTBUS_GPIO_DIRECTION_IN);
 	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_set_direction", ret, 0, iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
 
-	ret = iotbus_gpio_register_cb(g_gpio_h2, IOTBUS_GPIO_EDGE_BOTH, gpio_event_callback, (void *)g_gpio_h2);
+	ret = iotbus_gpio_register_cb(g_gpio_h2, IOTBUS_GPIO_EDGE_RISING, gpio_event_callback, (void *)g_gpio_h2);
 	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_register_cb", ret, 0, iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
 
 	// To trigger event for callback
@@ -310,18 +310,15 @@ static void itc_systemio_gpio_register_unregister_callback_p(void)
 	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_write", ret, 0, iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
 	sleep(WAIT_SECONDS);
 
-	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_register_cb not triggered", gpio_flag_callback, 1, iotbus_gpio_unregister_cb(g_gpio_h2); iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
-	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_register_cb response", gpio_callback_data, data, iotbus_gpio_unregister_cb(g_gpio_h2); iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
+	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_register_cb", gpio_flag_callback, 0, iotbus_gpio_unregister_cb(g_gpio_h2); iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
 
-	gpio_flag_callback = 0;
 	data = 1;
-
 	ret = iotbus_gpio_write(g_gpio_h, data);
-	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_register_cb", ret, 0, iotbus_gpio_unregister_cb(g_gpio_h2); iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
+	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_write", ret, 0, iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
 	sleep(WAIT_SECONDS);
 
-	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_register_cb triggered", gpio_flag_callback, 1, iotbus_gpio_unregister_cb(g_gpio_h2); iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
-	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_register_cb response", gpio_callback_data, data, iotbus_gpio_unregister_cb(g_gpio_h2); iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
+	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_register_cb", gpio_flag_callback, 1, iotbus_gpio_unregister_cb(g_gpio_h2); iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
+	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_register_cb", gpio_callback_data, data, iotbus_gpio_unregister_cb(g_gpio_h2); iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
 
 	ret = iotbus_gpio_unregister_cb(g_gpio_h2);
 	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_unregister_cb", ret, 0, iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
@@ -333,7 +330,7 @@ static void itc_systemio_gpio_register_unregister_callback_p(void)
 	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_register_cb", ret, 0, iotbus_gpio_unregister_cb(g_gpio_h2); iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
 	sleep(WAIT_SECONDS);
 
-	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_register_cb triggered", gpio_flag_callback, 0, iotbus_gpio_unregister_cb(g_gpio_h2); iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
+	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_register_cb", gpio_flag_callback, 0, iotbus_gpio_unregister_cb(g_gpio_h2); iotbus_gpio_close(g_gpio_h2); iotbus_gpio_close(g_gpio_h));
 
 	ret = iotbus_gpio_close(g_gpio_h2);
 	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_close", ret, 0, iotbus_gpio_close(g_gpio_h));
@@ -658,6 +655,7 @@ static void itc_systemio_gpio_open_close_p_multi_handle(void)
 	TC_SUCCESS_RESULT();
 }
 
+#if 0
 /**
 * @testcase         itc_systemio_gpio_open_close_p_reclose
 * @brief            gpio_open returns handle of gpio context and gpio_close closes the context
@@ -682,6 +680,7 @@ static void itc_systemio_gpio_open_close_p_reclose(void)
 
 	TC_SUCCESS_RESULT();
 }
+#endif
 
 /**
 * @testcase         itc_systemio_gpio_open_n

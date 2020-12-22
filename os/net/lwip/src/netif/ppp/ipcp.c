@@ -69,7 +69,7 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#include <net/lwip/opt.h>
+#include "lwip/opt.h"
 
 #if PPP_SUPPORT					/* don't build if not configured for use in lwipopts.h */
 
@@ -81,7 +81,7 @@
 #include "vj.h"
 #include "ipcp.h"
 
-#include <net/lwip/ipv4/inet.h>
+#include "lwip/inet.h"
 
 #include <string.h>
 
@@ -633,13 +633,9 @@ static int ipcp_nakci(fsm *f, u_char *p, int len)
 	}
 		   ) ;
 
-	NAKCIDNS(CI_MS_DNS1, req_dns1, try.dnsaddr[0] = cidnsaddr;
-			 IPCPDEBUG(LOG_INFO, ("primary DNS address %s\n", inet_ntoa(cidnsaddr)));
-			);
+	NAKCIDNS(CI_MS_DNS1, req_dns1, try.dnsaddr[0] = cidnsaddr; IPCPDEBUG(LOG_INFO, ("primary DNS address %s\n", inet_ntoa(cidnsaddr))););
 
-	NAKCIDNS(CI_MS_DNS2, req_dns2, try.dnsaddr[1] = cidnsaddr;
-			 IPCPDEBUG(LOG_INFO, ("secondary DNS address %s\n", inet_ntoa(cidnsaddr)));
-			);
+	NAKCIDNS(CI_MS_DNS2, req_dns2, try.dnsaddr[1] = cidnsaddr; IPCPDEBUG(LOG_INFO, ("secondary DNS address %s\n", inet_ntoa(cidnsaddr))););
 
 	/*
 	 * There may be remaining CIs, if the peer is requesting negotiation

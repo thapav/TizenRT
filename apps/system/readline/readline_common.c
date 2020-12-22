@@ -89,9 +89,9 @@
  * Private Data
  ****************************************************************************/
 /* <esc>[K is the VT100 command erases to the end of the line. */
-
+#ifdef CONFIG_READLINE_ECHO
 static const char g_erasetoeol[] = VT100_CLEAREOL;
-
+#endif
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
@@ -191,7 +191,6 @@ ssize_t readline_common(FAR struct rl_common_s *vtbl, FAR char *buf, int buflen)
 				/* We are finished with the escape sequence */
 
 				escape = 0;
-				ch = 'a';
 			} else {
 				/* The next character is the end of a 3-byte sequence.
 				 * NOTE:  Some of the <esc>[ sequences are longer than

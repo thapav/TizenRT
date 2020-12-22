@@ -71,7 +71,7 @@
 
 /* Included implementation-dependent register save structure layouts */
 
-#ifdef CONFIG_ARMV7M_CMNVECTOR
+#ifdef CONFIG_ARM_CMNVECTOR
 #include <arch/armv7-m/irq_cmnvector.h>
 #else
 #include <arch/armv7-m/irq_lazyfpu.h>
@@ -79,6 +79,7 @@
 
 #ifdef CONFIG_ARMV7M_USEBASEPRI
 #include <arch/chip/chip.h>
+#include "nvicpri.h"
 #endif
 
 /****************************************************************************
@@ -89,6 +90,29 @@
 
 #ifndef CONFIG_SYS_NNEST
 #define CONFIG_SYS_NNEST 2
+#endif
+
+/* MPU Region Definitions */
+
+#define MPU_REG0       (0)
+#define MPU_REG1       (1)
+#define MPU_REG2       (2)
+#define MPU_REG3       (3)
+#define MPU_REG4       (4)
+#define MPU_REG5       (5)
+#define MPU_REG6       (6)
+#define MPU_REG7       (7)
+#if (CONFIG_ARMV7M_MPU_NREGIONS == 12) || (CONFIG_ARMV7M_MPU_NREGIONS == 16)
+#define MPU_REG8       (8)
+#define MPU_REG9       (9)
+#define MPU_REG10      (10)
+#define MPU_REG11      (11)
+#endif
+#if (CONFIG_ARMV7M_MPU_NREGIONS == 16)
+#define MPU_REG12      (12)
+#define MPU_REG13      (13)
+#define MPU_REG14      (14)
+#define MPU_REG15      (15)
 #endif
 
 /* Alternate register names *************************************************/

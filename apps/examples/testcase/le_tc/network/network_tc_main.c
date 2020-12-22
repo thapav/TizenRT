@@ -27,14 +27,13 @@
 /****************************************************************************
  * Name: network_tc_main
  ****************************************************************************/
-
 #ifdef CONFIG_BUILD_KERNEL
 int main(int argc, FAR char *argv[])
 #else
 int tc_network_main(int argc, char *argv[])
 #endif
 {
-	if (tc_handler(TC_START, "Network TC") == ERROR) {
+	if (testcase_state_handler(TC_START, "Network TC") == ERROR) {
 		return ERROR;
 	}
 
@@ -107,8 +106,34 @@ int tc_network_main(int argc, char *argv[])
 #ifdef CONFIG_TC_NET_DUP
 	net_dup_main();
 #endif
-
-	(void)tc_handler(TC_END, "Network TC");
+#ifdef CONFIG_ITC_NET_CLOSE
+	itc_net_close_main();
+#endif
+#ifdef CONFIG_ITC_NET_DUP
+	itc_net_dup_main();
+#endif
+#ifdef CONFIG_ITC_NET_FCNTL
+	itc_net_fcntl_main();
+#endif
+#ifdef CONFIG_ITC_NET_LISTEN
+	itc_net_listen_main();
+#endif
+#ifdef CONFIG_ITC_NET_SETSOCKOPT
+	itc_net_setsockopt_main();
+#endif
+#ifdef CONFIG_ITC_NET_SEND
+	itc_net_send_main();
+#endif
+#ifdef CONFIG_ITC_NET_INET
+	itc_net_inet_main();
+#endif
+#ifdef CONFIG_ITC_NET_NETDB
+	itc_net_netdb_main();
+#endif
+#ifdef CONFIG_ITC_NET_CONNECT
+	itc_net_connect_main();
+#endif
+	(void)testcase_state_handler(TC_END, "Network TC");
 
 	return 0;
 }

@@ -68,9 +68,10 @@ USERLIBS =
 
 TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)libstubs$(LIBEXT) $(LIBRARIES_DIR)$(DELIM)libkc$(LIBEXT)
 TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)libkmm$(LIBEXT) $(LIBRARIES_DIR)$(DELIM)libkarch$(LIBEXT)
+TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)libkwque$(LIBEXT)
 USERLIBS  += $(LIBRARIES_DIR)$(DELIM)libproxies$(LIBEXT) $(LIBRARIES_DIR)$(DELIM)libuc$(LIBEXT)
 USERLIBS  += $(LIBRARIES_DIR)$(DELIM)libumm$(LIBEXT) $(LIBRARIES_DIR)$(DELIM)libuarch$(LIBEXT)
-
+USERLIBS  += $(LIBRARIES_DIR)$(DELIM)libuwque$(LIBEXT)
 
 # Add libraries for C++ support.  CXX, CXXFLAGS, and COMPILEXX must
 # be defined in Make.defs for this to work!
@@ -83,6 +84,21 @@ endif
 
 ifeq ($(CONFIG_AUDIO),y)
 TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)libaudio$(LIBEXT)
+endif
+
+# Add libraries for se support
+ifeq ($(CONFIG_SE),y)
+TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)libse$(LIBEXT)
+endif
+
+# Add libraries for compression support
+ifeq ($(CONFIG_COMPRESSED_BINARY),y)
+TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)libcompression$(LIBEXT)
+endif
+
+# Add libraries for crypto support
+ifeq ($(CONFIG_CRYPTO),y)
+TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)libcrypto$(LIBEXT)
 endif
 
 # Add libraries for network support
@@ -112,6 +128,19 @@ TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)libdrivers$(LIBEXT)
 endif
 else
 TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)libfs$(LIBEXT) $(LIBRARIES_DIR)$(DELIM)libdrivers$(LIBEXT)
+endif
+
+ifeq ($(CONFIG_BINFMT_ENABLE),y)
+TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)libbinfmt$(LIBEXT)
+endif
+
+ifeq ($(CONFIG_RTK_WLAN),y)
+TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)librtl$(LIBEXT)
+endif
+
+ifeq ($(CONFIG_AMEBAD_WIFI),y)
+TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)lib_wlan$(LIBEXT)
+TINYARALIBS += $(LIBRARIES_DIR)$(DELIM)lib_wps$(LIBEXT)
 endif
 
 # Add library for wifi driver

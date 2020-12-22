@@ -15,7 +15,6 @@
 # language governing permissions and limitations under the License.
 #
 ###########################################################################
-
 ############################################################################
 # apps/examples/testcase/Makefile
 #
@@ -55,16 +54,13 @@
 -include $(TOPDIR)/Make.defs
 include $(APPDIR)/Make.defs
 
-# built-in application info
-
-APPNAME = tc
-FUNCNAME = $(APPNAME)_main
-THREADEXEC = TASH_EXECMD_ASYNC
+CXXEXT ?= .cpp
 
 # testcase example
 
 ASRCS =
 CSRCS =
+CXXSRCS =
 
 ifeq ($(CONFIG_EXAMPLES_TESTCASE),y)
 
@@ -76,30 +72,27 @@ ifeq ($(WINTOOL),y)
 INCDIROPT = -w
 endif
 
-include le_tc/filesystem/Make.defs
-include le_tc/kernel/Make.defs
-include le_tc/network/Make.defs
-include le_tc/ttrace/Make.defs
-include ta_tc/systemio/utc/Make.defs
-include ta_tc/systemio/itc/Make.defs
-include ta_tc/arastorage/utc/Make.defs
-include ta_tc/arastorage/itc/Make.defs
-include ta_tc/device_management/utc/Make.defs
-include ta_tc/device_management/itc/Make.defs
-include ta_tc/wifi_manager/utc/Make.defs
-include ta_tc/wifi_manager/itc/Make.defs
-include ta_tc/mqtt/utc/Make.defs
-include ta_tc/mqtt/itc/Make.defs
-include ta_tc/audio/utc/Make.defs
-include ta_tc/audio/itc/Make.defs
+# Testcase Directories
+
+# BUILDIRS is the list of top-level directories containing Make.defs files
+
+BUILDIRS   := $(dir $(wildcard */*/Make.defs))
+BUILDIRS   += $(dir $(wildcard */*/*/Make.defs))
+
+define Add_Test
+  include $(1)Make.defs
+endef
+
+$(foreach BDIR, $(BUILDIRS), $(eval $(call Add_Test,$(BDIR))))
 
 endif
 
 AOBJS		= $(ASRCS:.S=$(OBJEXT))
 COBJS		= $(CSRCS:.c=$(OBJEXT))
+CXXOBJS		= $(CXXSRCS:$(CXXEXT)=$(OBJEXT))
 
-SRCS		= $(ASRCS) $(CSRCS)
-OBJS		= $(AOBJS) $(COBJS)
+SRCS		= $(ASRCS) $(CSRCS) $(CXXSRCS)
+OBJS		= $(AOBJS) $(COBJS) $(CXXOBJS)
 
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
   BIN		= ..\..\libapps$(LIBEXT)
@@ -123,6 +116,9 @@ $(AOBJS): %$(OBJEXT): %.S
 
 $(COBJS): %$(OBJEXT): %.c
 	$(call COMPILE, $<, $@)
+
+$(CXXOBJS): %$(OBJEXT): %$(CXXEXT)
+	$(call COMPILEXX, $<, $@)
 endif
 
 .built: $(OBJS)
@@ -134,10 +130,106 @@ endif
 install:
 
 ifeq ($(CONFIG_BUILTIN_APPS)$(CONFIG_EXAMPLES_TESTCASE),yy)
-$(BUILTIN_REGISTRY)$(DELIM)$(FUNCNAME).bdat: $(DEPCONFIG) Makefile
-	$(Q) $(call REGISTER,$(APPNAME),$(FUNCNAME),$(THREADEXEC),$(PRIORITY),$(STACKSIZE))
+$(BUILTIN_REGISTRY)$(DELIM)testcase.bdat: $(DEPCONFIG) Makefile
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_ARASTORAGE_UTC),y)
+	$(Q) $(call REGISTER,arastorage_utc,utc_arastorage_main,TASH_EXECMD_ASYNC,100,4096)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_ARASTORAGE_ITC),y)
+	$(Q) $(call REGISTER,arastorage_itc,itc_arastorage_main,TASH_EXECMD_ASYNC,100,4096)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_AUDIO_UTC),y)
+	$(Q) $(call REGISTER,audio_utc,utc_audio_main,TASH_EXECMD_ASYNC,100,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_AUDIO_ITC),y)
+	$(Q) $(call REGISTER,audio_itc,itc_audio_main,TASH_EXECMD_ASYNC,100,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_COMPRESSION),y)
+	$(Q) $(call REGISTER,compression_tc,tc_compression_main,TASH_EXECMD_ASYNC,100,16384)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_DM_UTC),y)
+	$(Q) $(call REGISTER,dm_utc,utc_dm_main,TASH_EXECMD_ASYNC,100,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_DM_ITC),y)
+	$(Q) $(call REGISTER,dm_itc,itc_dm_main,TASH_EXECMD_ASYNC,100,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_DRIVERS),y)
+	$(Q) $(call REGISTER,drivers_tc,tc_drivers_main,TASH_EXECMD_ASYNC,100,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_FILESYSTEM),y)
+	$(Q) $(call REGISTER,filesystem_tc,tc_filesystem_main,TASH_EXECMD_ASYNC,100,4096)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_KERNEL),y)
+	$(Q) $(call REGISTER,kernel_tc,tc_kernel_main,TASH_EXECMD_ASYNC,180,4096)
+endif
+ifeq ($(CONFIG_LIBCXX_UTC),y)
+	$(Q) $(call REGISTER,libcxx_utc,utc_libcxx_main,TASH_EXECMD_ASYNC,100,4096)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_MEDIA_UTC),y)
+	$(Q) $(call REGISTER,media_utc,utc_media_main,TASH_EXECMD_ASYNC,100,8192)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_MEDIA_ITC),y)
+	$(Q) $(call REGISTER,media_itc,itc_media_main,TASH_EXECMD_ASYNC,100,8192)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_MESSAGING_UTC),y)
+	$(Q) $(call REGISTER,messaging_utc,utc_messaging_main,TASH_EXECMD_ASYNC,100,4096)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_MPU),y)
+	$(Q) $(call REGISTER,mpu_tc,tc_mpu_main,TASH_EXECMD_ASYNC,100,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_MQTT_UTC),y)
+	$(Q) $(call REGISTER,mqtt_utc,utc_mqtt_main,TASH_EXECMD_ASYNC,100,4096)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_MQTT_ITC),y)
+	$(Q) $(call REGISTER,mqtt_itc,itc_mqtt_main,TASH_EXECMD_ASYNC,100,4096)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_NETWORK),y)
+	$(Q) $(call REGISTER,network_tc,tc_network_main,TASH_EXECMD_ASYNC,100,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_PREFERENCE_UTC),y)
+	$(Q) $(call REGISTER,preference_utc,utc_preference_main,TASH_EXECMD_ASYNC,100,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_SYSTEMIO_UTC),y)
+	$(Q) $(call REGISTER,sysio_utc,utc_sysio_main,TASH_EXECMD_ASYNC,100,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_SYSTEMIO_ITC),y)
+	$(Q) $(call REGISTER,sysio_itc,itc_sysio_main,TASH_EXECMD_ASYNC,100,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_TASK_MANAGER_UTC),y)
+	$(Q) $(call REGISTER,taskmgr_utc,utc_taskmanager_main,TASH_EXECMD_ASYNC,100,2048)
+	$(Q) $(call REGISTER,tm_sample,tm_sample_main,TASH_EXECMD_ASYNC,101,2048)
+	$(Q) $(call REGISTER,tm_broadcast1,tm_broadcast1_main,TASH_EXECMD_ASYNC,101,1024)
+	$(Q) $(call REGISTER,tm_broadcast2,tm_broadcast2_main,TASH_EXECMD_ASYNC,101,1024)
+	$(Q) $(call REGISTER,tm_broadcast3,tm_broadcast3_main,TASH_EXECMD_ASYNC,101,1024)
+	$(Q) $(call REGISTER,tm_utc,tm_utc_main,TASH_EXECMD_ASYNC,101,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_TASK_MANAGER_ITC),y)
+	$(Q) $(call REGISTER,taskmgr_itc,itc_taskmanager_main,TASH_EXECMD_ASYNC,100,2048)
+	$(Q) $(call REGISTER,tm_sample_itc,taskmanager_sample_main,TASH_EXECMD_ASYNC,101,2048)
+	$(Q) $(call REGISTER,tm_itc,tm_itc_main,TASH_EXECMD_ASYNC,101,2048)
+	$(Q) $(call REGISTER,start_itc_sampl,taskmanager_start_sample_main,TASH_EXECMD_ASYNC,101,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_TTRACE),y)
+	$(Q) $(call REGISTER,ttrace_tc,tc_ttrace_main,TASH_EXECMD_ASYNC,100,2048)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_WIFI_MANAGER_UTC),y)
+	$(Q) $(call REGISTER,wifimgr_utc,utc_wifimanager_main,TASH_EXECMD_ASYNC,100,4096)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_WIFI_MANAGER_ITC),y)
+	$(Q) $(call REGISTER,wifimgr_itc,itc_wifimanager_main,TASH_EXECMD_ASYNC,100,4096)
+endif
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_TCP_TLS_STRESS),y)
+	$(Q) $(call REGISTER,tcp_tls_stress,tc_tcp_tls_main,TASH_EXECMD_ASYNC,100,8192)
+endif
 
-context: $(BUILTIN_REGISTRY)$(DELIM)$(FUNCNAME).bdat
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_EVENTLOOP_UTC),y)
+	$(Q) $(call REGISTER,eventloop_utc,utc_eventloop_main,TASH_EXECMD_ASYNC,100,2048)
+endif
+
+ifeq ($(CONFIG_EXAMPLES_TESTCASE_SECURITY_FRAMEWORK_UTC),y)
+	$(Q) $(call REGISTER,security_utc,utc_security_main,TASH_EXECMD_ASYNC,100,16384)
+endif
+
+context: $(BUILTIN_REGISTRY)$(DELIM)testcase.bdat
 
 else
 context:
@@ -145,10 +237,12 @@ context:
 endif
 
 .depend: Makefile $(SRCS)
-ifeq ($(CONFIG_EXAMPLES_TESTCASE),y)
-	$(Q) $(MKDEP) $(DEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
+ifeq ($(filter %$(CXXEXT),$(SRCS)),)
+	@$(MKDEP) $(DEPPATH) "$(CC)" -- $(CFLAGS) -- $(SRCS) >Make.dep
+else
+	@$(MKDEP) $(DEPPATH) "$(CXX)" -- $(CXXFLAGS) -- $(SRCS) >Make.dep
 endif
+	@touch $@
 
 depend: .depend
 

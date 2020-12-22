@@ -58,7 +58,7 @@
  *******************************************************************************************/
 
 #include <sys/socket.h>
-
+#include <netinet/in.h>
 /*******************************************************************************************
  * Pre-Processor Definitions
  *******************************************************************************************/
@@ -174,6 +174,7 @@ struct lifreq {
 		uint8_t lifru_flags;	/* Interface flags */
 		struct mii_iotcl_notify_s llfru_mii_notify;	/* PHY event notification */
 		struct mii_ioctl_data_s lifru_mii_data;	/* MII request data */
+		uint8_t lifru_addr_type; /*  IPv6 Address type */
 	} lifr_ifru;
 };
 
@@ -192,6 +193,7 @@ struct lifreq {
 #define lifr_mii_reg_num      lifr_ifru.lifru_mii_data.reg_num	/* PHY register address */
 #define lifr_mii_val_in       lifr_ifru.lifru_mii_data.val_in	/* PHY input data */
 #define lifr_mii_val_out      lifr_ifru.lifru_mii_data.val_out	/* PHY output data */
+#define lifr_addr_type        lifr_ifru.lifru_addr_type	/* IPv6 Address type */
 
 #endif
 
@@ -242,6 +244,51 @@ struct ifconf {
 #define ifc_buf	ifc_ifcu.ifcu_buf	/* Buffer address.  */
 #define ifc_req	ifc_ifcu.ifcu_req	/* Array of structures.  */
 
+#ifdef CONFIG_NET_NETMON
+/* This is Network monitor request */
+enum netmon_proto {
+	NETMON_INVALID = 0,
+	NETMON_TCP = 0x10,
+	NETMON_UDP = 0x20,
+	NETMON_UDPLITE = 0x21,
+	NETMON_UDPNOCHKSUM = 0x22,
+	NETMON_RAW = 0x40,
+	NETMON_TYPE_IPV6 = 0x08,
+};
+enum netmon_state {
+	NETMON_NONE,
+	NETMON_WRITE,
+	NETMON_LISTEN,
+	NETMON_CONNECT,
+	NETMON_CLOSE,
+};
+/* Socket info. */
+struct netmon_sock {
+	struct netmon_sock *flink;
+	enum netmon_proto type;
+	enum netmon_state state;
+	union {
+		struct sockaddr_in ip;
+		struct sockaddr_in6 ip6;
+	} local;
+	union {
+		struct sockaddr_in ip;
+		struct sockaddr_in6 ip6;
+	} remote;
+	pid_t pid;
+	char  pid_name[CONFIG_TASK_NAME_SIZE];
+};
+#ifdef CONFIG_NET_STATS
+/* Netdev info. */
+struct netmon_netdev_stats {
+	char devname[IFNAMSIZ + 1];
+	u32_t devinpkts;
+	u32_t devinoctets;
+	u32_t devoutpkts;
+	u32_t devoutoctets;
+};
+#endif								/* CONFIG_NET_STATS */
+#endif                              /* CONFIG_NET_NETMON */
 /*******************************************************************************************
  * Public Function Prototypes
  *******************************************************************************************/

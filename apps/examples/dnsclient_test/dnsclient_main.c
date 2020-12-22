@@ -64,17 +64,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <errno.h>
 
 #include <tinyara/net/dns.h>
 #include <netdb.h>
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #ifdef CONFIG_NET_LWIP
-#include <net/lwip/ipv4/inet.h>
+#include "lwip/inet.h"
 #else
 #include <arpa/inet.h>
 #endif
-
 /****************************************************************************
  * Definitions
  ****************************************************************************/
@@ -82,13 +86,8 @@
 #define DNS_DEFAULT_PORT   53
 #endif
 
-#ifndef CONFIG_EXAMPLES_DNSCLIENT_TEST_SERVER_PORT
-#define CONFIG_EXAMPLES_DNSCLIENT_TEST_SERVER_PORT	DNS_DEFAULT_PORT
-#endif
+#define DNS_NAME_MAXSIZE 512
 
-#ifndef CONFIG_NETDB_DNSCLIENT_NAMESIZE
-#error "CONFIG_NETDB_DNSCLIENT_NAMESIZE is not defined"
-#endif
 /****************************************************************************
  * Enumeration
  ****************************************************************************/
@@ -100,7 +99,7 @@
 /****************************************************************************
  * Private Data
  ****************************************************************************/
-char hostname[CONFIG_NETDB_DNSCLIENT_NAMESIZE];
+char hostname[DNS_NAME_MAXSIZE];
 
 /****************************************************************************
  * function prototype
@@ -135,9 +134,7 @@ int dnsclient_main(int argc, FAR char *argv[])
 #endif
 {
 	struct hostent *shost = NULL;
-#ifdef CONFIG_NETDB_DNSSERVER_IPv4
-	struct sockaddr_in dns;
-#endif
+	ip_addr_t dns_addr;
 
 	if (argc < 2) {
 		show_usage(argv[0]);
@@ -145,26 +142,44 @@ int dnsclient_main(int argc, FAR char *argv[])
 	}
 
 	if (argc == 3 && argv[2] != NULL) {
-#ifdef CONFIG_NETDB_DNSSERVER_IPv4
 		printf("dnsclient : dns_add_nameserver : %s\n", argv[2]);
-		dns.sin_family = AF_INET;
-		dns.sin_port = htons(CONFIG_EXAMPLES_DNSCLIENT_TEST_SERVER_PORT);
-		dns.sin_addr.s_addr = inet_addr(argv[2]);
-		dns_add_nameserver((FAR struct sockaddr *)&dns, sizeof(struct sockaddr_in));
-#endif
-#ifdef CONFIG_NETDB_DNSSERVER_BY_DHCP
-		printf("dnsclient : dns server address is set by DHCP\n");
-#endif
+		IP_SET_TYPE_VAL(dns_addr, IPADDR_TYPE_V4);
+#ifdef CONFIG_NET_IPv6
+		dns_addr.u_addr.ip4.addr = inet_addr(argv[2]);
+#else
+		dns_addr.addr = inet_addr(argv[2]);
+#endif /* CONFIG_NET_IPv6 */
+		struct req_lwip_data req;
+
+		int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+		if (sockfd < 0) {
+			printf("dnsclient : socket() failed with errno: %d\n", errno);
+			return -1;
+		}
+
+		memset(&req, 0, sizeof(req));
+		req.type = DNSSETSERVER;
+		req.num_dns = 0;
+		req.dns_server = &dns_addr;
+
+		int ret = ioctl(sockfd, SIOCLWIP, (unsigned long)&req);
+		if (ret == ERROR) {
+			printf("dnsclient : ioctl() failed with errno: %d\n", errno);
+			close(sockfd);
+			return -1;
+		}
+
+		close(sockfd);
 	}
 
-	memset(hostname, 0x00, CONFIG_NETDB_DNSCLIENT_NAMESIZE);
+	memset(hostname, 0x00, DNS_NAME_MAXSIZE);
 
-	if (strlen(argv[1]) > CONFIG_NETDB_DNSCLIENT_NAMESIZE - 1) {
-		printf("dnsclient : length of hostname has to lower than or equal to %d\n", CONFIG_NETDB_DNSCLIENT_NAMESIZE - 1);
+	if (strlen(argv[1]) > DNS_NAME_MAXSIZE) {
+		printf("dnsclient : length of hostname has to lower than %d\n", DNS_NAME_MAXSIZE);
 		return -1;
 	}
 
-	strncpy(hostname, argv[1], CONFIG_NETDB_DNSCLIENT_NAMESIZE);
+	strncpy(hostname, argv[1], DNS_NAME_MAXSIZE);
 	printf("\nHostname : %s [len %d]\n", hostname, strlen(hostname));
 
 	if ((shost = gethostbyname(hostname)) == NULL || shost->h_addr_list == NULL) {
@@ -172,7 +187,7 @@ int dnsclient_main(int argc, FAR char *argv[])
 		return -1;
 	} else {
 		printf("DNS results\n");
-		printf("IP Address : %s\n", ip_ntoa((ip_addr_t *)shost->h_addr_list[0]));
+		printf("IP Address : %s\n", inet_ntoa(*((struct in_addr *)shost->h_addr_list[0])));
 	}
 
 	return 0;

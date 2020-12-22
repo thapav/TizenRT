@@ -6,6 +6,7 @@
 config SYSTEM_VI
 	bool "Tiny VI work-alike text editor"
 	default n
+	depends on (NFILE_DESCRIPTORS != 0) && (NFILE_STREAMS != 0)
 	---help---
 		Enable support for TinyAra tiny VI work-alike editor.
 
@@ -24,6 +25,9 @@ config SYSTEM_VI
 		Size: As of 2013-01-30, it appears that the size will vary from
 		about 8.5 to 10.5KB, depending upon the efficiency of the
 		underlying architecture.
+
+		VI uses TASH stack and its size is 16384 bytes by default.
+		If needed, please increase TASH_CMDTASK_STACKSIZE.
 
 if SYSTEM_VI
 

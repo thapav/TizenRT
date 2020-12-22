@@ -142,6 +142,10 @@ void sig_deliver(FAR struct tcb_s *stcb)
 
 		savesigprocmask = stcb->sigprocmask;
 		stcb->sigprocmask = savesigprocmask | sigq->mask | SIGNO2SET(sigq->info.si_signo);
+#ifdef HAVE_GROUP_MEMBERS
+		/* Turn on the mask for checking which signo is blocked for handling the signal. */
+		stcb->sigrecvmask |= SIGNO2SET(sigq->info.si_signo);
+#endif
 
 		/* Deliver the signal.  In the kernel build this has to be handled
 		 * differently if we are dispatching to a signal handler in a user-
@@ -149,6 +153,24 @@ void sig_deliver(FAR struct tcb_s *stcb)
 		 * calling the task.
 		 */
 
+		if (sigq->info.si_signo == SIGKILL) {
+#ifdef CONFIG_SIGKILL_HANDLER
+			if (stcb->sigkillusrhandler != NULL) {
+#if defined(CONFIG_BUILD_PROTECTED) || defined(CONFIG_BUILD_KERNEL)
+				if ((stcb->flags & TCB_FLAG_TTYPE_MASK) != TCB_FLAG_TTYPE_KERNEL) {
+					siginfo_t info;
+					memcpy(&info, &sigq->info, sizeof(siginfo_t));
+
+					up_signal_dispatch(stcb->sigkillusrhandler, sigq->info.si_signo, &info, NULL);
+				} else
+#endif
+				{
+					stcb->sigkillusrhandler(sigq->info.si_signo, &sigq->info, NULL);
+				}
+			}
+#endif
+			(*sigq->action.sighandler)(0, NULL, NULL);
+		} else
 #if defined(CONFIG_BUILD_PROTECTED) || defined(CONFIG_BUILD_KERNEL)
 		if ((stcb->flags & TCB_FLAG_TTYPE_MASK) != TCB_FLAG_TTYPE_KERNEL) {
 			/* The sigq_t pointed to by sigq resides in kernel space.  So we
@@ -174,6 +196,10 @@ void sig_deliver(FAR struct tcb_s *stcb)
 		/* Restore the original sigprocmask */
 
 		stcb->sigprocmask = savesigprocmask;
+#ifdef HAVE_GROUP_MEMBERS
+		/* Turn off the checking mask. */
+		stcb->sigrecvmask &= ~SIGNO2SET(sigq->info.si_signo);
+#endif
 
 		/* Now, handle the (rare?) case where (a) a blocked signal was
 		 * received while the signal handling executed but (b) restoring the

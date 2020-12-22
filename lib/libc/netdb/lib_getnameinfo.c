@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- * Copyright 2016 Samsung Electronics All Rights Reserved.
+ * Copyright 2019 Samsung Electronics All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,56 +15,77 @@
  * language governing permissions and limitations under the License.
  *
  ****************************************************************************/
-
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
 #include <tinyara/config.h>
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <netdb.h>
 #include <errno.h>
-#include <string.h>
-#include <arpa/inet.h>
 
-#include "lib_internal.h"
-#include "netdb/lib_netdb.h"
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
 
-#ifdef CONFIG_LIBC_NETDB
+/****************************************************************************
+ * Name: getnameinfo
+ *
+ * Description:
+ *   Translates the socket addresses and returns the string.
+ *   This is the dummy function to support compatibility for iotivity.
+ *
+ * Input Parameters:
+ *   sa - socket address to translate
+ *   salen - length of the socket address
+ *   host - host string pointer to be returned
+ *   hostlen - length of the host name buffer
+ *   serv - service string pointer to be returned
+ *   servlen - length of the service name buffer
+ *   flags - takes NI_NUMERICHOST and NI_NUMERICSERV
+ *
+ * Returned Value:
+ *   0 on success, non-zero on failure
+ *
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: getnameinfo
+ ****************************************************************************/
+#if defined(CONFIG_NET_LWIP_NETDB) && defined(LWIP_COMPAT_SOCKETS)
 int getnameinfo(const struct sockaddr *sa, size_t salen, char *host, size_t hostlen, char *serv, size_t servlen, int flags)
 {
-	struct sockaddr_in *sin = (struct sockaddr_in *)sa;
-	struct hostent *hp;
-	char tmpserv[16];
+	int ret = -1;
+	struct req_lwip_data req;
 
-	if (serv != NULL) {
-		snprintf(tmpserv, sizeof(tmpserv), "%d", ntohs(sin->sin_port));
-		if (strlcpy(serv, tmpserv, servlen) >= servlen) {
-			return (EAI_MEMORY);
-		}
+	int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (sockfd < 0) {
+		printf("socket() failed with errno: %d\n", errno);
+		return ret;
 	}
 
-	if (host != NULL) {
-		if (flags & NI_NUMERICHOST) {
-			if (strlcpy(host, (const char *)inet_ntoa(sin->sin_addr), hostlen) >= hostlen) {
-				return (EAI_MEMORY);
-			} else {
-				return (0);
-			}
-		} else {
-			hp = gethostbyaddr((char *)&sin->sin_addr, sizeof(struct in_addr), AF_INET);
-			if (hp == NULL) {
-				return (NO_DATA);
-			}
+	memset(&req, 0, sizeof(req));
+	req.type = GETNAMEINFO;
+	req.sa = sa;
+	req.sa_len = salen;
+	req.host_name = host;
+	req.host_len = hostlen;
+	req.serv_name = serv;
+	req.serv_len = servlen;
+	req.flags = flags;
 
-			if (strlcpy(host, hp->h_name, hostlen) >= hostlen) {
-				return (EAI_MEMORY);
-			} else {
-				return (0);
-			}
-		}
+	ret = ioctl(sockfd, SIOCLWIP, (unsigned long)&req);
+	if (ret == ERROR) {
+		printf("ioctl() failed with errno: %d\n", errno);
+		close(sockfd);
+		return ret;
 	}
-	return (0);
+
+	ret = req.req_res;
+	close(sockfd);
+	return ret;
 }
-
-#endif							/* CONFIG_LIBC_NETDB */
+#endif

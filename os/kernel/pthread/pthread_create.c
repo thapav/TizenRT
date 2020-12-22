@@ -66,6 +66,10 @@
 #include <errno.h>
 #include <queue.h>
 
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+#include <tinyara/mm/mm.h>
+#endif
+
 #include <tinyara/arch.h>
 #include <tinyara/semaphore.h>
 #include <tinyara/kmalloc.h>
@@ -76,6 +80,9 @@
 #include "group/group.h"
 #include "clock/clock.h"
 #include "pthread/pthread.h"
+#ifdef CONFIG_BINARY_MANAGER
+#include "binary_manager/binary_manager.h"
+#endif
 
 /****************************************************************************
  * Public Data
@@ -253,11 +260,26 @@ int pthread_create(FAR pthread_t *thread, FAR const pthread_attr_t *attr, pthrea
 
 	trace_begin(TTRACE_TAG_TASK, "pthread_create");
 
+	/* Check whether we are allowed to create new pthread ? */
+
+	if (g_alive_taskcount == CONFIG_MAX_TASKS) {
+		sdbg("ERROR: CONFIG_MAX_TASKS(%d) count reached\n", CONFIG_MAX_TASKS);
+		trace_end(TTRACE_TAG_TASK);
+		return EBUSY;
+	}
+
 	/* If attributes were not supplied, use the default attributes */
 
 	if (!attr) {
 		attr = &g_default_pthread_attr;
 	}
+
+#ifdef CONFIG_BINARY_MANAGER
+	if (BM_PRIORITY_MIN - 1 < attr->priority && attr->priority < BM_PRIORITY_MAX + 1) {
+		sdbg("Invalid priority %d, it should be lower than %d or higher than %d\n", attr->priority, BM_PRIORITY_MIN, BM_PRIORITY_MAX);
+		return EPERM;
+	}
+#endif
 
 	/* Allocate a TCB for the new task. */
 
@@ -273,7 +295,7 @@ int pthread_create(FAR pthread_t *thread, FAR const pthread_attr_t *attr, pthrea
 
 	ret = group_bind(ptcb);
 	if (ret < 0) {
-		errcode = ENOMEM;
+		errcode = -ret;
 		goto errout_with_tcb;
 	}
 #endif
@@ -301,7 +323,7 @@ int pthread_create(FAR pthread_t *thread, FAR const pthread_attr_t *attr, pthrea
 
 	ret = up_create_stack((FAR struct tcb_s *)ptcb, attr->stacksize, TCB_FLAG_TTYPE_PTHREAD);
 	if (ret != OK) {
-		errcode = ENOMEM;
+		errcode = -ret;
 		goto errout_with_join;
 	}
 #if defined(CONFIG_BUILD_PROTECTED)
@@ -347,6 +369,14 @@ int pthread_create(FAR pthread_t *thread, FAR const pthread_attr_t *attr, pthrea
 		goto errout_with_join;
 	}
 
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+	/* Update the pid information in stack node */
+	struct mm_allocnode_s *node;
+
+	node = (struct mm_allocnode_s *)(ptcb->cmn.stack_alloc_ptr - SIZEOF_MM_ALLOCNODE);
+	node->pid = (-1) * (ptcb->cmn.pid);
+#endif
+
 	/* Configure the TCB for a pthread receiving on parameter
 	 * passed by value
 	 */
@@ -358,7 +388,7 @@ int pthread_create(FAR pthread_t *thread, FAR const pthread_attr_t *attr, pthrea
 
 	ret = group_join(ptcb);
 	if (ret < 0) {
-		errcode = ENOMEM;
+		errcode = -ret;
 		goto errout_with_join;
 	}
 
@@ -372,8 +402,6 @@ int pthread_create(FAR pthread_t *thread, FAR const pthread_attr_t *attr, pthrea
 	/* Set the appropriate scheduling policy in the TCB */
 
 	switch (policy) {
-	default:
-		DEBUGPANIC();
 	case SCHED_FIFO:
 		ptcb->cmn.flags &= ~TCB_FLAG_ROUND_ROBIN;
 		break;
@@ -384,6 +412,8 @@ int pthread_create(FAR pthread_t *thread, FAR const pthread_attr_t *attr, pthrea
 		ptcb->cmn.timeslice = MSEC2TICK(CONFIG_RR_INTERVAL);
 		break;
 #endif
+	default:
+		DEBUGPANIC();
 	}
 
 #ifdef CONFIG_CANCELLATION_POINTS
@@ -441,6 +471,10 @@ int pthread_create(FAR pthread_t *thread, FAR const pthread_attr_t *attr, pthrea
 			ret = EINVAL;
 		}
 
+#ifdef CONFIG_BINARY_MANAGER
+		/* Add tcb to binary thread list */
+		binary_manager_add_binlist(&ptcb->cmn);
+#endif
 		sched_unlock();
 		(void)sem_destroy(&pjoin->data_sem);
 	} else {

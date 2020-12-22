@@ -82,27 +82,31 @@ include stdio/Make.defs
 include stdlib/Make.defs
 include unistd/Make.defs
 include sched/Make.defs
+include symtab/Make.defs
 include syslog/Make.defs
 include string/Make.defs
 include aio/Make.defs
 include pthread/Make.defs
 include semaphore/Make.defs
 include signal/Make.defs
-include mqueue/Make.defs
+include machine/Make.defs
 include math/Make.defs
 include fixedmath/Make.defs
 include net/Make.defs
+include netdb/Make.defs
 include time/Make.defs
+include inttypes/Make.defs
 include libgen/Make.defs
+include locale/Make.defs
 include dirent/Make.defs
 include termios/Make.defs
-include spawn/Make.defs
 include queue/Make.defs
-include wqueue/Make.defs
+include wchar/Make.defs
+include wctype/Make.defs
 include misc/Make.defs
-include netdb/Make.defs
 include ttrace/Make.defs
 include audio/Make.defs
+include uio/Make.defs
 
 # REVISIT: Backslash causes problems in $(COBJS) target
 DELIM := $(strip /)
@@ -134,6 +138,10 @@ $(COBJS): $(BINDIR)$(DELIM)%$(OBJEXT): %.c
 $(BIN): $(OBJS)
 	$(call ARCHIVE, $@, $(OBJS))
 
+ifeq ($(CONFIG_LIBC_DOWNLOAD_ZONEINFO),y)
+	$(Q) $(MAKE) -C zoneinfo all TOPDIR=$(TOPDIR)
+endif
+
 # C library for the user phase of the two-pass kernel build
 
 ifneq ($(BIN),$(UBIN))
@@ -147,6 +155,14 @@ ifneq ($(BIN),$(KBIN))
 $(KBIN):
 	$(Q) $(MAKE) $(KBIN) BIN=$(KBIN) BINDIR=kbin TOPDIR=$(TOPDIR) EXTRADEFINES=$(EXTRADEFINES)
 endif
+
+# Context
+
+context:
+ifeq ($(CONFIG_LIBC_DOWNLOAD_ZONEINFO),y)
+	$(Q) $(MAKE) -C zoneinfo context TOPDIR=$(TOPDIR)
+endif
+
 
 # Dependencies
 
@@ -178,6 +194,7 @@ distclean: clean
 	$(Q) $(MAKE) -C bin  distclean TOPDIR=$(TOPDIR)
 	$(Q) $(MAKE) -C ubin distclean TOPDIR=$(TOPDIR)
 	$(Q) $(MAKE) -C kbin distclean TOPDIR=$(TOPDIR)
+	$(Q) $(MAKE) -C zoneinfo distclean TOPDIR=$(TOPDIR)
 	$(call DELFILE, Make_bin.dep)
 	$(call DELFILE, Make_ubin.dep)
 	$(call DELFILE, Make_kbin.dep)

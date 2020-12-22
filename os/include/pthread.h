@@ -77,7 +77,7 @@
 #include <signal.h>				/* Needed for sigset_t */
 #include <time.h>				/* Needed for struct timespec */
 
-#include <tinyara/semaphore.h>	/* For sem_t and SEM_PRIO_* defines */
+#include <tinyara/semaphore.h>	/* For sem_t and SEM_* defines */
 
 /********************************************************************************
  * Pre-processor Definitions
@@ -204,6 +204,12 @@
 #define _PTHREAD_MFLAGS_INCONSISTENT  (1 << 1)	/* Mutex is in an inconsistent state */
 #define _PTHREAD_MFLAGS_NRECOVERABLE  (1 << 2)	/* Inconsistent mutex has been unlocked */
 
+/*
+ * Maximum values of pthread key operation
+ */
+#define PTHREAD_KEYS_MAX              CONFIG_NPTHREAD_KEYS
+#define PTHREAD_DESTRUCTOR_ITERATIONS CONFIG_NPTHREAD_DESTRUCTOR_ITERATIONS
+
 /* Definitions to map some non-standard, BSD thread management interfaces to
  * the non-standard Linux-like prctl() interface.  Since these are simple
  * mappings to prctl, they will return 0 on success and -1 on failure with the
@@ -217,7 +223,7 @@
  * @param[in] thread pid of pthread
  * @param[in] name name for setting
  * @return On success, OK is returned. On failure, ERROR is returned and errno is set appropriately.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #define pthread_setname_np(thread, name) \
 	prctl((int)PR_SET_NAME, (char*)name, (int)thread)
@@ -229,7 +235,7 @@
  * @param[in] thread pid of pthread
  * @param[in] name space for saving pthread name
  * @return On success, OK is returned. On failure, ERROR is returned and errno is set appropriately.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #define pthread_getname_np(thread, name) \
 	prctl((int)PR_GET_NAME, (char*)name, (int)thread)
@@ -244,90 +250,13 @@ extern "C" {
 
 /* pthread-specific types */
 
-typedef int pthread_key_t;
+typedef CODE void (*pthread_destructor_t)(void *arg);
 typedef FAR void *pthread_addr_t;
 
-typedef pthread_addr_t(*pthread_startroutine_t)(pthread_addr_t);
+typedef pthread_addr_t (*pthread_startroutine_t)(pthread_addr_t);
 typedef pthread_startroutine_t pthread_func_t;
 
-/**
- * @ingroup PTHREAD_KERNEL
- * @brief Structure of pthread region configuration
- */
-struct pthread_region_s {
-	void *address;			/* start address of the region */
-	uint32_t size;			/* size of the region in bytes */
-	uint32_t attributes;	/* attributes of the region */
-};
-/**
- * @ingroup PTHREAD_KERNEL
- * @brief Structure of pthread attr configuration
- */
-struct pthread_attr_s {
-	size_t stacksize;		/* Size of the stack allocated for the pthread */
-	int16_t priority;		/* Priority of the pthread */
-	uint8_t policy;			/* Pthread scheduler policy */
-	uint8_t inheritsched;	/* Inherit parent prio/policy? */
-	struct pthread_region_s region[2];	/* space for user-space region if MPU supported */
-};
-typedef struct pthread_attr_s pthread_attr_t;
-
-typedef pid_t pthread_t;
-
-typedef int pthread_condattr_t;
-
-/**
- * @ingroup PTHREAD_KERNEL
- * @brief Structure of pthread condition configuration
- */
-struct pthread_cond_s {
-	sem_t sem;
-};
-typedef struct pthread_cond_s pthread_cond_t;
-#define PTHREAD_COND_INITIALIZER { {0, 0xffff} }
-
-/**
- * @ingroup PTHREAD_KERNEL
- * @brief Structure of pthread mutex attr configuration
- */
-struct pthread_mutexattr_s {
-	uint8_t pshared:1; /* PTHREAD_PROCESS_PRIVATE or PTHREAD_PROCESS_SHARED */
-#ifdef CONFIG_PRIORITY_INHERITANCE
-	uint8_t proto:2; /* See PTHREAD_PRIO_* definitions */
-#endif
-#ifdef CONFIG_PTHREAD_MUTEX_TYPES
-	uint8_t type:2; /* Type of the mutex.  See PTHREAD_MUTEX_* definitions */
-#endif
-#if defined(CONFIG_PTHREAD_MUTEX_BOTH) || defined(CONFIG_PTHREAD_MUTEX_ROBUST)
-	uint8_t robust:1; /* PTHREAD_MUTEX_STALLED or PTHREAD_MUTEX_ROBUST */
-#endif
-};
-typedef struct pthread_mutexattr_s pthread_mutexattr_t;
-
-/**
- * @ingroup PTHREAD_KERNEL
- * @brief Structure of pthread mutex configuration
- */
-struct pthread_mutex_s {
-
-#ifndef CONFIG_PTHREAD_MUTEX_UNSAFE
-	/* Supports a singly linked list */
-
-	FAR struct pthread_mutex_s *flink;
-#endif
-	/* Payload */
-
-	sem_t sem;				/* Semaphore underlying the implementation of the mutex */
-	int pid;				/* ID of the holder of the mutex */
-#ifndef CONFIG_PTHREAD_MUTEX_UNSAFE
-	uint8_t flags;			/* See _PTHREAD_MFLAGS_* */
-#endif
-#ifdef CONFIG_PTHREAD_MUTEX_TYPES
-	uint8_t type;			/* Type of the mutex.  See PTHREAD_MUTEX_* definitions */
-	int nlocks;				/* The number of recursive locks held */
-#endif
-};
-typedef struct pthread_mutex_s pthread_mutex_t;
+#define PTHREAD_COND_INITIALIZER { SEM_INITIALIZER(0) }
 
 #define __PTHREAD_MUTEX_T_DEFINED 1
 
@@ -353,48 +282,11 @@ typedef struct pthread_mutex_s pthread_mutex_t;
 #define PTHREAD_MUTEX_INITIALIZER {SEM_INITIALIZER(1), -1}
 #endif
 
-/**
- * @ingroup PTHREAD_KERNEL
- * @brief Structure of pthread barrier attr configuration
- */
-struct pthread_barrierattr_s {
-	int pshared;
-};
-typedef struct pthread_barrierattr_s pthread_barrierattr_t;
-
-/**
- * @ingroup PTHREAD_KERNEL
- * @brief Structure of pthread barrier configuration
- */
-struct pthread_barrier_s {
-	sem_t sem;
-	unsigned int count;
-};
-typedef struct pthread_barrier_s pthread_barrier_t;
-
-typedef bool pthread_once_t;
-
 #ifdef CONFIG_PTHREAD_CLEANUP
 /* This type describes the pthread cleanup callback (non-standard) */
 
 typedef CODE void (*pthread_cleanup_t)(FAR void *arg);
 #endif
-
-/**
- * @ingroup PTHREAD_KERNEL
- * @brief Structure of pthread rwlock
- */
-struct pthread_rwlock_s {
-	pthread_mutex_t lock;
-	pthread_cond_t cv;
-	unsigned int num_readers;
-	unsigned int num_writers;
-	bool write_in_progress;
-};
-
-typedef struct pthread_rwlock_s pthread_rwlock_t;
-
-typedef int pthread_rwlockattr_t;
 
 #define PTHREAD_RWLOCK_INITIALIZER {PTHREAD_MUTEX_INITIALIZER, \
 				    PTHREAD_COND_INITIALIZER, \
@@ -429,7 +321,7 @@ struct sched_param;			/* Defined in sched.h */
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_create(FAR pthread_t *thread, FAR const pthread_attr_t *attr, pthread_startroutine_t startroutine, pthread_addr_t arg);
 
@@ -442,7 +334,7 @@ int pthread_create(FAR pthread_t *thread, FAR const pthread_attr_t *attr, pthrea
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_detach(pthread_t thread);
 
@@ -455,7 +347,7 @@ int pthread_detach(pthread_t thread);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 void pthread_exit(pthread_addr_t value) noreturn_function;
 /**
@@ -464,7 +356,7 @@ void pthread_exit(pthread_addr_t value) noreturn_function;
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_cancel(pthread_t thread);
 /**
@@ -473,7 +365,7 @@ int pthread_cancel(pthread_t thread);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_setcancelstate(int state, FAR int *oldstate);
 /**
@@ -481,7 +373,7 @@ int pthread_setcancelstate(int state, FAR int *oldstate);
  * @brief set cancelability state
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_setcanceltype(int type, FAR int *oldtype);
 
@@ -490,7 +382,7 @@ int pthread_setcanceltype(int type, FAR int *oldtype);
  * @brief set cancelability state
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 void pthread_testcancel(void);
 
@@ -510,9 +402,18 @@ void pthread_cleanup_push(pthread_cleanup_t routine, FAR void *arg);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_join(pthread_t thread, FAR pthread_addr_t *value);
+
+/**
+ * @ingroup PTHREAD_KERNEL
+ * @brief performs a nonblocking join with the thread thread, returning the exit status of the thread in *pexit_value
+ * @details @b #include <pthread.h> \n
+ * SYSTEM CALL API
+ * @since TizenRT v2.0
+ */
+int pthread_tryjoin_np(pthread_t thread, FAR pthread_addr_t *pexit_value);
 
 /* A thread may tell the scheduler that its processor can be made available. */
 /**
@@ -521,7 +422,7 @@ int pthread_join(pthread_t thread, FAR pthread_addr_t *value);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 void pthread_yield(void);
 
@@ -532,7 +433,7 @@ void pthread_yield(void);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #define pthread_self() ((pthread_t)getpid())
 
@@ -543,7 +444,7 @@ void pthread_yield(void);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 #define pthread_equal(t1, t2) ((t1) == (t2))
 
@@ -554,7 +455,7 @@ void pthread_yield(void);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_getschedparam(pthread_t thread, FAR int *policy, FAR struct sched_param *param);
 /**
@@ -563,7 +464,7 @@ int pthread_getschedparam(pthread_t thread, FAR int *policy, FAR struct sched_pa
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_setschedparam(pthread_t thread, int policy, FAR const struct sched_param *param);
 /**
@@ -571,7 +472,7 @@ int pthread_setschedparam(pthread_t thread, int policy, FAR const struct sched_p
  * @brief dynamic thread scheduling parameters access
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_setschedprio(pthread_t thread, int prio);
 
@@ -582,7 +483,7 @@ int pthread_setschedprio(pthread_t thread, int prio);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_key_create(FAR pthread_key_t *key, CODE void (*destructor)(FAR void *));
 /**
@@ -591,7 +492,7 @@ int pthread_key_create(FAR pthread_key_t *key, CODE void (*destructor)(FAR void 
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_setspecific(pthread_key_t key, FAR const void *value);
 /**
@@ -600,17 +501,18 @@ int pthread_setspecific(pthread_key_t key, FAR const void *value);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
-FAR void *pthread_getspecific(pthread_key_t key);
+void *pthread_getspecific(pthread_key_t key);
 /**
- * @cond
- * @internal
+ * @ingroup PTHREAD_KERNEL
+ * @brief thread-specific data key deletion
+ * @details @b #include <pthread.h> \n
+ * SYSTEM CALL API \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v2.0
  */
 int pthread_key_delete(pthread_key_t key);
-/**
- * @endcond
- */
 
 /* The following routines create, delete, lock and unlock mutexes. */
 
@@ -620,7 +522,7 @@ int pthread_key_delete(pthread_key_t key);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_mutex_init(FAR pthread_mutex_t *mutex, FAR const pthread_mutexattr_t *attr);
 /**
@@ -629,7 +531,7 @@ int pthread_mutex_init(FAR pthread_mutex_t *mutex, FAR const pthread_mutexattr_t
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_mutex_destroy(FAR pthread_mutex_t *mutex);
 /**
@@ -638,7 +540,7 @@ int pthread_mutex_destroy(FAR pthread_mutex_t *mutex);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_mutex_lock(FAR pthread_mutex_t *mutex);
 /**
@@ -647,7 +549,7 @@ int pthread_mutex_lock(FAR pthread_mutex_t *mutex);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_mutex_trylock(FAR pthread_mutex_t *mutex);
 /**
@@ -656,9 +558,28 @@ int pthread_mutex_trylock(FAR pthread_mutex_t *mutex);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_mutex_unlock(FAR pthread_mutex_t *mutex);
+
+/**
+ * @cond
+ * @internal
+ * @ingroup PTHREAD_KERNEL
+ * @brief Make sure that the pthread mutex is in a consistent state
+ * @details @b #include <pthread.h> \n
+ * SYSTEM CALL API \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v2.1 PRE
+ */
+#ifndef CONFIG_PTHREAD_MUTEX_UNSAFE
+/* Make sure that the pthread mutex is in a consistent state */
+
+int pthread_mutex_consistent(FAR pthread_mutex_t *mutex);
+#endif
+/**
+ * @endcond
+ */
 
 /* A thread can create and delete condition variables. */
 /**
@@ -667,7 +588,7 @@ int pthread_mutex_unlock(FAR pthread_mutex_t *mutex);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_cond_init(FAR pthread_cond_t *cond, FAR const pthread_condattr_t *attr);
 /**
@@ -676,7 +597,7 @@ int pthread_cond_init(FAR pthread_cond_t *cond, FAR const pthread_condattr_t *at
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_cond_destroy(FAR pthread_cond_t *cond);
 
@@ -687,7 +608,7 @@ int pthread_cond_destroy(FAR pthread_cond_t *cond);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_cond_broadcast(FAR pthread_cond_t *cond);
 /**
@@ -696,7 +617,7 @@ int pthread_cond_broadcast(FAR pthread_cond_t *cond);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_cond_signal(FAR pthread_cond_t *cond);
 
@@ -707,7 +628,7 @@ int pthread_cond_signal(FAR pthread_cond_t *cond);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_cond_wait(FAR pthread_cond_t *cond, FAR pthread_mutex_t *mutex);
 
@@ -718,7 +639,7 @@ int pthread_cond_wait(FAR pthread_cond_t *cond, FAR pthread_mutex_t *mutex);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_cond_timedwait(FAR pthread_cond_t *cond, FAR pthread_mutex_t *mutex, FAR const struct timespec *abstime);
 
@@ -729,7 +650,7 @@ int pthread_cond_timedwait(FAR pthread_cond_t *cond, FAR pthread_mutex_t *mutex,
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_barrier_destroy(FAR pthread_barrier_t *barrier);
 /**
@@ -738,7 +659,7 @@ int pthread_barrier_destroy(FAR pthread_barrier_t *barrier);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_barrier_init(FAR pthread_barrier_t *barrier, FAR const pthread_barrierattr_t *attr, unsigned int count);
 /**
@@ -747,7 +668,7 @@ int pthread_barrier_init(FAR pthread_barrier_t *barrier, FAR const pthread_barri
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_barrier_wait(FAR pthread_barrier_t *barrier);
 
@@ -758,29 +679,9 @@ int pthread_barrier_wait(FAR pthread_barrier_t *barrier);
  * @details @b #include <pthread.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_once(FAR pthread_once_t *once_control, CODE void (*init_routine)(void));
-
-/* Pthread signal management APIs */
-/**
- * @ingroup PTHREAD_KERNEL
- * @brief send a signal to a thread
- * @details @b #include <pthread.h> \n
- * SYSTEM CALL API \n
- * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
- */
-int pthread_kill(pthread_t thread, int sig);
-/**
- * @ingroup PTHREAD_KERNEL
- * @brief examine and change blocked signals
- * @details @b #include <pthread.h> \n
- * SYSTEM CALL API \n
- * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
- */
-int pthread_sigmask(int how, FAR const sigset_t *set, FAR sigset_t *oset);
 
 /**
  * @addtogroup PTHREAD_KERNEL
@@ -790,7 +691,7 @@ int pthread_sigmask(int how, FAR const sigset_t *set, FAR sigset_t *oset);
  * @brief initialize the thread attributes object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_attr_init(FAR pthread_attr_t *attr);
 
@@ -800,7 +701,7 @@ int pthread_attr_init(FAR pthread_attr_t *attr);
  * @brief destroy the thread attributes object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_attr_destroy(pthread_attr_t *attr);
 
@@ -810,42 +711,42 @@ int pthread_attr_destroy(pthread_attr_t *attr);
  * @brief set the schedpolicy attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_attr_setschedpolicy(FAR pthread_attr_t *attr, int policy);
 /**
  * @brief get the schedpolicy attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_attr_getschedpolicy(FAR const pthread_attr_t *attr, int *policy);
 /**
  * @brief set the schedparam attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_attr_setschedparam(FAR pthread_attr_t *attr, FAR const struct sched_param *param);
 /**
  * @brief get the schedparam attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_attr_getschedparam(FAR const pthread_attr_t *attr, FAR struct sched_param *param);
 /**
  * @brief set the inheritsched attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_attr_setinheritsched(FAR pthread_attr_t *attr, int inheritsched);
 /**
  * @brief get the inheritsched attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_attr_getinheritsched(FAR const pthread_attr_t *attr, FAR int *inheritsched);
 
@@ -854,7 +755,7 @@ int pthread_attr_getinheritsched(FAR const pthread_attr_t *attr, FAR int *inheri
  * @brief set the stacksize attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_attr_setstacksize(FAR pthread_attr_t *attr, long stacksize);
 
@@ -862,7 +763,7 @@ int pthread_attr_setstacksize(FAR pthread_attr_t *attr, long stacksize);
  * @brief get the stacksize attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_attr_getstacksize(FAR const pthread_attr_t *attr, long *stackaddr);
 
@@ -871,49 +772,49 @@ int pthread_attr_getstacksize(FAR const pthread_attr_t *attr, long *stackaddr);
  * @brief initialize the mutex attributes object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_mutexattr_init(FAR pthread_mutexattr_t *attr);
 /**
  * @brief destroy the mutex attributes object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_mutexattr_destroy(FAR pthread_mutexattr_t *attr);
 /**
  * @brief get the process-shared attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_mutexattr_getpshared(FAR const pthread_mutexattr_t *attr, FAR int *pshared);
 /**
  * @brief set the process-shared attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_mutexattr_setpshared(FAR pthread_mutexattr_t *attr, int pshared);
 /**
  * @brief get the mutex type attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_mutexattr_gettype(const pthread_mutexattr_t *attr, int *type);
 /**
  * @brief set the mutex type attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type);
 /**
  * @brief get the protocol attribute of the mutex attributes object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_mutexattr_getprotocol(FAR const pthread_mutexattr_t *attr,
 				  FAR int *protocol);
@@ -921,7 +822,7 @@ int pthread_mutexattr_getprotocol(FAR const pthread_mutexattr_t *attr,
  * @brief set the protocol attribute of the mutex attributes object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_mutexattr_setprotocol(FAR pthread_mutexattr_t *attr,
 				  int protocol);
@@ -929,7 +830,7 @@ int pthread_mutexattr_setprotocol(FAR pthread_mutexattr_t *attr,
  * @brief get the mutex robust attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_mutexattr_getrobust(FAR const pthread_mutexattr_t *attr,
 				FAR int *robust);
@@ -937,7 +838,7 @@ int pthread_mutexattr_getrobust(FAR const pthread_mutexattr_t *attr,
  * @brief set the mutex robust attribute
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_mutexattr_setrobust(FAR pthread_mutexattr_t *attr,
 				int robust);
@@ -947,14 +848,14 @@ int pthread_mutexattr_setrobust(FAR pthread_mutexattr_t *attr,
  * @brief initialize the condition variable attributes object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_condattr_init(FAR pthread_condattr_t *attr);
 /**
  * @brief destroy the condition variable attributes object
  * @details @b #include <pthread.h>
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_condattr_destroy(FAR pthread_condattr_t *attr);
 
@@ -963,28 +864,28 @@ int pthread_condattr_destroy(FAR pthread_condattr_t *attr);
  * @brief destroy the barrier attributes object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_barrierattr_destroy(FAR pthread_barrierattr_t *attr);
 /**
  * @brief initialize the barrier attributes object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_barrierattr_init(FAR pthread_barrierattr_t *attr);
 /**
  * @brief get the process-shared attribute of the barrier attributes object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_barrierattr_getpshared(FAR const pthread_barrierattr_t *attr, FAR int *pshared);
 /**
  * @brief set the process-shared attribute of the barrier attributes object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int pthread_barrierattr_setpshared(FAR pthread_barrierattr_t *attr, int pshared);
 
@@ -994,63 +895,63 @@ int pthread_barrierattr_setpshared(FAR pthread_barrierattr_t *attr, int pshared)
  * @brief destroy a read-write lock object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_rwlock_destroy(FAR pthread_rwlock_t *rw_lock);
 /**
  * @brief initialize a read-write lock object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_rwlock_init(FAR pthread_rwlock_t *rw_lock, FAR const pthread_rwlockattr_t *attr);
 /**
  * @brief lock a read-write lock object for reading
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_rwlock_rdlock(pthread_rwlock_t *lock);
 /**
  * @brief lock a read-write lock for reading
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_rwlock_timedrdlock(FAR pthread_rwlock_t *lock, FAR const struct timespec *abstime);
 /**
  * @brief lock a read-write lock for writing
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_rwlock_timedwrlock(FAR pthread_rwlock_t *lock, FAR const struct timespec *abstime);
 /**
  * @brief lock a read-write lock object for reading
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_rwlock_tryrdlock(FAR pthread_rwlock_t *lock);
 /**
  * @brief lock a read-write lock object for reading
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_rwlock_trywrlock(FAR pthread_rwlock_t *lock);
 /**
  * @brief unlock a read-write lock object
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_rwlock_unlock(FAR pthread_rwlock_t *lock);
 /**
  * @brief lock a read-write lock object for writing
  * @details @b #include <pthread.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.1
+ * @since TizenRT v1.1
  */
 int pthread_rwlock_wrlock(FAR pthread_rwlock_t *lock);
 

@@ -44,7 +44,7 @@
 
 #include <netdb.h>
 
-#include <uio.h>
+#include <sys/uio.h>
 
 #ifndef TUV_POLL_EVENTS_SIZE
 #define TUV_POLL_EVENTS_SIZE  32
@@ -57,7 +57,9 @@
 
 //---------------------------------------------------------------------------
 // TUV_CHANGES@20161130: NuttX doesn't provide ENOTSUP.
+#ifndef ENOTSUP
 #define ENOTSUP       EOPNOTSUPP
+#endif
 
 // TUV_CHANGES@20171130:
 // Not defined macros. Copied from x86-64 linux system header
@@ -81,12 +83,6 @@
 //-----------------------------------------------------------------------------
 // thread and mutex
 #define UV_PLATFORM_RWLOCK_T pthread_mutex_t
-
-//-----------------------------------------------------------------------------
-// uio
-ssize_t readv(int __fd, const struct iovec* __iovec, int __count);
-ssize_t writev(int __fd, const struct iovec* __iovec, int __count);
-
 
 //-----------------------------------------------------------------------------
 // etc

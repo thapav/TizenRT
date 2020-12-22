@@ -332,6 +332,10 @@ int websocket_client_handshake(websocket_t *client, char *host, char *port, char
 	}
 
 	memset(accept_key, 0, WEBSOCKET_ACCEPT_KEY_LEN);
+	if (keyhdend - keyhdstart > WEBSOCKET_ACCEPT_KEY_LEN) {
+		WEBSOCKET_DEBUG("error key length\n");
+		goto EXIT_WEBSOCKET_HANDSHAKE_ERROR;
+	}
 	memcpy(accept_key, keyhdstart, keyhdend - keyhdstart);
 	websocket_create_accept_key(dst, WEBSOCKET_ACCEPT_KEY_LEN, client_key, WEBSOCKET_CLIENT_KEY_LEN);
 	accept_key[WEBSOCKET_ACCEPT_KEY_LEN - 1] = '\0';
@@ -353,7 +357,7 @@ int connect_socket(websocket_t *client, const char *host, const char *port)
 	socklen_t addrlen;
 	struct sockaddr_in serveraddr;
 
-#ifdef CONFIG_LIBC_NETDB
+#ifdef CONFIG_NET_LWIP_NETDB
 	struct hostent *he = NULL;
 	char ip_str[INET6_ADDRSTRLEN];
 
@@ -376,7 +380,7 @@ int connect_socket(websocket_t *client, const char *host, const char *port)
 
 	serveraddr.sin_family = AF_INET;
 	serveraddr.sin_port = htons(atoi(port));
-#ifdef CONFIG_LIBC_NETDB
+#ifdef CONFIG_NET_LWIP_NETDB
 	serveraddr.sin_addr.s_addr = inet_addr(ip_str);
 #else
 	serveraddr.sin_addr.s_addr = inet_addr(host);
@@ -484,6 +488,10 @@ int websocket_server_handshake(websocket_t *server)
 	}
 
 	memset(client_key, 0, WEBSOCKET_CLIENT_KEY_LEN);
+	if (keyhdend - keyhdstart > WEBSOCKET_CLIENT_KEY_LEN) {
+		WEBSOCKET_DEBUG("error key length\n");
+		goto EXIT_WEBSOCKET_HANDSHAKE_ERROR;
+	}
 	memcpy(client_key, keyhdstart, keyhdend - keyhdstart);
 	memset(accept_key, 0, WEBSOCKET_ACCEPT_KEY_LEN);
 	websocket_create_accept_key(accept_key, WEBSOCKET_ACCEPT_KEY_LEN, client_key, WEBSOCKET_CLIENT_KEY_LEN);

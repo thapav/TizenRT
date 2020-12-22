@@ -33,6 +33,10 @@
 
 #include <tinyara/config.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
+
 #ifdef CONFIG_LWM2M_WAKAAMA
 #include <protocols/liblwm2m.h>
 #include "er-coap-13/er-coap-13.h"
@@ -86,7 +90,7 @@ struct dm_lwm2m_context_s {
  * @return On success, 0 is returned.
  *         On failure, a negative value is returned.
  *         If client is already started, return DM_ERROR_ALREADY_STARTED.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_lwm2m_start_client(struct dm_lwm2m_context_s *dm_context);
 
@@ -97,7 +101,7 @@ int dm_lwm2m_start_client(struct dm_lwm2m_context_s *dm_context);
  * @return On success, 0 is returned.
  *         On failure, a negative value is returned.
  *         If client is already stopped, return DM_ERROR_ALREADY_STOPPED.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_lwm2m_stop_client(void);
 
@@ -108,7 +112,7 @@ int dm_lwm2m_stop_client(void);
  * @param[out] server_ipAddr pointer to memory to store server IP address
  * @return     On success, 0 is returned.
  *             On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_lwm2m_get_server_address(char *server_ipAddr);
 
@@ -119,7 +123,7 @@ int dm_lwm2m_get_server_address(char *server_ipAddr);
  * @param[out] server_port pointer to memory to store server port
  * @return     On success, 0 is returned.
  *             On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_lwm2m_get_server_port(char *server_port);
 
@@ -130,7 +134,7 @@ int dm_lwm2m_get_server_port(char *server_port);
  * @param[out] lifetime pointer to memory to store client lifetime
  * @return     On success, 0 is returned.
  *             On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_lwm2m_get_client_lifetime(int *lifetime);
 
@@ -141,7 +145,7 @@ int dm_lwm2m_get_client_lifetime(int *lifetime);
  * @param[out] state pointer to memory to store client state
  * @return     On success, 0 is returned.
  *             On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_lwm2m_get_client_state(dm_lwm2m_client_state_e *state);
 
@@ -153,9 +157,13 @@ int dm_lwm2m_get_client_state(dm_lwm2m_client_state_e *state);
  *
  * @return     On success, 0 is returned.
  *             On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_lwm2m_display_client_resource(char *buffer);
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
 
 #endif
 

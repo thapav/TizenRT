@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- * Copyright 2016 Samsung Electronics All Rights Reserved.
+ * Copyright 2019 Samsung Electronics All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
  *
  ****************************************************************************/
 /****************************************************************************
- * libc/net/lib_inetpton.c
+ * lib/libc/net/lib_inetpton.c
  *
  *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -63,6 +63,7 @@
 #include <tinyara/config.h>
 
 #include <sys/socket.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,6 +71,10 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -89,14 +94,12 @@
  *          address (32 bits for AF_INET, 128 bits for AF_INET6).
  *
  * Returned Value:
- *   The inet_pton() function returns 1 if the conversion succeeds, with the
- *   address pointed to by dest in network byte order. It will return 0 if the
- *   input is not a valid IPv4 dotted-decimal string or a valid IPv6 address
- *   string, or -1 with errno set to EAFNOSUPPOR] if the af argument is unknown.
+ *   inet_ipv4_pton() will returns 1 if the conversion succeeds. It will
+ *   return 0 if the input is not a valid IPv4 dotted-decimal string string.
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IPv4
+#if defined(CONFIG_NET_IPv4)
 static int inet_ipv4_pton(FAR const char *src, FAR void *dest)
 {
 	size_t srcoffset;
@@ -189,14 +192,12 @@ static int inet_ipv4_pton(FAR const char *src, FAR void *dest)
  *          address (32 bits for AF_INET, 128 bits for AF_INET6).
  *
  * Returned Value:
- *   The inet_pton() function returns 1 if the conversion succeeds, with the
- *   address pointed to by dest in network byte order. It will return 0 if the
- *   input is not a valid IPv4 dotted-decimal string or a valid IPv6 address
- *   string, or -1 with errno set to EAFNOSUPPOR] if the af argument is unknown.
+ *   inet_ipv6_pton() will returns 1 if the conversion succeeds. It will
+ *   return 0 if the input is not a valid IPv6 address string.
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IPv6
+#if defined(CONFIG_NET_IPv6)
 static int inet_ipv6_pton(FAR const char *src, FAR void *dest)
 {
 	size_t srcoffset;
@@ -342,7 +343,7 @@ static int inet_ipv6_pton(FAR const char *src, FAR void *dest)
  *   af   - The af argument specifies the family of the address. This can be
  *          AF_INET or AF_INET6.
  *   src  - The src argument points to the string being passed in.
- *   dest - The dest argument points to a numstr into which the function stores
+ *   dest - The dest argument points to memory into which the function stores
  *          the numeric address; this must be large enough to hold the numeric
  *          address (32 bits for AF_INET, 128 bits for AF_INET6).
  *
@@ -350,7 +351,7 @@ static int inet_ipv6_pton(FAR const char *src, FAR void *dest)
  *   The inet_pton() function returns 1 if the conversion succeeds, with the
  *   address pointed to by dest in network byte order. It will return 0 if the
  *   input is not a valid IPv4 dotted-decimal string or a valid IPv6 address
- *   string, or -1 with errno set to EAFNOSUPPORT] if the af argument is
+ *   string, or -1 with errno set to EAFNOSUPPORT if the af argument is
  *   unknown.
  *
  ****************************************************************************/
@@ -362,12 +363,12 @@ int inet_pton(int af, FAR const char *src, FAR void *dest)
 	/* Do the conversion according to the IP version */
 
 	switch (af) {
-#ifdef CONFIG_NET_IPv4
+#if defined(CONFIG_NET_IPv4)
 	case AF_INET:
 		return inet_ipv4_pton(src, dest);
 #endif
 
-#ifdef CONFIG_NET_IPv6
+#if defined(CONFIG_NET_IPv6)
 	case AF_INET6:
 		return inet_ipv6_pton(src, dest);
 #endif

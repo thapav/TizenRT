@@ -66,26 +66,6 @@
 #include <stdint.h>
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-#define ALC5658_DEFAULT_SAMPRATE	16000
-#define ALC5658_DEFAULT_NCHANNELS	2
-#define ALC5658_DEFAULT_BPSAMP		16
-#define FAIL				0xFFFF
-#define alc5658_givesem(s) sem_post(s)
-
-/* Commonly defined and redefined macros */
-
-#ifndef MIN
-#define MIN(a, b)                   (((a) < (b)) ? (a) : (b))
-#endif
-
-#ifndef MAX
-#define MAX(a, b)                   (((a) > (b)) ? (a) : (b))
-#endif
-
-/****************************************************************************
  * Public Types
  ****************************************************************************/
 /* This should be put under hammer to strip size
@@ -108,20 +88,18 @@ struct alc5658_dev_s {
 	FAR struct alc5658_lower_s *lower;	/* Pointer to the board lower functions */
 	FAR struct i2c_dev_s *i2c;	/* I2C driver to use */
 	FAR struct i2s_dev_s *i2s;	/* I2S driver to use */
-	struct dq_queue_s pendq;	/* Queue of pending buffers to be sent */
-	struct dq_queue_s doneq;	/* Queue of sent buffers to be returned */
+	struct sq_queue_s pendq;	/* Queue of pending buffers to be sent */
 	sem_t devsem;				/* Protection for both pendq & dev */
 
 #ifdef ALC5658_USE_FFLOCK_INT
 	struct work_s work;			/* Interrupt work */
 #endif
 	uint16_t samprate;			/* Configured samprate (samples/sec) */
-#ifndef CONFIG_AUDIO_EXCLUDE_VOLUME
 #ifndef CONFIG_AUDIO_EXCLUDE_BALANCE
 	uint16_t balance;			/* Current balance level (b16) */
 #endif							/* CONFIG_AUDIO_EXCLUDE_BALANCE */
-	uint8_t volume;				/* Current volume level {0..63} */
-#endif							/* CONFIG_AUDIO_EXCLUDE_VOLUME */
+	uint16_t volume;			/* Current volume level {0..31} */
+	uint16_t gain;				/* In port gain */
 	uint8_t nchannels;			/* Number of channels (1 or 2) */
 	uint8_t bpsamp;				/* Bits per sample (8 or 16) */
 	volatile uint8_t inflight;	/* Number of audio buffers in-flight */
@@ -136,7 +114,7 @@ struct alc5658_dev_s {
 #endif
 	bool reserved;				/* True: Device is reserved */
 	volatile int result;		/* The result of the last transfer */
-	bool inout;					/* True: IN device */
+	bool inout;					/* True: In device */
 };
 
 /****************************************************************************
@@ -157,7 +135,7 @@ static uint16_t alc5658_modifyreg(FAR struct alc5658_dev_s *priv, uint16_t regad
 
 #ifndef CONFIG_AUDIO_EXCLUDE_VOLUME
 static inline uint16_t alc5658_scalevolume(uint16_t volume, b16_t scale);
-static void alc5658_setvolume(FAR struct alc5658_dev_s *priv, uint16_t volume, bool mute);
+static void alc5658_setvolume(FAR struct alc5658_dev_s *priv);
 #endif
 
 #ifndef CONFIG_AUDIO_EXCLUDE_TONE

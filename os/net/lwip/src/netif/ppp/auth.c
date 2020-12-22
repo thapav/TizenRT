@@ -82,7 +82,7 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#include <net/lwip/opt.h>
+#include "lwip/opt.h"
 
 #if PPP_SUPPORT					/* don't build if not configured for use in lwipopts.h */
 
@@ -100,7 +100,8 @@
 #include "cbcp.h"
 #endif							/* CBCP_SUPPORT */
 
-#include <net/lwip/ipv4/inet.h>
+#include "lwip/inet.h"
+#include "lwip/netif/ppp/ppp_opts.h"
 
 #include <string.h>
 
@@ -409,7 +410,7 @@ static int set_noauth_addr(char **argv)
 	int l = strlen(addr);
 	struct wordlist *wp;
 
-	wp = (struct wordlist *)malloc(sizeof(struct wordlist) + l + 1);
+	wp = (struct wordlist *)kmm_malloc(sizeof(struct wordlist) + l + 1);
 	if (wp == NULL) {
 		novm("allow-ip argument");
 	}
@@ -1161,11 +1162,11 @@ static void set_allowed_addrs(int unit, struct wordlist *addrs)
 		if (wo->hisaddr == 0 && *p != '!' && *p != '-' && strchr(p, '/') == NULL) {
 			hp = gethostbyname(p);
 			if (hp != NULL && hp->h_addrtype == AF_INET) {
-				a = *(u32_t *)hp->h_addr;
+				a = *(u32_t *) hp->h_addr;
 			} else {
 				a = inet_addr(p);
 			}
-			if (a != (u32_t)-1) {
+			if (a != (u32_t) - 1) {
 				wo->hisaddr = a;
 			}
 		}
@@ -1268,7 +1269,7 @@ static void free_wordlist(struct wordlist *wp)
 
 	while (wp != NULL) {
 		next = wp->next;
-		free(wp);
+		kmm_free(wp);
 		wp = next;
 	}
 }

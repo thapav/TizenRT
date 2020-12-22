@@ -112,22 +112,6 @@ struct gpio_open_s {
  ****************************************************************************/
 
 /****************************************************************************
- * Name: sem_reinit
- *
- * Description:
- *    Reinitialize semaphore
- *
- ****************************************************************************/
-#ifndef CONFIG_DISABLE_POLL
-static int sem_reinit(FAR sem_t *sem, int pshared, unsigned int value)
-{
-	sem_destroy(sem);
-
-	return sem_init(sem, pshared, value);
-}
-#endif
-
-/****************************************************************************
  * Name: gpio_takesem
  *
  * Description:
@@ -243,7 +227,7 @@ static void gpio_interrupt(FAR struct gpio_upperhalf_s *upper)
 
 static void gpio_enable(FAR struct gpio_upperhalf_s *priv)
 {
-	FAR struct gpio_lowerhalf_s *lower = priv->gu_lower;
+	FAR struct gpio_lowerhalf_s *lower;
 	FAR struct gpio_open_s *opriv;
 	bool rising;
 	bool falling;
@@ -286,7 +270,16 @@ static void gpio_enable(FAR struct gpio_upperhalf_s *priv)
 	/* Enable/disable GPIO interrupts */
 	DEBUGASSERT(lower->ops->enable);
 	if (rising || falling) {
-		lower->ops->enable(lower, true, true, gpio_interrupt);
+		/*
+		  * gu_sample saved the old status for GPIO, it used when interrupt coming to compare
+		  * current status to gu_sample.
+		  * It update on system startup during gpio_register().
+		  * But, device driver init always after gpio init.
+		  * If GPIO status changed after gpio_register(), it will not record.
+		  * So, we update gu_sample before enable gpio irq.
+		  */
+		priv->gu_sample = lower->ops->get(lower);
+		lower->ops->enable(lower, falling, rising, gpio_interrupt);
 	} else {
 		/* Disable further interrupts */
 		lower->ops->enable(lower, false, false, NULL);
@@ -296,6 +289,57 @@ static void gpio_enable(FAR struct gpio_upperhalf_s *priv)
 }
 #endif
 
+#ifdef CONFIG_IOTDEV
+static int gpio_enable_interrupt(FAR struct gpio_upperhalf_s *priv, unsigned long arg)
+{
+	FAR struct gpio_lowerhalf_s *lower;
+	
+	DEBUGASSERT(priv && priv->gu_lower);
+	lower = priv->gu_lower;
+
+	bool rising;
+	bool falling;
+	int ret;
+	irqstate_t flags;
+
+	flags = irqsave();
+
+	switch (arg) {
+	case GPIO_EDGE_NONE:
+		rising = false;
+		falling = false;
+		break;
+	case GPIO_EDGE_BOTH:
+		rising = true;
+		falling = true;
+		break;
+	case GPIO_EDGE_RISING:
+		rising = true;
+		falling = false;
+		break;
+	case GPIO_EDGE_FALLING:
+		rising = false;
+		falling = true;
+		break;
+	default:
+		lldbg("Interrupt value is invalid\n");
+		irqrestore(flags);
+		return ERROR;
+		break;
+	}
+
+	DEBUGASSERT(lower->ops->enable);
+	if (rising || falling) {
+		ret = lower->ops->enable(lower, falling, rising, gpio_interrupt);
+	} else {
+		/* Disable further interrupts */
+		ret = lower->ops->enable(lower, false, false, NULL);
+	}
+	irqrestore(flags);
+
+	return ret;
+}
+#endif
 /****************************************************************************
  * Name: gpio_write
  *
@@ -412,7 +456,12 @@ static int gpio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 		break;
 	}
 #endif /* CONFIG_DISABLE_SIGNALS */
-
+#ifdef CONFIG_IOTDEV
+	case GPIOIOC_SET_INTERRUPT: {
+		ret = gpio_enable_interrupt(priv, arg);
+		break;
+	}
+#endif
 	default:
 		ret = -ENOTTY;
 		if (lower->ops->ioctl) {
@@ -466,6 +515,7 @@ static int gpio_poll(FAR struct file *filep, FAR struct pollfd *fds,
 				/* Bind the poll structure and this slot */
 				opriv->go_fds[i] = fds;
 				fds->priv = &opriv->go_fds[i];
+				fds->filep = (void *)filep;
 				break;
 			}
 		}
@@ -510,6 +560,9 @@ static int gpio_close(FAR struct file *filep)
 	irqstate_t flags;
 	bool closing;
 	int ret;
+#ifndef CONFIG_DISABLE_POLL
+	int waiter_idx;
+#endif
 
 	DEBUGASSERT(filep && filep->f_priv && filep->f_inode);
 	opriv = filep->f_priv;
@@ -534,6 +587,20 @@ static int gpio_close(FAR struct file *filep)
 		return ret;
 	}
 
+#ifndef CONFIG_DISABLE_POLL
+	/*
+	 * Check if this file is registered in a list of waiters for polling.
+	 * If it is, the used slot should be cleared.
+	 * Otherwise, an invalid pollfd remains in a list and this slot is not available forever.
+	 */
+	for (waiter_idx = 0; waiter_idx < CONFIG_GPIO_NPOLLWAITERS; waiter_idx++) {
+		struct pollfd *fds = opriv->go_fds[waiter_idx];
+		if (fds && (FAR struct file *)fds->filep == filep) {
+			opriv->go_fds[waiter_idx] = NULL;
+		}
+	}
+#endif
+
 	/* Find the open structure in the list of open structures for the device */
 	for (prev = NULL, curr = priv->gu_open; curr && curr != opriv;
 			prev = curr, curr = curr->go_flink);
@@ -554,6 +621,8 @@ static int gpio_close(FAR struct file *filep)
 
 	/* And free the open structure */
 	kmm_free(opriv);
+	filep->f_priv = NULL;
+
 	ret = OK;
 
 errout_with_exclsem:

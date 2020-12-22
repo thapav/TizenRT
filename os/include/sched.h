@@ -97,10 +97,6 @@
 #define TASK_CANCEL_DEFERRED (0)
 #define TASK_CANCEL_ASYNCHRONOUS (1)
 
-/* Pthread definitions **********************************************************/
-
-#define PTHREAD_KEYS_MAX CONFIG_NPTHREAD_KEYS
-
 /**
  * @}
  */
@@ -165,15 +161,13 @@ int task_activate(FAR struct tcb_s *tcb);
  * @param[in] priority Priority of the new task
  * @param[in] stack_size size (in bytes) of the stack needed
  * @param[in] entry Entry point of a new task
- * @param[in] argv[] A pointer to an array of input parameters. Up to
- *                CONFIG_MAX_TASK_ARG parameters may be provided.  If fewer
- *                than CONFIG_MAX_TASK_ARG parameters are passed, the list
+ * @param[in] argv[] A pointer to an array of input parameters. The array
  *                should be terminated with a NULL argv[] value. If no
  *                parameters are required, argv may be NULL.
  * @return non-zero process ID of the new task or ERROR if memory is
  *   insufficient or the task cannot be created.  The errno will be set to
  *   indicate the nature of the error (always ENOMEM).
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int task_create(FAR const char *name, int priority, int stack_size, main_t entry, FAR char *const argv[]);
 #endif
@@ -206,7 +200,7 @@ int task_create(FAR const char *name, int priority, int stack_size, main_t entry
  * @param[in] pid The task ID of the task to delete.  A pid of zero
  *         signifies the calling task.
  * @return OK on success; or ERROR on failure
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int task_delete(pid_t pid);
 
@@ -227,7 +221,7 @@ int task_delete(pid_t pid);
  * @param[in] pid The task ID of the task to delete.  An ID of zero signifies the
  *         calling task.
  * @return OK on success; or ERROR on failure
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int task_restart(pid_t pid);
 
@@ -242,7 +236,7 @@ void   task_testcancel(void);
  * @details @b #include <sched.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sched_setparam(pid_t pid, const struct sched_param *param);
 /**
@@ -251,7 +245,7 @@ int sched_setparam(pid_t pid, const struct sched_param *param);
  * @details @b #include <sched.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sched_getparam(pid_t pid, struct sched_param *param);
 /**
@@ -260,7 +254,7 @@ int sched_getparam(pid_t pid, struct sched_param *param);
  * @details @b #include <sched.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sched_setscheduler(pid_t pid, int policy, FAR const struct sched_param *param);
 /**
@@ -269,7 +263,7 @@ int sched_setscheduler(pid_t pid, int policy, FAR const struct sched_param *para
  * @details @b #include <sched.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sched_getscheduler(pid_t pid);
 /**
@@ -278,7 +272,7 @@ int sched_getscheduler(pid_t pid);
  * @details @b #include <sched.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sched_yield(void);
 /**
@@ -293,14 +287,14 @@ int sched_yield(void);
  * @brief get priority limits
  * @details @b #include <sched.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sched_get_priority_max(int policy);
 /**
  * @brief get priority limits
  * @details @b #include <sched.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sched_get_priority_min(int policy);
 /**
@@ -312,7 +306,7 @@ int sched_get_priority_min(int policy);
  * @details @b #include <sched.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sched_rr_get_interval(pid_t pid, FAR struct timespec *interval);
 
@@ -323,7 +317,7 @@ int sched_rr_get_interval(pid_t pid, FAR struct timespec *interval);
  * @details @b #include <sched.h> \n
  * SYSTEM CALL API
  * @return On success, OK is returned. On failure, ERROR is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sched_lock(void);
 /**
@@ -338,7 +332,7 @@ int sched_lock(void);
  *   decremented to zero, any tasks that were eligible to preempt the
  *   current task will execute.
  * @return On success, OK is returned. On failure, ERROR is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sched_unlock(void);
 /**
@@ -353,7 +347,7 @@ int sched_unlock(void);
  *   this thread in order to re-enable pre-emption.
  *
  * @return On success, lockcount is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sched_lockcount(void);
 

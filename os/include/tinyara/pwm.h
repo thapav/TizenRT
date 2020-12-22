@@ -130,6 +130,7 @@
  *   and return immediately.
  *
  *   ioctl argument:  None
+ *
  */
 
 #define PWMIOC_SETCHARACTERISTICS _PWMIOC(1)
@@ -169,6 +170,7 @@ struct pwm_info_s {
 	uint32_t count;				/* The number of pulse to generate.  0 means to
 								 * generate an indefinite number of pulses */
 #endif
+	ub8_t idle;
 #endif							/* CONFIG_PWM_MULTICHAN */
 };
 

@@ -64,12 +64,20 @@
 #include <tinyara/fs/fs.h>
 #include <tinyara/net/net.h>
 #include <tinyara/lib.h>
+#include <tinyara/sched.h>
 
 #include "environ/environ.h"
 #include "signal/signal.h"
 #include "pthread/pthread.h"
 #include "mqueue/mqueue.h"
 #include "group/group.h"
+
+#ifdef CONFIG_BINFMT_LOADABLE
+#ifdef CONFIG_BINARY_MANAGER
+#include "binary_manager/binary_manager.h"
+#endif
+#include <tinyara/binfmt/binfmt.h>
+#endif
 
 #ifdef HAVE_TASK_GROUP
 
@@ -253,21 +261,20 @@ static inline void group_release(FAR struct task_group_s *group)
 	 * freed here.
 	 */
 
-#if defined(CONFIG_BUILD_PROTECTED)
-	/* In the protected build, the task's stream list is always allocated
-	 * and freed from the single, global user allocator.
+	/* In the protected build or kernel build, the task's stream list is allocated at user or kernel heap
+	 * via group_malloc() using the appropriate memory manager according to privilege of group.
+	 * If this group is being created for a privileged thread, it is allocated in kernel heap.
+	 * Otherwise, the unprivileged process' stream list will be allocated from with its per-process, private user heap.
 	 */
+#if defined(CONFIG_BUILD_PROTECTED)
 
-	sched_ufree(group->tg_streamlist);
+	group_free(group, group->tg_streamlist);
 
 #elif defined(CONFIG_BUILD_KERNEL)
-	/* In the kernel build, the unprivileged process' stream list will be
-	 * allocated from with its per-process, private user heap. But in that
-	 * case, there is no reason to do anything here:  That allocation resides
-	 * in the user heap which which be completely freed when we destroy the
+	/* In the kernel build, there is no reason to do anything here for unpriviledged process' stream list:
+	 * That allocation resides in the user heap which which be completely freed when we destroy the
 	 * process' address environment.
 	 */
-
 	if ((group->tg_flags & GROUP_FLAG_PRIVILEGED) != 0) {
 		/* But kernel threads are different in this build configuration: Their
 		 * stream lists were allocated from the common, global kernel heap and
@@ -380,9 +387,37 @@ void group_leave(FAR struct tcb_s *tcb)
 		/* Have all of the members left the group? */
 
 		if (group->tg_nmembers == 0) {
-			/* Yes.. Release all of the resource held by the task group */
+#ifdef CONFIG_BINFMT_LOADABLE
+			if (IS_BINARY_MAINTASK(tcb)) {
+				/* The region of stack is allocated in user RAM partition.
+				 * If it is loaded, whole RAM partition for binary is freed by unloading in group_release.
+				 * So the stack doesn't need to be freed after unloading.
+				 */
+
+				tcb->stack_alloc_ptr = NULL;
+#ifdef CONFIG_BINARY_MANAGER
+				/* Clear binary data and update binary state before group_release
+				 * because a group has a binary index to access binary table.
+				 */
+
+				binary_manager_clear_bindata(group->tg_binidx);
+#endif /* CONFIG_BINARY_MANAGER */
+			}
+#endif /* CONFIG_BINFMT_LOADABLE */
+
+			/* Release all of the resource held by the task group */
 
 			group_release(group);
+
+#ifdef CONFIG_BINFMT_LOADABLE
+			/* If the exiting task was loaded into RAM from a file, then we need to
+			 * release all of the memory resource.
+			 * It should be called after group_release because binfmt_exit releases whole heap memory.
+			 */
+			if (IS_BINARY_MAINTASK(tcb)) {
+				binfmt_exit(((struct task_tcb_s *)tcb)->bininfo);
+			}
+#endif
 		}
 
 		/* In any event, we can detach the group from the TCB so that we won't
@@ -416,9 +451,38 @@ void group_leave(FAR struct tcb_s *tcb)
 		/* Yes.. that was the last member remaining in the group */
 
 		else {
+#ifdef CONFIG_BINFMT_LOADABLE
+			if (IS_BINARY_MAINTASK(tcb)) {
+				/* The region of stack is allocated in user RAM partition.
+				 * If it is loaded, whole RAM partition for binary is freed by unloading in group_release.
+				 * So the stack doesn't need to be freed after unloading.
+				 */
+
+				tcb->stack_alloc_ptr = NULL;
+#ifdef CONFIG_BINARY_MANAGER
+				/* Clear binary data and update binary state before group_release
+				 * because a group has a binary index to access binary table.
+				 */
+
+				binary_manager_clear_bindata(group->tg_binidx);
+#endif /* CONFIG_BINARY_MANAGER */
+			}
+#endif /* CONFIG_BINFMT_LOADABLE */
+
 			/* Release all of the resource held by the task group */
 
 			group_release(group);
+
+#ifdef CONFIG_BINFMT_LOADABLE
+			/* If the exiting task was loaded into RAM from a file, then we need to
+			 * release all of the memory resource.
+			 * It should be called after group_release because binfmt_exit releases whole heap memory.
+			 */
+
+			if (IS_BINARY_MAINTASK(tcb)) {
+				binfmt_exit(((struct task_tcb_s *)tcb)->bininfo);
+			}
+#endif
 		}
 
 		/* In any event, we can detach the group from the TCB so we won't do

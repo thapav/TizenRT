@@ -1,11 +1,11 @@
 # tc
- This can be used to test database, file system, kernel, network functionality of Tizen RT on ARTIK053.
+ This can be used to test database, file system, kernel, network functionality of TizenRT on ARTIK053.
 
 ## Enabled Feature
 ### Database
   Arastorage
 
-### File system
+### File System
   ProcFS, SmartFS
 
 ### Kernel

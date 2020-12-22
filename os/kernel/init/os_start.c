@@ -61,6 +61,7 @@
 #include  <debug.h>
 
 #include  <tinyara/arch.h>
+#include  <tinyara/binfmt/binfmt.h>
 #include  <tinyara/compiler.h>
 #include  <tinyara/sched.h>
 #include  <tinyara/fs/fs.h>
@@ -70,16 +71,24 @@
 #include  <tinyara/mm/shm.h>
 #include  <tinyara/kmalloc.h>
 #include  <tinyara/init.h>
+#include  <tinyara/pm/pm.h>
+#include  <tinyara/mm/heap_regioninfo.h>
+#ifdef CONFIG_DEBUG_SYSTEM
+#include  <tinyara/debug/sysdbg.h>
+#endif
+#ifdef CONFIG_DRIVERS_KERNEL_TEST
+#include  <tinyara/kernel_test_drv.h>
+#endif
 
 #include  "sched/sched.h"
 #include  "signal/signal.h"
 #include  "wdog/wdog.h"
 #include  "semaphore/semaphore.h"
 #ifndef CONFIG_DISABLE_MQUEUE
-#include "mqueue/mqueue.h"
+#include  "mqueue/mqueue.h"
 #endif
 #ifndef CONFIG_DISABLE_PTHREAD
-#include "pthread/pthread.h"
+#include  "pthread/pthread.h"
 #endif
 #include  "clock/clock.h"
 #include  "timer/timer.h"
@@ -88,6 +97,9 @@
 #include  "group/group.h"
 #endif
 #include  "init/init.h"
+#include  "debug/memdbg.h"
+
+extern const uint32_t g_idle_topstack;
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -157,6 +169,10 @@ volatile dq_queue_t g_waitingformqnotfull;
 volatile dq_queue_t g_waitingforfill;
 #endif
 
+/* This is the list of all tasks that are blocking waiting to be unblocked another threads */
+
+volatile dq_queue_t g_waitingforfin;
+
 /* This the list of all tasks that have been initialized, but not yet
  * activated. NOTE:  This is the only list that is not prioritized.
  */
@@ -171,10 +187,7 @@ volatile dq_queue_t g_inactivetasks;
 
 volatile sq_queue_t g_delayed_kufree;
 
-#if (defined(CONFIG_BUILD_PROTECTED) || defined(CONFIG_BUILD_KERNEL)) && \
-	 defined(CONFIG_MM_KERNEL_HEAP)
 volatile sq_queue_t g_delayed_kfree;
-#endif
 
 /* This gives number of alive tasks at any point of time in the system.
  * If the system is already running CONFIG_MAX_TASKS, Creating new
@@ -211,7 +224,8 @@ const struct tasklist_s g_tasklisttable[NUM_TASK_STATES] = {
 	{&g_readytorun,           true },	/* TSTATE_TASK_READYTORUN */
 	{&g_readytorun,           true },	/* TSTATE_TASK_RUNNING */
 	{&g_inactivetasks,        false},	/* TSTATE_TASK_INACTIVE */
-	{&g_waitingforsemaphore,  true }	/* TSTATE_WAIT_SEM */
+	{&g_waitingforsemaphore,  true },	/* TSTATE_WAIT_SEM */
+	{&g_waitingforfin,    true }		/* TSTATE_WAIT_FIN */
 #ifndef CONFIG_DISABLE_SIGNALS
 	,
 	{&g_waitingforsignal,     false}	/* TSTATE_WAIT_SIG */
@@ -350,6 +364,11 @@ void os_start(void)
 	g_idleargv[1]  = NULL;
 	g_idletcb.argv = g_idleargv;
 
+	/* Fill the stack information to Idle task's tcb */
+	g_idletcb.cmn.adj_stack_size = CONFIG_IDLETHREAD_STACKSIZE;
+	g_idletcb.cmn.stack_alloc_ptr = (void *)(g_idle_topstack - CONFIG_IDLETHREAD_STACKSIZE);
+	g_idletcb.cmn.adj_stack_ptr = (void *)(g_idle_topstack - 4);
+
 	/* Then add the idle task's TCB to the head of the ready to run list */
 
 	dq_addfirst((FAR dq_entry_t *)&g_idletcb, (FAR dq_queue_t *)&g_readytorun);
@@ -365,21 +384,13 @@ void os_start(void)
 
 	sem_initialize();
 
-#if defined(MM_KERNEL_USRHEAP_INIT) || defined(CONFIG_MM_KERNEL_HEAP) || defined(CONFIG_MM_PGALLOC)
+
+#if defined(CONFIG_MM_KERNEL_HEAP) || defined(CONFIG_MM_PGALLOC)
 	/* Initialize the memory manager */
 
 	{
 		FAR void *heap_start;
 		size_t heap_size;
-
-#ifdef MM_KERNEL_USRHEAP_INIT
-		/* Get the user-mode heap from the platform specific code and configure
-		 * the user-mode memory allocator.
-		 */
-
-		up_allocate_heap(&heap_start, &heap_size);
-		kumm_initialize(heap_start, heap_size);
-#endif
 
 #ifdef CONFIG_MM_KERNEL_HEAP
 		/* Get the kernel-mode heap from the platform specific code and configure
@@ -400,6 +411,12 @@ void os_start(void)
 		mm_pginitialize(heap_start, heap_size);
 #endif
 	}
+#endif
+
+	up_add_kregion();
+
+#ifdef CONFIG_APP_BINARY_SEPARATION
+	mm_initialize_app_heap_q();
 #endif
 
 #if defined(CONFIG_SCHED_HAVE_PARENT) && defined(CONFIG_SCHED_CHILD_STATUS)
@@ -430,6 +447,12 @@ void os_start(void)
 	{
 		wd_initialize();
 	}
+
+#if CONFIG_NFILE_DESCRIPTORS > 0
+	/* Initialize the file system (needed to support device drivers) */
+
+	fs_initialize();
+#endif
 
 	/* Initialize the POSIX timer facility (if included in the link) */
 
@@ -481,12 +504,6 @@ void os_start(void)
 	}
 #endif
 
-#if CONFIG_NFILE_DESCRIPTORS > 0
-	/* Initialize the file system (needed to support device drivers) */
-
-	fs_initialize();
-#endif
-
 #ifdef CONFIG_NET
 	/* Initialize the networking system.  Network initialization is
 	 * performed in two steps:  (1) net_setup() initializes static
@@ -508,6 +525,18 @@ void os_start(void)
 
 	up_initialize();
 
+	/* Auto-mount Arch-independent File Sysytems */
+
+	fs_auto_mount();
+
+#ifdef CONFIG_DRIVERS_KERNEL_TEST
+	kernel_test_drv_register();
+#endif
+
+#if defined(CONFIG_DEBUG_SYSTEM)
+	sysdbg_init();
+#endif
+
 #if defined(CONFIG_TTRACE)
 	ttrace_init();
 #endif
@@ -523,6 +552,12 @@ void os_start(void)
 	 */
 
 	lib_initialize();
+
+#ifdef CONFIG_BINFMT_ENABLE
+	/* Initialize the binfmt system */
+
+	binfmt_initialize();
+#endif
 
 	/* IDLE Group Initialization **********************************************/
 #ifdef HAVE_TASK_GROUP
@@ -548,8 +583,18 @@ void os_start(void)
 	g_idletcb.cmn.group->tg_flags = GROUP_FLAG_NOCLDWAIT;
 #endif
 
+#ifdef CONFIG_ARMV8M_TRUSTZONE
+	up_init_secure_context();
+#endif
 	/* Bring Up the System ****************************************************/
 	/* Create initial tasks and bring-up the system */
+
+#ifdef CONFIG_PM
+	/* We cannot enter low power state until boot complete */
+	pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
+#endif
+
+	display_memory_information();
 
 	DEBUGVERIFY(os_bringup());
 
@@ -577,10 +622,7 @@ void os_start(void)
 		 * queue so that is done in a safer context.
 		 */
 
-		if (kmm_trysemaphore() == 0) {
-			sched_garbagecollection();
-			kmm_givesemaphore();
-		}
+		sched_garbagecollection();
 #endif
 
 		/* Perform any processor-specific idle state operations */

@@ -51,9 +51,10 @@
 ############################################################################
 
 CSRCS += irq_initialize.c irq_attach.c irq_dispatch.c irq_unexpectedisr.c
+CSRCS += fin_wait.c fin_notify.c
 
 ifeq ($(CONFIG_DEBUG_IRQ_INFO),y)
-CSRCS += irq_info.c
+CSRCS += irq_procfs.c
 endif
 
 # Include irq build support

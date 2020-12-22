@@ -16,7 +16,7 @@
  *
  ****************************************************************************/
 
-/// @file libc_misc.c
+/// @file tc_libc_misc.c
 
 /// @brief Test Case Example for Libc Misc API
 
@@ -44,9 +44,9 @@
 #define VAL_213 213
 #define VAL_255 255
 #define VAL_65380 65380
-#define VAL_CRC32_1 1256170817UL
-#define VAL_CRC32_2 3369554304UL
-#define VAL_CRC32_3 1742555852UL
+#define VAL_CRC32_1 2564639436UL
+#define VAL_CRC32_2 450215437UL
+#define VAL_CRC32_3 3051332929UL
 
 /**
  * @fn                  :tc_libc_misc_crc8
@@ -227,6 +227,8 @@ static void tc_libc_misc_crc32part(void)
 	TC_SUCCESS_RESULT();
 }
 
+#ifdef CONFIG_DEBUG
+#ifdef CONFIG_DEBUG_ERROR
 /**
  * @fn                  :tc_libc_misc_dbg
  * @brief               :Outputs messages to the console similar to printf() except that the output is not buffered.
@@ -257,6 +259,52 @@ static void tc_libc_misc_dbg(void)
 	TC_SUCCESS_RESULT();
 }
 
+/**
+ * @fn                  :tc_libc_misc_lib_dumpbuffer
+ * @brief               :Do a pretty buffer dump
+ * @scenario            :Do a pretty buffer dump
+ * @API's covered       :lib_dumpbuffer
+ * @Preconditions       :None
+ * @Postconditions      :None
+ * @Return              :void
+ */
+static void tc_libc_misc_lib_dumpbuffer(void)
+{
+	const char *msg = "tc_libc_misc_lib_dumpbuffer";
+	unsigned char buffer[] = {'S', 'A', 'M', 'S', 'U', 'N', 'G', '-', 'T', 'i', 'z', 'e', 'n', 'R', 'T'};
+	unsigned char *buf = NULL;
+	int idx;
+
+	/* To guarantee flushing other printf messages before using lowsyslog */
+	usleep(10);
+
+	/**
+	 * As lib_dumpbuffer returns void, there in no way to check the success or failure case
+	 * we need to manually check the dump output
+	 * Case-1: output: 53414d53554e472d54697a656e5254 SAMSUNG-TizenRT
+	 * Case-2: output: 0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a ...............	(i.e, 256 "0a")
+	 */
+
+	/* Case-1 */
+	lib_dumpbuffer(msg, buffer, sizeof(buffer));
+
+	/* Case-2 */
+	buf = (unsigned char *)malloc(BUFF_SIZE);
+	TC_ASSERT_NEQ("malloc", buf, NULL);
+
+	for (idx = 0; idx < BUFF_SIZE; idx++) {
+		buf[idx] = 0xA;
+	}
+	lib_dumpbuffer(msg, buf, BUFF_SIZE);
+
+	free(buf);
+	buf = NULL;
+
+	TC_SUCCESS_RESULT();
+}
+
+#ifndef CONFIG_BUILD_PROTECTED
+#ifdef CONFIG_ARCH_LOWPUTC
 /**
  * @fn                  :tc_libc_misc_lldbg
  * @brief               :Identical to [a-z]dbg() except this is uses special interfaces provided by architecture-specific logic to \n
@@ -317,7 +365,11 @@ static void tc_libc_misc_llvdbg(void)
 
 	TC_SUCCESS_RESULT();
 }
+#endif
+#endif /* CONFIG_BUILD_PROTECTED */
+#endif /* CONFIG_DEBUG_ERROR */
 
+#ifdef CONFIG_DEBUG_VERBOSE
 /**
  * @fn                  :tc_libc_misc_vdbg
  * @brief               :This is intended for general debug output that is normally suppressed.
@@ -348,47 +400,8 @@ static void tc_libc_misc_vdbg(void)
 
 	TC_SUCCESS_RESULT();
 }
-
-/**
- * @fn                  :tc_libc_misc_lib_dumpbuffer
- * @brief               :Do a pretty buffer dump
- * @scenario            :Do a pretty buffer dump
- * @API's covered       :lib_dumpbuffer
- * @Preconditions       :None
- * @Postconditions      :None
- * @Return              :void
- */
-static void tc_libc_misc_lib_dumpbuffer(void)
-{
-	const char *msg = "tc_libc_misc_lib_dumpbuffer";
-	unsigned char buffer[] = { 'S', 'A', 'M', 'S', 'U', 'N', 'G', '-', 'T', 'i', 'z', 'e', 'n', 'R', 'T' };
-	unsigned char *buf = NULL;
-	int idx;
-
-	/**
-	 * As lib_dumpbuffer returns void, there in no way to check the success or failure case
-	 * we need to manually check the dump output
-	 * Case-1: output: 53414d53554e472d54697a656e5254 SAMSUNG-TizenRT
-	 * Case-2: output: 0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a ...............	(i.e, 256 "0a")
-	 */
-
-	/* Case-1 */
-	lib_dumpbuffer(msg, buffer, sizeof(buffer));
-
-	/* Case-2 */
-	buf = (unsigned char *)malloc(BUFF_SIZE);
-	TC_ASSERT_NEQ("malloc", buf, NULL);
-
-	for (idx = 0; idx < BUFF_SIZE; idx++) {
-		buf[idx] = 0xA;
-	}
-	lib_dumpbuffer(msg, buf, BUFF_SIZE);
-
-	free(buf);
-	buf = NULL;
-
-	TC_SUCCESS_RESULT();
-}
+#endif
+#endif /* CONFIG_DEBUG */
 
 /**
  * @fn                  :tc_libc_misc_match
@@ -432,16 +445,16 @@ int libc_misc_main(void)
 #ifdef CONFIG_DEBUG_ERROR
 	tc_libc_misc_dbg();
 	tc_libc_misc_lib_dumpbuffer();
+#ifndef CONFIG_BUILD_PROTECTED
 #ifdef CONFIG_ARCH_LOWPUTC
 	tc_libc_misc_lldbg();
+	tc_libc_misc_llvdbg();
 #endif
+#endif /* CONFIG_BUILD_PROTECTED */
 #endif
 
 #ifdef CONFIG_DEBUG_VERBOSE
 	tc_libc_misc_vdbg();
-#ifdef CONFIG_ARCH_LOWPUTC
-	tc_libc_misc_llvdbg();
-#endif
 #endif
 #endif /* CONFIG_DEBUG */
 	tc_libc_misc_match();

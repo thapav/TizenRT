@@ -18,9 +18,9 @@
 
 #include "test_etharp.h"
 
-#include <net/lwip/udp.h>
-#include <net/lwip/netif/etharp.h>
-#include <net/lwip/stats.h>
+#include "lwip/udp.h"
+#include "lwip/netif/etharp.h"
+#include "lwip/stats.h"
 
 #if !LWIP_STATS || !UDP_STATS || !MEMP_STATS || !ETHARP_STATS
 #error "This tests needs UDP-, MEMP- and ETHARP-statistics enabled"
@@ -121,6 +121,7 @@ static void create_arp_response(ip_addr_t *adr)
 		ethhdr->src.addr[k] = test_ethaddr2.addr[k];
 	}
 
+	//etharp_input(p, &test_netif);
 	ethernet_input(p, &test_netif);
 }
 

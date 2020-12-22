@@ -16,7 +16,7 @@
 #
 ###########################################################################
 ############################################################################
-# configs/sidk_s5jt200/sidk_tash_wlan/Make.defs
+# configs/sidk_s5jt200/sidk_tash_aws/Make.defs
 #
 #   Copyright (C) 2011, 2012-2013 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -52,15 +52,10 @@
 
 include ${TOPDIR}/.config
 include ${TOPDIR}/tools/Config.mk
-include ${TOPDIR}/arch/arm/src/armv7-r/Toolchain.defs
+ARCH_FAMILY = $(patsubst "%",%,$(CONFIG_ARCH_FAMILY))
+include ${TOPDIR}/arch/$(CONFIG_ARCH)/src/$(ARCH_FAMILY)/Toolchain.defs
 
 LDSCRIPT = ld_s5jt200_flash.script
-
-ifeq ($(CONFIG_UCLIBCXX_HAVE_LIBSUPCXX),y)
-LIBSUPXX = ${shell $(CC) --print-file-name=libsupc++.a}
-EXTRA_LIBPATHS = -L "${shell dirname "$(LIBSUPXX)"}"
-EXTRA_LIBS = -lsupc++
-endif
 
 ifeq ($(WINTOOL),y)
   # Windows-native toolchains
@@ -68,13 +63,17 @@ ifeq ($(WINTOOL),y)
   DIRUNLINK = $(TOPDIR)/tools/unlink.sh
   MKDEP = $(TOPDIR)/tools/mkwindeps.sh
   ARCHINCLUDES = -I. -isystem "${shell cygpath -w $(TOPDIR)/include}" -isystem "${shell cygpath -w $(TOPDIR)/../framework/include}" -isystem "${shell cygpath -w $(TOPDIR)/../external/include}"
-  ARCHXXINCLUDES = -I. -isystem "${shell cygpath -w $(TOPDIR)/include}" -isystem "${shell cygpath -w $(TOPDIR)/include/cxx}" -isystem "${shell cygpath -w $(TOPDIR)/include/uClibc++}" -isystem "${shell cygpath -w $(TOPDIR)/../external/include}"
-  ARCHSCRIPT = -T "${shell cygpath -w $(TOPDIR)/configs/$(CONFIG_ARCH_BOARD)/scripts/$(LDSCRIPT)}"
+  ARCHINCLUDES += -isystem "${shell cygpath -w $(TOPDIR)/net/lwip/src/include}"
+  ARCHXXINCLUDES = -I. -isystem "${shell cygpath -w $(TOPDIR)/include}" -isystem "${shell cygpath -w $(TOPDIR)/../external/include}"
+  ARCHXXINCLUDES += -isystem "${shell cygpath -w $(TOPDIR)/net/lwip/src/include}"
+  ARCHSCRIPT = -T "${shell cygpath -w $(TOPDIR)/../build/configs/$(CONFIG_ARCH_BOARD)/scripts/$(LDSCRIPT)}"
 else
   # Linux/Cygwin-native toolchain
   MKDEP = $(TOPDIR)/tools/mkdeps$(HOSTEXEEXT)
   ARCHINCLUDES = -I. -isystem $(TOPDIR)/include -isystem $(TOPDIR)/../framework/include -isystem $(TOPDIR)/../external/include
-  ARCHXXINCLUDES = -I. -isystem $(TOPDIR)/include -isystem $(TOPDIR)/include/cxx -isystem $(TOPDIR)/include/uClibc++ -isystem $(TOPDIR)/../external/include
+  ARCHINCLUDES += -isystem $(TOPDIR)/net/lwip/src/include
+  ARCHXXINCLUDES = -I. -isystem $(TOPDIR)/include -isystem $(TOPDIR)/../external/include
+  ARCHXXINCLUDES += -isystem $(TOPDIR)/net/lwip/src/include
   ARCHSCRIPT = -T$(TOPDIR)/../build/configs/$(CONFIG_ARCH_BOARD)/scripts/$(LDSCRIPT)
 endif
 
@@ -123,22 +122,18 @@ ARCHPICFLAGS = -fpic -msingle-pic-base -mpic-register=r10
 CFLAGS = $(ARCHCFLAGS) $(ARCHWARNINGS) $(ARCHOPTIMIZATION) $(ARCHCPUFLAGS) $(ARCHINCLUDES) $(ARCHDEFINES) $(EXTRADEFINES) -pipe
 CPICFLAGS = $(ARCHPICFLAGS) $(CFLAGS)
 CXXFLAGS = $(ARCHWARNINGSXX) $(ARCHOPTIMIZATION) $(ARCHCPUFLAGS) $(ARCHXXINCLUDES) $(ARCHDEFINES) $(EXTRADEFINES) -pipe
+ifeq ($(CONFIG_LIBCXX),y)
+CXXFLAGS += -DCONFIG_WCHAR_BUILTIN
+endif
 CXXPICFLAGS = $(ARCHPICFLAGS) $(CXXFLAGS)
 CPPFLAGS = $(ARCHINCLUDES) $(ARCHDEFINES) $(EXTRADEFINES)
 AFLAGS = $(CFLAGS) -D__ASSEMBLY__
-
-NXFLATLDFLAGS1 = -r -d -warn-common
-NXFLATLDFLAGS2 = $(NXFLATLDFLAGS1) -T$(TOPDIR)/binfmt/libnxflat/gnu-nxflat-pcrel.ld -no-check-sections
-LDNXFLATFLAGS = -e main -s 2048
 
 ASMEXT = .S
 OBJEXT = .o
 LIBEXT = .a
 EXEEXT =
 
-ifneq ($(CROSSDEV),arm-nuttx-elf-)
-  LDFLAGS += -nostartfiles -nodefaultlibs
-endif
 ifeq ($(CONFIG_DEBUG_SYMBOLS),y)
   LDFLAGS += -g
 endif
@@ -150,6 +145,9 @@ HOSTCFLAGS = -Wall -Wstrict-prototypes -Wshadow -Wundef -g -pipe
 HOSTLDFLAGS =
 
 define DOWNLOAD
-  @$(TOPDIR)/../build/configs/sidk_s5jt200/sidk_s5jt200_download.sh $(1)
+  $(TOPDIR)/../build/configs/sidk_s5jt200/sidk_s5jt200_download.sh $(1)
 endef
 
+define MAKE_BOARD_SPECIFIC_BIN
+  $(TOPDIR)/../build/configs/sidk_s5jt200/sidk_s5jt200_make_bin.sh --bin $(1) --ext $(2)
+endef

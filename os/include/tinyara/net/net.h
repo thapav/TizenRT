@@ -64,6 +64,7 @@
 #include <stdarg.h>
 #include <semaphore.h>
 #include <sys/types.h>
+#include <tinyara/net/net_lock.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -74,11 +75,12 @@
  * socket descriptors
  */
 
-#ifdef CONFIG_NFILE_DESCRIPTORS
 #define __SOCKFD_OFFSET CONFIG_NFILE_DESCRIPTORS
-#else
-#define __SOCKFD_OFFSET 0
-#endif
+
+/* Capabilities of a socket */
+
+#define SOCKCAP_NONBLOCKING (1 << 0) /* Bit 0: Socket supports non-blocking \
+									  *        operation. */
 
 /****************************************************************************
  * Public Types
@@ -103,29 +105,76 @@ typedef uint16_t sockopt_t;
 
 typedef uint16_t socktimeo_t;
 
+
+/* This type defines the type of the socket capabilities set */
+
+typedef uint8_t sockcaps_t;
+
+/* This callbacks are socket operations that may be performed on a socket of
+ * a given address family.
+ */
+
+struct file;	 /* Forward reference */
+struct socket;   /* Forward reference */
+struct pollfd;   /* Forward reference */
+struct sockaddr; /* Forward reference */
+
+struct sock_intf_s {
+	CODE int (*si_setup)(FAR struct socket *psock, int protocol);
+	CODE sockcaps_t (*si_sockcaps)(FAR struct socket *psock);
+	CODE void (*si_addref)(FAR struct socket *psock);
+	CODE int (*si_bind)(FAR struct socket *psock,
+						FAR const struct sockaddr *addr, socklen_t addrlen);
+	CODE int (*si_getsockname)(FAR struct socket *psock,
+							   FAR struct sockaddr *addr, FAR socklen_t *addrlen);
+	CODE int (*si_getpeername)(FAR struct socket *psock,
+							   FAR struct sockaddr *addr, FAR socklen_t *addrlen);
+	CODE int (*si_listen)(FAR struct socket *psock, int backlog);
+	CODE int (*si_connect)(FAR struct socket *psock,
+						   FAR const struct sockaddr *addr, socklen_t addrlen);
+	CODE int (*si_accept)(FAR struct socket *psock,
+						  FAR struct sockaddr *addr, FAR socklen_t *addrlen,
+						  FAR struct socket *newsock);
+	CODE int (*si_poll)(FAR struct socket *psock,
+						FAR struct pollfd *fds, bool setup);
+	CODE ssize_t (*si_send)(FAR struct socket *psock, FAR const void *buf,
+							size_t len, int flags);
+	CODE ssize_t (*si_sendto)(FAR struct socket *psock, FAR const void *buf,
+							  size_t len, int flags, FAR const struct sockaddr *to,
+							  socklen_t tolen);
+	CODE ssize_t (*si_recvfrom)(FAR struct socket *psock, FAR void *buf,
+								size_t len, int flags, FAR struct sockaddr *from,
+								FAR socklen_t *fromlen);
+	CODE int (*si_close)(FAR struct socket *psock);
+};
+
 /* This is the internal representation of a socket reference by a file
  * descriptor.
  */
+typedef enum {
+	TR_SOCKET,
+	TR_UDS,
+	TR_LWNL,
+	TR_UNKNOWN,
+} sock_type;
 
 struct socket {
+	int16_t s_crefs;  /* Reference count on the socket */
+	uint8_t s_domain; /* IP domain: PF_INET, PF_INET6, or PF_PACKET */
+	uint8_t s_type;   /* Protocol type: Only SOCK_STREAM or
+					   * SOCK_DGRAM */
+	uint8_t s_flags;  /* See _SF_* definitions */
+
+	FAR void *s_conn; /* Connection inherits from struct socket_conn_s */
+
+	/* Socket interface */
+
+	FAR const struct sock_intf_s *s_sockif;
+
 	/** sockets currently are built on netconns, each socket has one netconn */
-	struct netconn *conn;
-	/** data that was left from the previous read */
-	void *lastdata;
-	/** offset in the data that was left from the previous read */
-	uint16_t lastoffset;
-	/** number of times data was received, set by event_callback(),
-	    tested by the receive and select functions */
-	int16_t rcvevent;
-	/** number of times data was ACKed (free send buffer), set by event_callback(),
-	    tested by select */
-	uint16_t sendevent;
-	/** error happened for this socket, set by event_callback(), tested by select */
-	uint16_t errevent;
-	/** last error that occurred on this socket */
-	int err;
-	/** counter of how many threads are waiting for this socket using select */
-	int select_waiting;
+	void *conn;
+	sock_type type; // socket, uds, ...
+	void *sock;	// lwip_sock
 };
 
 /* This defines a list of sockets indexed by the socket descriptor */
@@ -139,15 +188,8 @@ struct socketlist {
 #endif
 
 /* Callback from netdev_foreach() */
-struct netif;					/* Forward reference. Defined in tinyara/net/lwip/src/include/lwip/netif.h */
+struct netif;					/* Forward reference. Defined in lwip/netif.h */
 typedef int (*netdev_callback_t)(FAR struct netif *dev, void *arg);
-
-/* Semaphore based locking for non-interrupt based logic.
- *
- * net_lock_t -- Not used.  Only for compatibility
- */
-
-typedef uint8_t net_lock_t;		/* Not really used */
 
 /****************************************************************************
  * Public Data
@@ -192,101 +234,6 @@ extern "C" {
  ****************************************************************************/
 
 /****************************************************************************
- * Critical section management.
- *
- *   net_lock()          - Takes the semaphore().  Implements a re-entrant mutex.
- *   net_unlock()        - Gives the semaphore().
- *   net_lockedwait()    - Like pthread_cond_wait(); releases the semaphore
- *                         momentarily to wait on another semaphore()
- *
- ****************************************************************************/
-
-/****************************************************************************
- * Function: net_lock
- *
- * Description:
- *   Take the lock
- *
- ****************************************************************************/
-
-net_lock_t net_lock(void);
-
-/****************************************************************************
- * Function: net_unlock
- *
- * Description:
- *   Release the lock.
- *
- ****************************************************************************/
-
-void net_unlock(net_lock_t flags);
-
-/****************************************************************************
- * Function: net_timedwait
- *
- * Description:
- *   Atomically wait for sem (or a timeout( while temporarily releasing
- *   the lock on the network.
- *
- * Input Parameters:
- *   sem     - A reference to the semaphore to be taken.
- *   abstime - The absolute time to wait until a timeout is declared.
- *
- * Returned value:
- *   The returned value is the same as sem_timedwait():  Zero (OK) is
- *   returned on success; -1 (ERROR) is returned on a failure with the
- *   errno value set appropriately.
- *
- ****************************************************************************/
-
-struct timespec;
-int net_timedwait(sem_t *sem, FAR const struct timespec *abstime);
-
-/****************************************************************************
- * Function: net_lockedwait
- *
- * Description:
- *   Atomically wait for sem while temporarily releasing lock on the network.
- *
- * Input Parameters:
- *   sem - A reference to the semaphore to be taken.
- *
- * Returned value:
- *   The returned value is the same as sem_wait():  Zero (OK) is returned
- *   on success; -1 (ERROR) is returned on a failure with the errno value
- *   set appropriately.
- *
- ****************************************************************************/
-
-int net_lockedwait(sem_t *sem);
-
-/****************************************************************************
- * Function: net_setipid
- *
- * Description:
- *   This function may be used at boot time to set the initial ip_id.
- *
- * Assumptions:
- *
- ****************************************************************************/
-
-void net_setipid(uint16_t id);
-
-/****************************************************************************
- * Name: net_checksd
- *
- * Description:
- *   Check if the socket descriptor is valid for the provided TCB and if it
- *   supports the requested access.  This trivial operation is part of the
- *   fdopen() operation when the fdopen() is performed on a socket descriptor.
- *   It simply performs some sanity checking before permitting the socket
- *   descriptor to be wrapped as a C FILE stream.
- *
- ****************************************************************************/
-
-int net_checksd(int fd, int oflags);
-
-/****************************************************************************
  * Name: net_setup
  *
  * Description:
@@ -327,6 +274,21 @@ void net_setup(void);
  ****************************************************************************/
 
 void net_initialize(void);
+
+/****************************************************************************
+ * Name: net_checksd
+ *
+ * Description:
+ *   Check if the socket descriptor is valid for the provided TCB and if it
+ *   supports the requested access.  This trivial operation is part of the
+ *   fdopen() operation when the fdopen() is performed on a socket descriptor.
+ *   It simply performs some sanity checking before permitting the socket
+ *   descriptor to be wrapped as a C FILE stream.
+ *
+ ****************************************************************************/
+
+int net_checksd(int fd, int oflags);
+
 
 /****************************************************************************
  * Name:
@@ -379,37 +341,19 @@ void net_releaselist(FAR struct socketlist *list);
 int net_close(int sockfd);
 
 /****************************************************************************
- * Name: netdev_ioctl
+ * Function: net_poll
  *
  * Description:
- *   Perform network device specific operations.
+ *   poll() waits for one of a set of file descriptors to become ready to
+ *   perform I/O.
  *
- * Parameters:
- *   sockfd   Socket descriptor of device
- *   cmd      The ioctl command
- *   arg      The argument of the ioctl cmd
+  * Returned Value:
+ *   0 on success; -1 on error with errno set appropriately.
  *
- * Return:
- *   >=0 on success (positive non-zero values are cmd-specific)
- *   On a failure, -1 is returned with errno set appropriately
- *
- *   EBADF
- *     'sockfd' is not a valid descriptor.
- *   EFAULT
- *     'arg' references an inaccessible memory area.
- *   ENOTTY
- *     'cmd' not valid.
- *   EINVAL
- *     'arg' is not valid.
- *   ENOTTY
- *     'sockfd' is not associated with a network device.
- *   ENOTTY
- *      The specified request does not apply to the kind of object that the
- *      descriptor 'sockfd' references.
+ * Assumptions:
  *
  ****************************************************************************/
-
-int netdev_ioctl(int sockfd, int cmd, unsigned long arg);
+int net_poll(int sd, struct pollfd *fds, bool setup);
 
 /****************************************************************************
  * Function: net_dupsd
@@ -467,6 +411,40 @@ int net_clone(FAR struct socket *psock1, FAR struct socket *psock2);
 int net_vfcntl(int sockfd, int cmd, va_list ap);
 
 /****************************************************************************
+ * Name: net_ioctl
+ *
+ * Description:
+ *   Perform network device specific operations.
+ *
+ * Parameters:
+ *   sockfd   Socket descriptor of device
+ *   cmd      The ioctl command
+ *   arg      The argument of the ioctl cmd
+ *
+ * Return:
+ *   >=0 on success (positive non-zero values are cmd-specific)
+ *   On a failure, -1 is returned with errno set appropriately
+ *
+ *   EBADF
+ *     'sockfd' is not a valid descriptor.
+ *   EFAULT
+ *     'arg' references an inaccessible memory area.
+ *   ENOTTY
+ *     'cmd' not valid.
+ *   EINVAL
+ *     'arg' is not valid.
+ *   ENOTTY
+ *     'sockfd' is not associated with a network device.
+ *   ENOTTY
+ *      The specified request does not apply to the kind of object that the
+ *      descriptor 'sockfd' references.
+ *
+ ****************************************************************************/
+
+
+int net_ioctl(int sockfd, int cmd, unsigned long arg);
+
+/****************************************************************************
  * Function: netdev_foreach
  *
  * Description:
@@ -487,7 +465,6 @@ int net_vfcntl(int sockfd, int cmd, va_list ap);
  ****************************************************************************/
 
 int netdev_foreach(netdev_callback_t callback, void *arg);
-
 #undef EXTERN
 #ifdef __cplusplus
 }

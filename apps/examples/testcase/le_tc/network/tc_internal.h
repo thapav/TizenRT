@@ -35,7 +35,7 @@ int net_socket_main(void);
 void net_getsockopt_main(void);
 #endif
 #ifdef CONFIG_TC_NET_SETSOCKOPT
-int net_setsockopt_main(void);
+void net_setsockopt_main(void);
 #endif
 #ifdef CONFIG_TC_NET_CONNECT
 int net_connect_main(void);
@@ -97,4 +97,32 @@ int net_netdb_main(void);
 #ifdef CONFIG_TC_NET_DUP
 int net_dup_main(void);
 #endif
+#ifdef CONFIG_ITC_NET_CLOSE
+int itc_net_close_main(void);
+#endif
+#ifdef CONFIG_ITC_NET_DUP
+int itc_net_dup_main(void);
+#endif
+#ifdef CONFIG_ITC_NET_FCNTL
+int itc_net_fcntl_main(void);
+#endif
+#ifdef CONFIG_ITC_NET_LISTEN
+int itc_net_listen_main(void);
+#endif
+#ifdef CONFIG_ITC_NET_SETSOCKOPT
+int itc_net_setsockopt_main(void);
+#endif
+#ifdef CONFIG_ITC_NET_SEND
+int itc_net_send_main(void);
+#endif
+#ifdef CONFIG_ITC_NET_INET
+int itc_net_inet_main(void);
+#endif
+#ifdef CONFIG_ITC_NET_NETDB
+int itc_net_netdb_main(void);
+#endif
+#ifdef CONFIG_ITC_NET_CONNECT
+int itc_net_connect_main(void);
+#endif
+
 #endif /* __EXAMPLES_TESTCASE_NETWORK_TC_INTERNAL_H */

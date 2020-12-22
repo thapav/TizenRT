@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- * Copyright 2016 Samsung Electronics All Rights Reserved.
+ * Copyright 2019 Samsung Electronics All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
  * language governing permissions and limitations under the License.
  *
  ****************************************************************************/
-/************************************************************
- * libc/net/lib_ntohl.c
+/****************************************************************************
+ * lib/libc/net/lib_ntohl.c
  *
  *   Copyright (C) 2007, 2009, 2011 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -48,20 +48,20 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************/
+ ****************************************************************************/
 
-/************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************/
+ ****************************************************************************/
 
 #include <tinyara/config.h>
 
 #include <stdint.h>
 #include <arpa/inet.h>
 
-/************************************************************
- * Global Functions
- ************************************************************/
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
 
 uint32_t htonl(uint32_t hl)
 {

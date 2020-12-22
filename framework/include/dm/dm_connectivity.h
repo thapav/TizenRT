@@ -50,13 +50,21 @@ typedef struct dm_scan_info_s dm_scan_info_t;
 
 typedef void (*conn_cb)(void);
 
+
+/**
+ * @brief register dm callback of wifi
+ * @details @b #include <dm/dm_connectivity.h>
+ * @since TizenRT v2.0
+ */
+void dm_cb_register_init(void);
+
 /**
  * @brief get the rssi of network
  *
  * @details @b #include <dm/dm_connectivity.h>
  * @param[out] rssi current rssi. (the rssi is a negative value)
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_conn_get_rssi(int *rssi);
 
@@ -66,7 +74,7 @@ int dm_conn_get_rssi(int *rssi);
  * @details @b #include <dm/dm_connectivity.h>
  * @param[out] ipAddr current ip address. (the form is XXX.XXX.XXX.XXX)
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_conn_get_address(char *ipAddr);
 
@@ -76,7 +84,7 @@ int dm_conn_get_address(char *ipAddr);
  * @details @b #include <dm/dm_connectivity.h>
  * @param[out] interface current interface of network. (the value is a string)
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_conn_get_interface(char *interface);
 
@@ -86,7 +94,7 @@ int dm_conn_get_interface(char *interface);
  * @details @b #include <dm/dm_connectivity.h>
  * @param[out] channel current channel of network.
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_conn_get_channel(int *channel);
 
@@ -96,7 +104,7 @@ int dm_conn_get_channel(int *channel);
  * @details @b #include <dm/dm_connectivity.h>
  * @param[out] dbm current tx power of network. (the value is between 0 ~ 30 dbm)
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_conn_get_tx_power(int *dbm);
 
@@ -106,7 +114,7 @@ int dm_conn_get_tx_power(int *dbm);
  * @details @b #include <dm/dm_connectivity.h>
  * @param[in] dbm the power value to set up. (the value is between 0 ~ 30 dbm)
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_conn_set_tx_power(const int *dbm);
 
@@ -116,7 +124,7 @@ int dm_conn_set_tx_power(const int *dbm);
  * @details @b #include <dm/dm_connectivity.h>
  * @param[in] cb A pointer to call when a network link up event occurs.
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_conn_register_linkup_cb(conn_cb cb);
 
@@ -126,7 +134,7 @@ int dm_conn_register_linkup_cb(conn_cb cb);
  * @details @b #include <dm/dm_connectivity.h>
  * @param[in] cb A pointer to call when a network link down event occurs.
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_conn_register_linkdown_cb(conn_cb cb);
 
@@ -136,7 +144,7 @@ int dm_conn_register_linkdown_cb(conn_cb cb);
  * @details @b #include <dm/dm_connectivity.h>
  * @param[in] cb A pointer to call when a network link up event occurs.
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_conn_unregister_linkup_cb(conn_cb cb);
 
@@ -146,7 +154,7 @@ int dm_conn_unregister_linkup_cb(conn_cb cb);
  * @details @b #include <dm/dm_connectivity.h>
  * @param[in] cb A pointer to call when a network link down event occurs.
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int dm_conn_unregister_linkdown_cb(conn_cb cb);
 

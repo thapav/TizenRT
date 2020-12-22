@@ -65,6 +65,8 @@
 #include <tinyara/kmalloc.h>
 #include <tinyara/fs/fs.h>
 #include <tinyara/fs/dirent.h>
+#include <tinyara/sched.h>
+#include <sys/stat.h>
 
 #include "inode/inode.h"
 
@@ -240,15 +242,22 @@ FAR DIR *opendir(FAR const char *path)
 	FAR struct inode *inode = NULL;
 	FAR struct fs_dirent_s *dir;
 	FAR const char *relpath;
+	struct stat st;
 	bool isroot = false;
 	int ret;
+	struct tcb_s *rtcb = sched_self();
 
 	/* If we are given 'nothing' then we will interpret this as
 	 * request for the root inode.
 	 */
 
+	if (!path || *path == '\0') {
+		set_errno(ENOENT);
+		return NULL;
+	}
+
 	inode_semtake();
-	if (!path || *path == 0 || strcmp(path, "/") == 0) {
+	if (strcmp(path, "/") == 0) {
 		inode = root_inode;
 		isroot = true;
 		relpath = NULL;
@@ -278,7 +287,13 @@ FAR DIR *opendir(FAR const char *path)
 	 * container.
 	 */
 
-	dir = (FAR struct fs_dirent_s *)kumm_zalloc(sizeof(struct fs_dirent_s));
+	if (!rtcb->uheap) {
+		/* If uheap is null, then its a kernel side task / thread. */
+		dir = (FAR struct fs_dirent_s *)kmm_zalloc(sizeof(struct fs_dirent_s));
+	} else {
+		dir = (FAR struct fs_dirent_s *)kumm_zalloc(sizeof(struct fs_dirent_s));
+	}
+
 	if (!dir) {
 		/* Insufficient memory to complete the operation. */
 
@@ -313,6 +328,22 @@ FAR DIR *opendir(FAR const char *path)
 	else if (INODE_IS_MOUNTPT(inode)) {
 		/* Yes, the node is a file system mountpoint */
 
+		if (inode->u.i_mops && inode->u.i_mops->stat) {
+			/* Perform the stat() operation */
+
+			ret = inode->u.i_mops->stat(inode, path, &st);
+			if (ret < 0) {
+				ret = -ret;
+				goto errout_with_direntry;
+			} else if (!S_ISDIR(st.st_mode)) {
+				ret = ENOTDIR;
+				goto errout_with_direntry;
+			}
+		} else {
+			ret = ENOSYS;
+			goto errout_with_direntry;
+		}
+
 		dir->fd_root = inode;	/* Save the inode where we start */
 
 		/* Open the directory at the relative path */
@@ -328,6 +359,12 @@ FAR DIR *opendir(FAR const char *path)
 		 * have a child? If so that the child would be the 'root' of a list
 		 * of nodes under the directory.
 		 */
+
+		ret = inode_stat(inode, &st);
+		if (!S_ISDIR(st.st_mode)) {
+			ret = ENOTDIR;
+			goto errout_with_direntry;
+		}
 
 		FAR struct inode *child = inode->i_child;
 		if (child) {
@@ -352,7 +389,12 @@ FAR DIR *opendir(FAR const char *path)
 	/* Nasty goto's make error handling simpler */
 
 errout_with_direntry:
-	kumm_free(dir);
+	if (!rtcb->uheap) {
+		/* If uheap is null, then its a kernel side task / thread. */
+		kmm_free(dir);
+	} else {
+		kumm_free(dir);
+	}
 
 errout_with_semaphore:
 	inode_semgive();

@@ -23,20 +23,13 @@
 #include <tinyara/config.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
-#include <tinyara/time.h>
-#include <sys/time.h>
+#include <iotbus/iotbus_spi.h>
+#include <iotbus/iotbus_error.h>
 #include "utc_internal.h"
-#include <iotbus_spi.h>
-#include <iotbus_error.h>
 
 iotbus_spi_context_h spi;
 
-#if defined(CONFIG_ARCH_BOARD_MIKROEQUAIL)
 unsigned int bus = 1;
-#else
-unsigned int bus = 0;
-#endif
 
 unsigned char txbuf[64] = { 0, };
 unsigned char rxbuf[64] = { 0, };;
@@ -60,6 +53,20 @@ static void utc_systemio_spi_open_n(void)
 {
 	iotbus_spi_context_h m_spi = iotbus_spi_open(bus, NULL);
 	TC_ASSERT_EQ("iotbus_spi_open", m_spi, NULL);
+	TC_SUCCESS_RESULT();
+}
+
+static void utc_systemio_spi_set_config_p(void)
+{
+	int ret = iotbus_spi_set_config(spi, &config);
+	TC_ASSERT_EQ("iotbus_spi_set_config", ret, IOTBUS_ERROR_NONE);
+	TC_SUCCESS_RESULT();
+}
+
+static void utc_systemio_spi_set_config_n(void)
+{
+	int ret = iotbus_spi_set_config(spi, NULL);
+	TC_ASSERT_EQ("iotbus_spi_set_config", ret, IOTBUS_ERROR_INVALID_PARAMETER);
 	TC_SUCCESS_RESULT();
 }
 
@@ -91,14 +98,20 @@ static void utc_systemio_spi_recv_n(void)
 	TC_SUCCESS_RESULT();
 }
 
-static void utc_systemio_spi_transfer_p(void)
+static void utc_systemio_spi_transfer_buf_p(void)
 {
-	//TO DO
+	int ret = iotbus_spi_transfer_buf(spi, txbuf, rxbuf, 16);
+	TC_ASSERT_EQ("iotbus_spi_transfer_buf", ret, IOTBUS_ERROR_NONE);
+	TC_SUCCESS_RESULT();
 }
 
-static void utc_systemio_spi_transfer_n(void)
+static void utc_systemio_spi_transfer_buf_n(void)
 {
-	//TO DO
+	int ret = iotbus_spi_transfer_buf(NULL, txbuf, rxbuf, 16);
+	TC_ASSERT_EQ("iotbus_spi_transfer_buf", ret, IOTBUS_ERROR_INVALID_PARAMETER);
+	ret = iotbus_spi_transfer_buf(spi, NULL, rxbuf, 16);
+	TC_ASSERT_EQ("iotbus_spi_transfer_buf", ret, IOTBUS_ERROR_INVALID_PARAMETER);
+	TC_SUCCESS_RESULT();
 }
 
 static void utc_systemio_spi_close_p(void)
@@ -106,7 +119,6 @@ static void utc_systemio_spi_close_p(void)
 	int ret = iotbus_spi_close(spi);
 	TC_ASSERT_EQ("iotbus_spi_close", ret, IOTBUS_ERROR_NONE);
 	TC_SUCCESS_RESULT();
-
 }
 
 static void utc_systemio_spi_close_n(void)
@@ -121,12 +133,16 @@ int utc_spi_main(void)
 	SYSIO_UTC_I2C_PRINT("## SPI SYSIO Test##\n");
 	utc_systemio_spi_open_p();
 	utc_systemio_spi_open_n();
+	utc_systemio_spi_set_config_p();
+	utc_systemio_spi_set_config_n();
 	utc_systemio_spi_write_p();
 	utc_systemio_spi_write_n();
 	utc_systemio_spi_recv_p();
 	utc_systemio_spi_recv_n();
-	utc_systemio_spi_transfer_p();
-	utc_systemio_spi_transfer_n();
+#ifdef CONFIG_SPI_EXCHANGE
+	utc_systemio_spi_transfer_buf_p();
+	utc_systemio_spi_transfer_buf_n();
+#endif	
 	utc_systemio_spi_close_n();
 	utc_systemio_spi_close_p();	
 

@@ -4,34 +4,10 @@
 #
 
 config MM_KERNEL_HEAP
-	bool "Support a protected, kernel heap"
+	bool
 	default y
-	depends on BUILD_PROTECTED || BUILD_KERNEL
-	---help---
-		Partition heap memory into two parts:  (1) a protected, kernel-mode
-		heap accessible only by the TinyAra kernel, and (2) an unprotected
-		user-mode heap for use by applications.  If you are only interested
-		in protected the kernel from read access, then this option is not
-		necessary.  If you wish to secure the kernel data as well, then
-		this option should be selected.
 
-		The kernel heap size that is used is provided a a platform-specific
-		up_allocate_kheap() interface.  This configuration setting is made
-		available to that platform specific code.  However, the
-		up_allocate_kheap() interface may chose to ignore this setting if it
-		has a more appropriate heap allocation strategy.
-
-config MM_KERNEL_HEAPSIZE
-	int "Kernal heap size"
-	default 8192
-	depends on MM_KERNEL_HEAP
-	---help---
-		This is the size of the a protected, kernel-mode heap (in bytes).
-		The remaining of available memory is given to the unprotected
-		user-mode heap.  This value may need to be aligned to units of the
-		size of the smallest memory protection region.
-
-config DISABLE_REALLOC_NEIGHBOR_EXTENSION
+config REALLOC_DISABLE_NEIGHBOR_EXTENSION
 	bool "Disable Realloc Neighbor Extension"
 	default n
 	---help---
@@ -59,34 +35,38 @@ config MM_SMALL
 		only 4-byte alignment.  This may be important on some platforms where
 		64-bit data is in allocated structures and 8-byte alignment is required.
 
-config MM_REGIONS
-	int "Number of memory regions"
+config KMM_REGIONS
+	int "Number of kernel memory regions"
 	default 1
 	---help---
 		If the architecture includes multiple, non-contiguous regions of
-		memory to allocate from, this specifies the number of memory regions
-		that the memory manager must handle and enables the API
-		mm_addregion(heap, start, end);
+		memory to allocate from, KMM_REGIONS should be set to the number of
+		memory. Or if you want to use multiple kernel heap, KMM_REGIONS
+		should be set to the number of heaps.
 
-config ARCH_HAVE_HEAPx
-	bool
+config KMM_NHEAPS
+	int "Number of kernel heaps"
+	default 1
+	---help---
+		A number of kernel heap memory. If KMM_NHEAPS sets more than equal to 2,
+		it can be split for multi kernel heap.
+		You can refer to "https://github.com/Samsung/TizenRT/blob/master/docs/HowToUseMultiHeap.md"
+
+config KMM_FORCE_ALLOC_AT
+	bool "Force to alloc at specific mm heap for kernel"
 	default n
-
-if ARCH_HAVE_HEAPx
-
-config HEAPx_BASE
-	string "List of start address for additional heap region"
-	default "0x00000000,"
+	depends on KMM_NHEAPS != 1
+	depends on MM_KERNEL_HEAP
 	---help---
-		The base address list of the additional heap region.
+		When Enable multi heap, it's possible that need to alloc memory from
+		specific heap for kernel
 
-config HEAPx_SIZE
-	string "List of size for additional heap region"
-	default "0,"
+config KMM_FORCE_ALLOC_IDX
+	int "Heap index for kernel memory"
+	default 0
+	depends on KMM_FORCE_ALLOC_AT
 	---help---
-		The size list of additional heap region.
-
-endif # ARCH_HAVE_HEAPx
+		Index of the heap that need to alloc for kernel forcedly
 
 config GRAN
 	bool "Enable Granule Allocator"

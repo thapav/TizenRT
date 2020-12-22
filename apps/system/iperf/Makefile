@@ -21,6 +21,8 @@
 include $(APPDIR)/Make.defs
 
 # built-in application info
+PRIORITY = $(CONFIG_IPERF_PRIORITY)
+STACKSIZE = $(CONFIG_IPERF_STACKSIZE)
 
 APPNAME = iperf
 FUNCNAME = iperf_main
@@ -94,6 +96,7 @@ else
 install:
 
 endif
+
 
 ifeq ($(CONFIG_BUILTIN_APPS)$(CONFIG_SYSTEM_IPERF),yy)
 $(BUILTIN_REGISTRY)$(DELIM)$(FUNCNAME).bdat: $(DEPCONFIG) Makefile

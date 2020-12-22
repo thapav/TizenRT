@@ -270,7 +270,7 @@ static int mtdconfig_writebytes(FAR struct mtdconfig_struct_s *dev, int offset, 
 		off_t bytes_written = 0;
 
 		while (writelen) {
-			/* Read existing data from the the block into the buffer */
+			/* Read existing data from the block into the buffer */
 
 			block = offset / dev->blocksize;
 			ret = MTD_BREAD(dev->mtd, block, 1, dev->buffer);
@@ -464,7 +464,6 @@ read_next:
 				if (size > 0 && bytes_left_in_block >= size + sizeof(*phdr)) {
 					/* Free entry of large enough size found */
 
-					found = true;
 					break;
 				}
 
@@ -1161,6 +1160,9 @@ static int mtdconfig_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 	FAR struct mtdconfig_struct_s *dev = inode->i_private;
 	FAR struct config_data_s *pdata;
 	int ret = -ENOSYS;
+	if (!arg) {
+		return -EINVAL;
+	}
 
 	switch (cmd) {
 	case CFGDIOC_SETCONFIG:
@@ -1244,6 +1246,8 @@ int mtdconfig_register(FAR struct mtd_dev_s *mtd)
 		dev->nblocks = geo.neraseblocks * geo.erasesize / geo.blocksize;
 
 		(void)register_driver("/dev/config", &mtdconfig_fops, 0666, dev);
+	} else {
+		ret = -ENOMEM;
 	}
 
 errout:

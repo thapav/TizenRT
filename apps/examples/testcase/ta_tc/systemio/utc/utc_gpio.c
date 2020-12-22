@@ -23,48 +23,35 @@
 #include <tinyara/config.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
-#include <tinyara/time.h>
-#include <sys/time.h>
+#include <unistd.h>
+#include <iotbus/iotbus_gpio.h>
+#include <iotbus/iotbus_error.h>
 #include "utc_internal.h"
-#include <iotbus_gpio.h>
-#include <iotbus_error.h>
-#ifdef CONFIG_ARCH_CHIP_STM32
+
+#if !defined(CONFIG_SYSIO_UTC_GPIO1_NUM) || !defined(CONFIG_SYSIO_UTC_GPIO2_NUM)
+#error To run system I/O testcase, kindly set GPIOs number on menuconfig.
 #endif
 
-iotbus_gpio_context_h gpio;
-iotbus_gpio_context_h gpio2;
+#define TEST_GPIO_1ST           CONFIG_SYSIO_UTC_GPIO1_NUM
+#define TEST_GPIO_2ND           CONFIG_SYSIO_UTC_GPIO2_NUM
+#define TEST_GPIO_INVALID       (-1)
 
+static iotbus_gpio_context_h gpio;
+static iotbus_gpio_context_h gpio2;
 static int gpio_callback_flag = 0;
-
-static int utc_systemio_gpio_open2(int gpiopin)
-{
-	iotbus_gpio_context_h m_gpio = iotbus_gpio_open(gpiopin);
-	if (!m_gpio) {
-		return 0;
-	}
-	gpio2 = m_gpio;
-	return 1;
-}
 
 static void utc_systemio_gpio_open_p(void)
 {
-#ifdef CONFIG_ARCH_CHIP_STM32
-	iotbus_gpio_context_h m_gpio = iotbus_gpio_open(GPIO_PORTA_PIN5);
+	iotbus_gpio_context_h m_gpio = iotbus_gpio_open(TEST_GPIO_1ST);
 	TC_ASSERT_NEQ("iotbus_gpio_open", m_gpio, NULL);
 	gpio = m_gpio;
 	TC_SUCCESS_RESULT();
-#elif CONFIG_ARCH_CHIP_S5J
-	iotbus_gpio_context_h m_gpio = iotbus_gpio_open(41);
-	TC_ASSERT_NEQ("iotbus_gpio_open", m_gpio, NULL);
-	gpio = m_gpio;
-	TC_SUCCESS_RESULT();
-#endif
 }
 
 static void utc_systemio_gpio_open_n(void)
 {
-	TC_ASSERT_EQ("iotbus_gpio_open", iotbus_gpio_open(-1), NULL);
+	iotbus_gpio_context_h m_gpio = iotbus_gpio_open(TEST_GPIO_INVALID);
+	TC_ASSERT_EQ_CLEANUP("iotbus_gpio_open", m_gpio, NULL, iotbus_gpio_close(m_gpio));
 	TC_SUCCESS_RESULT();
 }
 
@@ -88,7 +75,7 @@ static void utc_systemio_gpio_set_direction_p_IOTBUS_GPIO_DIRECTION_IN(void)
 
 static void utc_systemio_gpio_set_direction_n(void)
 {
-	TC_ASSERT_EQ("iotbus_gpio_set_direction", iotbus_gpio_set_direction(gpio, -1), IOTBUS_ERROR_INVALID_PARAMETER);
+	TC_ASSERT_EQ("iotbus_gpio_set_direction", iotbus_gpio_set_direction(gpio, TEST_GPIO_INVALID), IOTBUS_ERROR_INVALID_PARAMETER);
 	TC_SUCCESS_RESULT();
 }
 
@@ -133,7 +120,7 @@ static void utc_systemio_gpio_set_edge_mode_p_IOTBUS_GPIO_EDGE_FALLING(void)
 
 static void utc_systemio_gpio_set_edge_mode_n(void)
 {
-	TC_ASSERT_EQ("iotbus_gpio_set_edge_mode", iotbus_gpio_set_edge_mode(gpio, -1), IOTBUS_ERROR_INVALID_PARAMETER);
+	TC_ASSERT_EQ("iotbus_gpio_set_edge_mode", iotbus_gpio_set_edge_mode(gpio, TEST_GPIO_INVALID), IOTBUS_ERROR_INVALID_PARAMETER);
 	TC_SUCCESS_RESULT();
 }
 
@@ -172,7 +159,7 @@ static void utc_systemio_gpio_set_drive_mode_p_IOTBUS_GPIO_DRIVE_FLOAT(void)
 
 static void utc_systemio_gpio_set_drive_mode_n(void)
 {
-	TC_ASSERT_EQ("iotbus_gpio_set_drive_mode", iotbus_gpio_set_drive_mode(NULL, -1), IOTBUS_ERROR_INVALID_PARAMETER);
+	TC_ASSERT_EQ("iotbus_gpio_set_drive_mode", iotbus_gpio_set_drive_mode(NULL, TEST_GPIO_INVALID), IOTBUS_ERROR_INVALID_PARAMETER);
 	TC_SUCCESS_RESULT();
 }
 
@@ -193,13 +180,13 @@ static void utc_systemio_gpio_get_drive_mode_p(void)
 
 static void utc_systemio_gpio_write_p(void)
 {
-	TC_ASSERT_EQ("iotbus_gpio_write", iotbus_gpio_write(gpio, 1), IOTBUS_ERROR_NONE);
+	TC_ASSERT_EQ("iotbus_gpio_write", iotbus_gpio_write(gpio, IOTBUS_GPIO_HIGH), IOTBUS_ERROR_NONE);
 	TC_SUCCESS_RESULT();
 }
 
 static void utc_systemio_gpio_write_n(void)
 {
-	TC_ASSERT_EQ("iotbus_gpio_write", iotbus_gpio_write(NULL, -1), IOTBUS_ERROR_INVALID_PARAMETER);
+	TC_ASSERT_EQ("iotbus_gpio_write", iotbus_gpio_write(NULL, TEST_GPIO_INVALID), IOTBUS_ERROR_INVALID_PARAMETER);
 	TC_SUCCESS_RESULT();
 }
 
@@ -217,11 +204,7 @@ static void utc_systemio_gpio_read_n(void)
 
 static void utc_systemio_gpio_get_pin_p(void)
 {
-#ifdef CONFIG_ARCH_CHIP_STM32
-	TC_ASSERT_EQ("iotbus_gpio_get_pin", iotbus_gpio_get_pin(gpio), GPIO_PORTA_PIN5);
-#elif CONFIG_ARCH_CHIP_S5J
-	TC_ASSERT_EQ("iotbus_gpio_get_pin", iotbus_gpio_get_pin(gpio), 41);
-#endif
+	TC_ASSERT_EQ("iotbus_gpio_get_pin", iotbus_gpio_get_pin(gpio), TEST_GPIO_1ST);
 	TC_SUCCESS_RESULT();
 }
 
@@ -233,7 +216,7 @@ static void utc_systemio_gpio_get_pin_n(void)
 
 void gpio_callback_event(void *user_data)
 {
-	iotbus_gpio_context_h hnd = (iotbus_gpio_context_h) user_data;
+	iotbus_gpio_context_h hnd = (iotbus_gpio_context_h)user_data;
 	int value = iotbus_gpio_read(hnd);
 	if (value < 0) {
 		gpio_callback_flag = 0;
@@ -248,10 +231,10 @@ static void utc_systemio_gpio_register_p(void)
 	gpio_callback_flag = 0;
 
 	int ret = iotbus_gpio_register_cb(gpio2, IOTBUS_GPIO_EDGE_RISING, gpio_callback_event, (void *)gpio2);
-	int data = 0;
+	int data = IOTBUS_GPIO_LOW;
 	iotbus_gpio_write(gpio, data);
 	sleep(1);
-	data = 1;
+	data = IOTBUS_GPIO_HIGH;
 	iotbus_gpio_write(gpio, data);
 	sleep(2);
 
@@ -261,7 +244,7 @@ static void utc_systemio_gpio_register_p(void)
 
 static void utc_systemio_gpio_register_n(void)
 {
-	int ret = iotbus_gpio_register_cb(gpio2, -1, NULL, NULL);
+	int ret = iotbus_gpio_register_cb(gpio2, TEST_GPIO_INVALID, NULL, NULL);
 
 	TC_ASSERT_EQ("iotbus_gpio_register_cb", (ret == IOTBUS_ERROR_INVALID_PARAMETER ? 1 : 0), 1);
 	TC_SUCCESS_RESULT();
@@ -291,6 +274,23 @@ static void utc_systemio_gpio_close_n(void)
 	TC_SUCCESS_RESULT();
 }
 
+static void utc_systemio_gpio_register_signal_p(void)
+{
+	TC_ASSERT_EQ("iotbus_gpio_register_signal", iotbus_gpio_register_signal(gpio, IOTBUS_GPIO_EDGE_NONE), IOTBUS_ERROR_NONE);
+	TC_ASSERT_EQ("iotbus_gpio_register_signal", iotbus_gpio_register_signal(gpio, IOTBUS_GPIO_EDGE_BOTH), IOTBUS_ERROR_NONE);
+	TC_ASSERT_EQ("iotbus_gpio_register_signal", iotbus_gpio_register_signal(gpio, IOTBUS_GPIO_EDGE_RISING), IOTBUS_ERROR_NONE);
+	TC_ASSERT_EQ("iotbus_gpio_register_signal", iotbus_gpio_register_signal(gpio, IOTBUS_GPIO_EDGE_FALLING), IOTBUS_ERROR_NONE);
+	TC_SUCCESS_RESULT();
+}
+
+static void utc_systemio_gpio_register_signal_n(void)
+{
+	TC_ASSERT_EQ("iotbus_gpio_register_signal", iotbus_gpio_register_signal(gpio, TEST_GPIO_INVALID), IOTBUS_ERROR_INVALID_PARAMETER);
+	TC_ASSERT_EQ("iotbus_gpio_register_signal", iotbus_gpio_register_signal(NULL, TEST_GPIO_INVALID), IOTBUS_ERROR_INVALID_PARAMETER);
+	TC_SUCCESS_RESULT();
+}
+
+
 int utc_gpio_main(void)
 {
 	iotapi_initialize();
@@ -298,19 +298,15 @@ int utc_gpio_main(void)
 	utc_systemio_gpio_open_p();
 	utc_systemio_gpio_open_n();
 
-#ifdef CONFIG_ARCH_CHIP_STM32
-	utc_systemio_gpio_open2(GPIO_PORTA_PIN6);
-#elif CONFIG_ARCH_CHIP_S5J
-	utc_systemio_gpio_open2(57);
-#endif
+	gpio2 = iotbus_gpio_open(TEST_GPIO_2ND);
 
 	utc_systemio_gpio_set_direction_p_IOTBUS_GPIO_DIRECTION_NONE();
 	utc_systemio_gpio_set_direction_p_IOTBUS_GPIO_DIRECTION_OUT();
 	utc_systemio_gpio_set_direction_p_IOTBUS_GPIO_DIRECTION_IN();
 	utc_systemio_gpio_set_direction_n();
 
-	iotbus_gpio_set_direction(gpio, IOTBUS_GPIO_DIRECTION_OUT);	// for stm
-	iotbus_gpio_set_direction(gpio2, IOTBUS_GPIO_DIRECTION_IN);	// for stm
+	iotbus_gpio_set_direction(gpio, IOTBUS_GPIO_DIRECTION_OUT);
+	iotbus_gpio_set_direction(gpio2, IOTBUS_GPIO_DIRECTION_IN);
 
 	utc_systemio_gpio_get_direction_p();
 	utc_systemio_gpio_get_direction_n();
@@ -322,8 +318,8 @@ int utc_gpio_main(void)
 	utc_systemio_gpio_get_edge_mode_p();
 	utc_systemio_gpio_get_edge_mode_n();
 
-	iotbus_gpio_set_direction(gpio, IOTBUS_GPIO_DIRECTION_OUT);	// for stm
-	iotbus_gpio_set_direction(gpio2, IOTBUS_GPIO_DIRECTION_IN);	// for stm
+	iotbus_gpio_set_direction(gpio, IOTBUS_GPIO_DIRECTION_OUT);
+	iotbus_gpio_set_direction(gpio2, IOTBUS_GPIO_DIRECTION_IN);
 
 	utc_systemio_gpio_set_drive_mode_p_IOTBUS_GPIO_DRIVE_PULLUP();
 	utc_systemio_gpio_set_drive_mode_p_IOTBUS_GPIO_DRIVE_PULLDOWN();
@@ -341,6 +337,10 @@ int utc_gpio_main(void)
 	utc_systemio_gpio_register_n();
 	utc_systemio_gpio_unregister_p();
 	utc_systemio_gpio_unregister_n();
+#ifndef CONFIG_DISABLE_SIGNALS
+	utc_systemio_gpio_register_signal_p();
+	utc_systemio_gpio_register_signal_n();
+#endif
 	utc_systemio_gpio_close_n();
 	utc_systemio_gpio_close_p();
 

@@ -104,12 +104,6 @@ ifneq ($(CONFIG_DISABLE_POSIX_TIMERS),y)
 CSRCS += posixtimer.c
 endif
 
-ifeq ($(CONFIG_ARCH_HAVE_VFORK),y)
-ifeq ($(CONFIG_SCHED_WAITPID),y)
-CSRCS += vfork.c
-endif
-endif
-
 ifneq ($(CONFIG_DISABLE_SIGNALS),y)
 ifneq ($(CONFIG_DISABLE_PTHREAD),y)
 ifeq ($(CONFIG_PRIORITY_INHERITANCE),y)
@@ -120,10 +114,6 @@ endif # CONFIG_DISABLE_SIGNALS
 
 ifeq ($(CONFIG_SCHED_WORKQUEUE),y)
 CSRCS += workqueue.c
-else
-ifeq ($(CONFIG_LIB_USRWORK),y)
-CSRCS += workqueue.c
-endif
 endif
 AOBJS = $(ASRCS:.S=$(OBJEXT))
 COBJS = $(CSRCS:.c=$(OBJEXT))

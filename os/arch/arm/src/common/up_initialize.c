@@ -62,6 +62,9 @@
 #include <tinyara/fs/fs.h>
 #include <tinyara/syslog/ramlog.h>
 #include <tinyara/syslog/syslog_console.h>
+#if defined(CONFIG_BLUETOOTH) && defined(CONFIG_BLUETOOTH_NULL)
+#include <tinyara/bluetooth/bt_null.h>
+#endif
 
 #include <arch/board/board.h>
 
@@ -70,6 +73,10 @@
 
 #ifdef CONFIG_NETDEV_TELNET
 #include <tinyara/net/telnet.h>
+#endif
+
+#ifdef CONFIG_WATCHDOG_FOR_IRQ
+#include <tinyara/arch.h>
 #endif
 
 /****************************************************************************
@@ -166,10 +173,6 @@ void up_initialize(void)
 
 	up_color_intstack();
 
-	/* Add any extra memory fragments to the memory manager */
-
-	up_addregion();
-
 	/* Initialize the interrupt subsystem */
 
 	up_irqinitialize();
@@ -202,6 +205,19 @@ void up_initialize(void)
 #if !defined(CONFIG_SUPPRESS_INTERRUPTS) && !defined(CONFIG_SUPPRESS_TIMER_INTS) && \
 	!defined(CONFIG_SYSTEMTICK_EXTCLK)
 	up_timer_initialize();
+
+#ifdef CONFIG_WATCHDOG_FOR_IRQ
+#if ((CONFIG_WATCHDOG_FOR_IRQ_INTERVAL * 1000) <= CONFIG_USEC_PER_TICK)
+#error "CONFIG_WATCHDOG_FOR_IRQ_INTERVAL should be greater than CONFIG_USEC_PER_TICK"
+#endif
+	up_wdog_init(CONFIG_WATCHDOG_FOR_IRQ_INTERVAL);
+#endif
+#endif
+
+	/* Initialize pipe */
+
+#if defined(CONFIG_PIPES) && CONFIG_DEV_PIPE_SIZE > 0
+	pipe_initialize();
 #endif
 
 	/* Register devices */
@@ -210,6 +226,18 @@ void up_initialize(void)
 
 #if defined(CONFIG_DEV_NULL)
 	devnull_register();			/* Standard /dev/null */
+#endif
+
+#ifdef CONFIG_VIDEO_NULL
+	video_null_initialize("/dev/video0");	/* Standard /dev/video0 */
+#endif
+
+#if defined(CONFIG_BLUETOOTH) && defined(CONFIG_BLUETOOTH_NULL)
+	btnull_register();    /* bluetooth bt_null */
+#endif
+
+#ifdef CONFIG_DEV_URANDOM
+	devurandom_register();			/* /dev/urandom */
 #endif
 
 #if defined(CONFIG_DEV_ZERO)
@@ -255,6 +283,11 @@ void up_initialize(void)
 	/* Initialize the Telnet session factory */
 
 	(void)telnet_initialize();
+#endif
+
+#ifdef CONFIG_ERROR_REPORT
+	/* Initialize Error Reporting for network */
+	error_report_init();
 #endif
 	/* Initialize the network */
 

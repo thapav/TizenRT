@@ -30,10 +30,10 @@
 #include <netutils/netlib.h>
 
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 
 #include "tc_internal.h"
 
-extern int ioctlsocket(int s, long cmd, void *argp);
 
 /**
    * @testcase		   :tc_net_ioctl_p
@@ -48,9 +48,12 @@ static void tc_net_ioctl_p(void)
 
 	int fd = -1;
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
-	long a = 0;
-
-	int ret = ioctlsocket(fd, FIONBIO, &a);
+	if (fd < 0) {
+		printf("fail %s:%d\n", __FUNCTION__, __LINE__);
+		return;
+	}
+	int dummy = 0;
+	int ret = ioctl(fd, FIONBIO, (unsigned long)&dummy);
 	close(fd);
 
 	TC_ASSERT_NEQ("ioctl", ret, -1);
@@ -59,24 +62,27 @@ static void tc_net_ioctl_p(void)
 }
 
 /**
-   * @testcase		   :tc_net_ioctl_fionread_n
+   * @testcase		   :tc_net_ioctl_fionread_p
    * @brief		   :
    * @scenario		   :
    * @apicovered	   :ioctl()
    * @precondition	   :
    * @postcondition	   :
    */
-static void tc_net_ioctl_fionread_n(void)
+static void tc_net_ioctl_fionread_p(void)
 {
 
 	int fd = -1;
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
-	long a = 10;
-
-	int ret = ioctlsocket(fd, FIONREAD, &a);
+	if (fd < 0) {
+		printf("fail %s:%d\n", __FUNCTION__, __LINE__);
+		return;
+	}
+	int dummy = 10;
+	int ret = ioctl(fd, FIONREAD, (unsigned long)&dummy);
 	close(fd);
 
-	TC_ASSERT_NEQ("ioctl", ret, 0);
+	TC_ASSERT_NEQ("ioctl", ret, -1);
 	TC_SUCCESS_RESULT();
 
 }
@@ -93,7 +99,7 @@ static void tc_net_ioctl_n(void)
 {
 
 	int fd = -1;
-	int ret = ioctlsocket(fd, FIONBIO, 0);
+	int ret = ioctl(fd, FIONBIO, 0);
 
 	TC_ASSERT_NEQ("ioctl", ret, 0);
 	TC_SUCCESS_RESULT();
@@ -108,7 +114,7 @@ int net_ioctl_main(void)
 {
 
 	tc_net_ioctl_p();
-	tc_net_ioctl_fionread_n();
+	tc_net_ioctl_fionread_p();
 
 	tc_net_ioctl_n();
 

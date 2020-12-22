@@ -73,7 +73,6 @@
 #include <tinyara/fs/fs.h>
 #include <tinyara/arch.h>
 #include <tinyara/audio/audio.h>
-#include <mqueue.h>
 
 #include <arch/irq.h>
 
@@ -185,7 +184,13 @@ static int audio_open(FAR struct file *filep)
 	/* Save the new open count on success */
 
 	upper->crefs = tmp;
-	upper->usermq = NULL;
+
+	/* Initialize usermq only when it is the first open */
+
+	if (upper->crefs == 1) {
+		upper->usermq = NULL;
+	}
+
 	ret = OK;
 
 errout_with_sem:
@@ -207,7 +212,7 @@ static int audio_close(FAR struct file *filep)
 {
 	FAR struct inode *inode = filep->f_inode;
 	FAR struct audio_upperhalf_s *upper = inode->i_private;
-	int ret;
+	int ret = OK;
 
 	audvdbg("crefs: %d\n", upper->crefs);
 
@@ -237,9 +242,8 @@ static int audio_close(FAR struct file *filep)
 		DEBUGASSERT(lower->ops->shutdown != NULL);
 		audvdbg("calling shutdown: %d\n");
 
-		lower->ops->shutdown(lower);
+		ret = lower->ops->shutdown(lower);
 	}
-	ret = OK;
 
 //errout_with_sem:
 	sem_post(&upper->exclsem);
@@ -286,7 +290,6 @@ static ssize_t audio_write(FAR struct file *filep, FAR const char *buffer, size_
 	FAR struct inode *inode = filep->f_inode;
 	FAR struct audio_upperhalf_s *upper = inode->i_private;
 	FAR struct audio_lowerhalf_s *lower = upper->dev;
-
 	/* TODO: Should we check permissions here? */
 
 	/* Audio write operations get passed directly to the lower-level */
@@ -312,10 +315,18 @@ static int audio_start(FAR struct audio_upperhalf_s *upper, FAR void *session)
 static int audio_start(FAR struct audio_upperhalf_s *upper)
 #endif
 {
-	FAR struct audio_lowerhalf_s *lower = upper->dev;
-	int ret = OK;
 
-	DEBUGASSERT(upper != NULL && lower->ops->start != NULL);
+	if (!upper) {
+		return -EINVAL;
+	}
+
+	FAR struct audio_lowerhalf_s *lower = upper->dev;
+
+	if (lower->ops->start == NULL) {
+		return -ENOSYS;
+	}
+
+	int ret = OK;
 
 	/* Verify that the Audio is not already running */
 
@@ -379,40 +390,55 @@ static int audio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 	 */
 
 	case AUDIOIOC_GETCAPS: {
-		FAR struct audio_caps_s *caps = (FAR struct audio_caps_s *)((uintptr_t) arg);
-		DEBUGASSERT(lower->ops->getcaps != NULL);
 
-		audvdbg("AUDIOIOC_GETCAPS: Device=%d\n", caps->ac_type);
+		if (lower->ops->getcaps != NULL) {
 
-		/* Call the lower-half driver capabilities handler */
+			FAR struct audio_caps_s *caps = (FAR struct audio_caps_s *)((uintptr_t) arg);
 
-		ret = lower->ops->getcaps(lower, caps->ac_type, caps);
+			audvdbg("AUDIOIOC_GETCAPS: Device=%d\n", caps->ac_type);
+
+
+			/* Call the lower-half driver capabilities handler */
+
+			ret = lower->ops->getcaps(lower, caps->ac_type, caps);
+		} else {
+			ret = -ENOSYS;
+		}
 	}
 	break;
 
 	case AUDIOIOC_CONFIGURE: {
-		FAR const struct audio_caps_desc_s *caps = (FAR const struct audio_caps_desc_s *)((uintptr_t) arg);
-		DEBUGASSERT(lower->ops->configure != NULL);
 
-		audvdbg("AUDIOIOC_INITIALIZE: Device=%d\n", caps->caps.ac_type);
+		if (lower->ops->configure != NULL) {
 
-		/* Call the lower-half driver configure handler */
+			FAR const struct audio_caps_desc_s *caps = (FAR const struct audio_caps_desc_s *)((uintptr_t) arg);
+
+			audvdbg("AUDIOIOC_CONFIGURE: Device=%d\n", caps->caps.ac_type);
+
+			/* Call the lower-half driver configure handler */
 
 #ifdef CONFIG_AUDIO_MULTI_SESSION
-		ret = lower->ops->configure(lower, caps->session, &caps->caps);
+			ret = lower->ops->configure(lower, caps->session, &caps->caps);
 #else
-		ret = lower->ops->configure(lower, &caps->caps);
+			ret = lower->ops->configure(lower, &caps->caps);
 #endif
+		} else {
+			ret = -ENOSYS;
+		}
 	}
 	break;
 
 	case AUDIOIOC_SHUTDOWN: {
-		DEBUGASSERT(lower->ops->shutdown != NULL);
 
-		audvdbg("AUDIOIOC_SHUTDOWN\n");
+		if (lower->ops->shutdown != NULL) {
 
-		/* Call the lower-half driver initialize handler */
-		ret = lower->ops->shutdown(lower);
+			audvdbg("AUDIOIOC_SHUTDOWN\n");
+
+			/* Call the lower-half driver initialize handler */
+			ret = lower->ops->shutdown(lower);
+		} else {
+			ret = -ENOSYS;
+		}
 	}
 	break;
 
@@ -423,61 +449,73 @@ static int audio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 	 */
 
 	case AUDIOIOC_START: {
-		audvdbg("AUDIOIOC_START\n");
-		DEBUGASSERT(lower->ops->start != NULL);
 
-		/* Start the audio stream */
+		if (lower->ops->start != NULL) {
+			audvdbg("AUDIOIOC_START\n");
+
+			/* Start the audio stream */
 
 #ifdef CONFIG_AUDIO_MULTI_SESSION
-		session = (FAR void *)arg;
-		ret = audio_start(upper, session);
+			session = (FAR void *)arg;
+			ret = audio_start(upper, session);
 #else
-		ret = audio_start(upper);
+			ret = audio_start(upper);
 #endif
+		} else {
+			ret = -ENOSYS;
+		}
 	}
 	break;
 
-		/* AUDIOIOC_STOP - Stop the audio stream.
-		 *
-		 *   ioctl argument:  Audio session
-		 */
+	/* AUDIOIOC_STOP - Stop the audio stream.
+	 *
+	 *   ioctl argument:  Audio session
+	 */
 
 #ifndef CONFIG_AUDIO_EXCLUDE_STOP
 	case AUDIOIOC_STOP: {
-		audvdbg("AUDIOIOC_STOP\n");
-		DEBUGASSERT(lower->ops->stop != NULL);
 
-		if (upper->started) {
+		if (lower->ops->stop != NULL) {
+			audvdbg("AUDIOIOC_STOP\n");
+
+			if (upper->started) {
 #ifdef CONFIG_AUDIO_MULTI_SESSION
-			session = (FAR void *)arg;
-			ret = lower->ops->stop(lower, session);
+				session = (FAR void *)arg;
+				ret = lower->ops->stop(lower, session);
 #else
-			ret = lower->ops->stop(lower);
+				ret = lower->ops->stop(lower);
 #endif
-			upper->started = false;
+				upper->started = false;
+			}
+		} else {
+			ret = -ENOSYS;
 		}
 	}
 	break;
 #endif							/* CONFIG_AUDIO_EXCLUDE_STOP */
 
-		/* AUDIOIOC_PAUSE - Pause the audio stream.
-		 *
-		 *   ioctl argument:  Audio session
-		 */
+	/* AUDIOIOC_PAUSE - Pause the audio stream.
+	 *
+	 *   ioctl argument:  Audio session
+	 */
 
 #ifndef CONFIG_AUDIO_EXCLUDE_PAUSE_RESUME
 
 	case AUDIOIOC_PAUSE: {
-		audvdbg("AUDIOIOC_PAUSE\n");
-		DEBUGASSERT(lower->ops->pause != NULL);
+		if (lower->ops->pause != NULL) {
 
-		if (upper->started) {
+			audvdbg("AUDIOIOC_PAUSE\n");
+
+			if (upper->started) {
 #ifdef CONFIG_AUDIO_MULTI_SESSION
-			session = (FAR void *)arg;
-			ret = lower->ops->pause(lower, session);
+				session = (FAR void *)arg;
+				ret = lower->ops->pause(lower, session);
 #else
-			ret = lower->ops->pause(lower);
+				ret = lower->ops->pause(lower);
 #endif
+			}
+		} else {
+			ret = -ENOSYS;
 		}
 	}
 	break;
@@ -488,16 +526,20 @@ static int audio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 	 */
 
 	case AUDIOIOC_RESUME: {
-		audvdbg("AUDIOIOC_RESUME\n");
-		DEBUGASSERT(lower->ops->resume != NULL);
 
-		if (upper->started) {
+		if (lower->ops->resume != NULL) {
+			audvdbg("AUDIOIOC_RESUME\n");
+
+			if (upper->started) {
 #ifdef CONFIG_AUDIO_MULTI_SESSION
-			session = (FAR void *)arg;
-			ret = lower->ops->resume(lower, session);
+				session = (FAR void *)arg;
+				ret = lower->ops->resume(lower, session);
 #else
-			ret = lower->ops->resume(lower);
+				ret = lower->ops->resume(lower);
 #endif
+			}
+		} else {
+			ret = -ENOSYS;
 		}
 	}
 	break;
@@ -550,12 +592,14 @@ static int audio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 	 */
 
 	case AUDIOIOC_ENQUEUEBUFFER: {
-		audvdbg("AUDIOIOC_ENQUEUEBUFFER\n");
 
-		DEBUGASSERT(lower->ops->enqueuebuffer != NULL);
-
-		bufdesc = (FAR struct audio_buf_desc_s *)arg;
-		ret = lower->ops->enqueuebuffer(lower, bufdesc->u.pBuffer);
+		if (lower->ops->enqueuebuffer != NULL) {
+			audvdbg("AUDIOIOC_ENQUEUEBUFFER\n");
+			bufdesc = (FAR struct audio_buf_desc_s *)arg;
+			ret = lower->ops->enqueuebuffer(lower, bufdesc->u.pBuffer);
+		} else {
+			ret = -ENOSYS;
+		}
 	}
 	break;
 
@@ -592,16 +636,20 @@ static int audio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 	 */
 
 	case AUDIOIOC_RESERVE: {
-		audvdbg("AUDIOIOC_RESERVE\n");
-		DEBUGASSERT(lower->ops->reserve != NULL);
 
-		/* Call lower-half to perform the reservation */
+		if (lower->ops->reserve != NULL) {
+			audvdbg("AUDIOIOC_RESERVE\n");
+
+			/* Call lower-half to perform the reservation */
 
 #ifdef CONFIG_AUDIO_MULTI_SESSION
-		ret = lower->ops->reserve(lower, (FAR void **)arg);
+			ret = lower->ops->reserve(lower, (FAR void **)arg);
 #else
-		ret = lower->ops->reserve(lower);
+			ret = lower->ops->reserve(lower);
 #endif
+		} else {
+			ret = -ENOSYS;
+		}
 	}
 	break;
 
@@ -611,25 +659,31 @@ static int audio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 	 */
 
 	case AUDIOIOC_RELEASE: {
-		audvdbg("AUDIOIOC_RELEASE\n");
-		DEBUGASSERT(lower->ops->release != NULL);
+		if (lower->ops->release != NULL) {
+			audvdbg("AUDIOIOC_RELEASE\n");
 
-		/* Call lower-half to perform the release */
+			/* Call lower-half to perform the release */
 
 #ifdef CONFIG_AUDIO_MULTI_SESSION
-		ret = lower->ops->release(lower, (FAR void *)arg);
+			ret = lower->ops->release(lower, (FAR void *)arg);
 #else
-		ret = lower->ops->release(lower);
+			ret = lower->ops->release(lower);
 #endif
+		} else {
+			ret = -ENOSYS;
+		}
 	}
 	break;
 
 	/* Any unrecognized IOCTL commands might be platform-specific ioctl commands */
 
 	default: {
-		audvdbg("Forwarding unrecognized cmd: %d arg: %ld\n", cmd, arg);
-		DEBUGASSERT(lower->ops->ioctl != NULL);
-		ret = lower->ops->ioctl(lower, cmd, arg);
+		if (lower->ops->ioctl != NULL) {
+			audvdbg("Forwarding unrecognized cmd: %d arg: %ld\n", cmd, arg);
+			ret = lower->ops->ioctl(lower, cmd, arg);
+		} else {
+			ret = -ENOSYS;
+		}
 	}
 	break;
 	}
@@ -690,6 +744,40 @@ static inline void audio_dequeuebuffer(FAR struct audio_upperhalf_s *upper, FAR 
 #endif
 		apb->flags |= AUDIO_APB_DEQUEUED;
 		mq_send(upper->usermq, (FAR const char *)&msg, sizeof(msg), CONFIG_AUDIO_BUFFER_DEQUEUE_PRIO);
+	}
+}
+
+/****************************************************************************
+ * Name: audio_error_handler
+ *
+ * Description:
+ *   Send an AUDIO_MSG_IOERR message to the client to indicate that the
+ *   an error has occured.  The lower-half driver initiates this
+ *   call via its callback pointer to our upper-half driver.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_AUDIO_MULTI_SESSION
+static inline void audio_error_handler(FAR struct audio_upperhalf_s *upper, FAR struct ap_buffer_s *apb, uint16_t status, FAR void *session)
+#else
+static inline void audio_error_handler(FAR struct audio_upperhalf_s *upper, FAR struct ap_buffer_s *apb, uint16_t status)
+#endif
+{
+	struct audio_msg_s msg;
+
+	/* Send a error message to the user if a message queue is registered */
+
+	upper->started = false;
+	if (upper->usermq != NULL) {
+		/* We are always sending XRUN error msg since it is the
+		only type of error that we handle now. If new error scenario
+		is required, then we need to handle here */
+		msg.msgId = AUDIO_MSG_XRUN;
+		msg.u.pPtr = NULL;
+#ifdef CONFIG_AUDIO_MULTI_SESSION
+		msg.session = session;
+#endif
+		mq_send(upper->usermq, (FAR const char *)&msg, sizeof(msg), MQ_PRIO_MAX);
 	}
 }
 
@@ -774,6 +862,11 @@ static void audio_callback(FAR void *handle, uint16_t reason, FAR struct ap_buff
 	/* Lower-half I/O error occurred */
 
 	case AUDIO_CALLBACK_IOERR: {
+#ifdef CONFIG_AUDIO_MULTI_SESSION
+		audio_error_handler(upper, apb, status, session);
+#else
+		audio_error_handler(upper, apb, status);
+#endif
 	}
 	break;
 
@@ -833,10 +926,12 @@ int audio_register(FAR const char *name, FAR struct audio_lowerhalf_s *dev)
 	static bool dev_audio_created = false;
 #ifndef CONFIG_AUDIO_CUSTOM_DEV_PATH
 	FAR const char *devname = "/dev/audio";
+	int ret;
 #elif !defined(CONFIG_AUDIO_DEV_ROOT)
 	FAR const char *devname = CONFIG_AUDIO_DEV_PATH;
 	FAR const char *ptr;
 	FAR char *pathptr;
+	int ret;
 #endif
 
 	/* Allocate the upper-half data structure */
@@ -893,7 +988,12 @@ int audio_register(FAR const char *name, FAR struct audio_lowerhalf_s *dev)
 
 			/* Make this level of directory */
 
-			mkdir(path, 0644);
+			ret = mkdir(path, 0644);
+			if (ret < 0) {
+				auddbg("ERROR: mkdir failed\n");
+				kmm_free(upper);
+				return ret;
+			}
 
 			/* Check for another level */
 
@@ -929,15 +1029,20 @@ int audio_register(FAR const char *name, FAR struct audio_lowerhalf_s *dev)
 		 * for us.
 		 */
 
-		mkdir(devname, 0644);
+		ret = mkdir(devname, 0644);
+		if (ret < 0) {
+			auddbg("ERROR: mkdir failed\n");
+			kmm_free(upper);
+			return ret;
+		}
 		dev_audio_created = true;
 	}
 
 	/* Register the Audio device */
 
 	memset(path, 0, AUDIO_MAX_DEVICE_PATH);
-	strcpy(path, devname);
-	strcat(path, "/");
+	strncpy(path, devname, sizeof(path));
+	strncat(path, "/", strlen("/"));
 	strncat(path, name, AUDIO_MAX_DEVICE_PATH - 11);
 #endif
 

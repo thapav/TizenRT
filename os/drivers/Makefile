@@ -62,27 +62,41 @@ ASRCS =
 CSRCS =
 VPATH = .
 
+ifeq ($(CONFIG_TASK_MANAGER),y)
+CFLAGS += -I $(TOPDIR)/kernel
+endif
+
 # Include support for various drivers.  Each Make.defs file will add its
 # files to the source file list, add its DEPPATH info, and will add
 # the appropriate paths to the VPATH variable
 
 include analog$(DELIM)Make.defs
-include bch$(DELIM)Make.defs
-include i2c$(DELIM)Make.defs
 include audio$(DELIM)Make.defs
+include bch$(DELIM)Make.defs
+include cpuload$(DELIM)Make.defs
+include fota$(DELIM)Make.defs
+include gpio$(DELIM)Make.defs
+include heapinfo$(DELIM)Make.defs
+include i2c$(DELIM)Make.defs
+include iotdev$(DELIM)Make.defs
+include kernel_test$(DELIM)Make.defs
+include lcd$(DELIM)Make.defs
+include lwnl${DELIM}Make.defs
 include net$(DELIM)Make.defs
+include otp$(DELIM)Make.defs
 include pipes$(DELIM)Make.defs
 include power$(DELIM)Make.defs
+include seclink$(DELIM)Make.defs
+include sensors$(DELIM)Make.defs
 include serial$(DELIM)Make.defs
 include spi$(DELIM)Make.defs
 include syslog$(DELIM)Make.defs
+include task_manager$(DELIM)Make.defs
+include ttrace$(DELIM)Make.defs
 include usbdev$(DELIM)Make.defs
 include usbhost$(DELIM)Make.defs
-include gpio$(DELIM)Make.defs
-include fota$(DELIM)Make.defs
-include ttrace$(DELIM)Make.defs
+include video$(DELIM)Make.defs
 include wireless$(DELIM)Make.defs
-include sensors$(DELIM)Make.defs
 
 ifneq ($(CONFIG_NFILE_DESCRIPTORS),0)
   CSRCS += dev_null.c dev_zero.c
@@ -100,6 +114,10 @@ endif
 
 ifeq ($(CONFIG_CAN),y)
   CSRCS += can.c
+endif
+
+ifeq ($(CONFIG_DEV_URANDOM),y)
+  CSRCS += dev_urandom.c
 endif
 
 ifeq ($(CONFIG_PWM),y)

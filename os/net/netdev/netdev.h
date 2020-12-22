@@ -64,7 +64,7 @@
 
 #include <tinyara/net/ip.h>
 
-#include <net/lwip/netif.h>
+#include "lwip/netif.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -179,6 +179,12 @@ void netdev_ipv6_rxnotify(FAR const net_ipv6addr_t ripaddr);
 
 #if CONFIG_NSOCKET_DESCRIPTORS > 0
 int netdev_count(void);
+#endif
+
+/* netdev_getstats.c *******************************************************/
+
+#if CONFIG_NSOCKET_DESCRIPTORS > 0 && defined(CONFIG_NET_STATS)
+int netdev_getstats(void *arg);
 #endif
 
 #undef EXTERN

@@ -31,12 +31,12 @@
 #include <debug.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
 
-#include <include/iotbus/iotbus_gpio.h>
-#include <include/iotbus/iotbus_error.h>
+#include <tinyara/iotbus_sig.h>
+#include <iotbus/iotbus_gpio.h>
+#include <iotbus/iotbus_error.h>
 #include "iotapi_evt_handler.h"
-
-#define zdbg printf
 
 /**
  * @brief Struct for iotbus_gpio_s
@@ -48,18 +48,37 @@ struct _iotbus_gpio_s {
 	iotbus_gpio_edge_e edge;
 	int fd;
 	gpio_isr_cb isr_cb;
+	iotbus_gpio_cb cb;
 	void *ud;
+};
+
+struct _iotbus_gpio_wrapper_s {
+	struct _iotbus_gpio_s *handle;
 };
 
 #ifdef __cplusplus
 extern "C" {
-#else
 #endif
+
+static iotbus_error_e iotbus_gpio_get_errno(void)
+{
+	switch (errno) {
+	case EPERM:
+		ibdbg("unsupported command \n");
+		return IOTBUS_ERROR_NOT_SUPPORTED;
+	case EINVAL:
+		ibdbg("invalid parameter \n");
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	default:
+		ibdbg("ioctl failed \n");
+		return IOTBUS_ERROR_UNKNOWN;
+	}
+}
 
 void gpio_async_handler(void *data)
 {
-	struct _iotbus_gpio_s *item = (struct _iotbus_gpio_s *)data;
-	item->isr_cb(item->ud);
+	struct _iotbus_gpio_s *handle = (struct _iotbus_gpio_s *)data;
+	handle->isr_cb(handle->ud);
 
 	return;
 }
@@ -69,29 +88,45 @@ void gpio_async_handler(void *data)
  */
 iotbus_gpio_context_h iotbus_gpio_open(int gpiopin)
 {
-	struct _iotbus_gpio_s *dev = NULL;
-	dev = (struct _iotbus_gpio_s *)malloc(sizeof(struct _iotbus_gpio_s));
-
-	if (dev == NULL) {
-		zdbg("malloc failed: %d\n", errno);
-		return NULL;
-	}
+	int fd;
 	char gpio_dev[16] = { 0, };
+	struct _iotbus_gpio_s *handle;
+	iotbus_gpio_context_h dev;
+
 	snprintf(gpio_dev, 16, "/dev/gpio%d", gpiopin);
 
-	dev->fd = open(gpio_dev, O_RDWR);
-	if (dev->fd < 0) {
-		zdbg("open %s failed: %d\n", gpio_dev, errno);
-		free(dev);
+	fd = open(gpio_dev, O_RDWR);
+	if (fd < 0) {
+		ibdbg("open %s failed: %d\n", gpio_dev, errno);
 		return NULL;
 	}
-	dev->pin = gpiopin;
-	dev->drive = IOTBUS_GPIO_DRIVE_PULLUP;
-	dev->dir = IOTBUS_GPIO_DIRECTION_OUT;
-	dev->edge = IOTBUS_GPIO_EDGE_NONE;
-	dev->isr_cb = NULL;
+
+	handle = (struct _iotbus_gpio_s *)malloc(sizeof(struct _iotbus_gpio_s));
+	if (!handle) {
+		goto errout_with_close;
+	}
+
+	dev = (struct _iotbus_gpio_wrapper_s *)malloc(sizeof(struct _iotbus_gpio_wrapper_s));
+	if (!dev) {
+		free(handle);
+		goto errout_with_close;
+	}
+
+	handle->pin = gpiopin;
+	handle->drive = IOTBUS_GPIO_DRIVE_FLOAT;
+	handle->dir = IOTBUS_GPIO_DIRECTION_OUT;
+	handle->edge = IOTBUS_GPIO_EDGE_NONE;
+	handle->fd = fd;
+	handle->isr_cb = NULL;
+	handle->cb = NULL;
+
+	dev->handle = handle;
 
 	return dev;
+
+errout_with_close:
+	close(fd);
+	return NULL;
 }
 
 /**
@@ -99,17 +134,26 @@ iotbus_gpio_context_h iotbus_gpio_open(int gpiopin)
  */
 int iotbus_gpio_close(iotbus_gpio_context_h dev)
 {
-	if (!dev)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
+	struct _iotbus_gpio_s *handle;
 
-	if (dev->isr_cb != NULL) {
-		int ret = iotbus_gpio_unregister_cb(dev);
-		if (ret != IOTBUS_ERROR_NONE)
-			return ret;
+	if (!dev || !dev->handle) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
 	}
 
-	close(dev->fd);
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+
+	if (handle->isr_cb != NULL) {
+		int ret = iotbus_gpio_unregister_cb(dev);
+		if (ret != IOTBUS_ERROR_NONE) {
+			return ret;
+		}
+	}
+
+	close(handle->fd);
+	free(handle);
+	dev->handle = NULL;
 	free(dev);
+
 	return IOTBUS_ERROR_NONE;
 }
 
@@ -119,41 +163,82 @@ int iotbus_gpio_close(iotbus_gpio_context_h dev)
 int iotbus_gpio_set_direction(iotbus_gpio_context_h dev, iotbus_gpio_direction_e dir)
 {
 	int ret = -1;
+	struct _iotbus_gpio_s *handle;
 
-	if (!dev)
+	if (!dev || !dev->handle) {
 		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
 
-	dev->dir = dir;
-	switch (dev->dir) {
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+
+	switch (dir) {
 	case IOTBUS_GPIO_DIRECTION_IN:
-		ret = ioctl(dev->fd, GPIOIOC_SET_DIRECTION, GPIO_DIRECTION_IN);
+		ret = ioctl(handle->fd, GPIOIOC_SET_DIRECTION, GPIO_DIRECTION_IN);
 		break;
 	case IOTBUS_GPIO_DIRECTION_OUT:
-		ret = ioctl(dev->fd, GPIOIOC_SET_DIRECTION, GPIO_DIRECTION_OUT);
+		ret = ioctl(handle->fd, GPIOIOC_SET_DIRECTION, GPIO_DIRECTION_OUT);
 		break;
 	case IOTBUS_GPIO_DIRECTION_NONE:
-		ret = ioctl(dev->fd, GPIOIOC_SET_DIRECTION, GPIO_DIRECTION_NONE);
-				break;
+		ret = ioctl(handle->fd, GPIOIOC_SET_DIRECTION, GPIO_DIRECTION_NONE);
+		break;
 	default:
 		return IOTBUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (ret != 0) {
-		switch (errno) {
-		case EPERM:
-			zdbg("unsupported command \n");
-			return IOTBUS_ERROR_NOT_SUPPORTED;
-		case EINVAL:
-			zdbg("invalid parameter \n");
-			return IOTBUS_ERROR_INVALID_PARAMETER;
-		default:
-			zdbg("ioctl failed \n");
-			return IOTBUS_ERROR_UNKNOWN;
-		}
+		return iotbus_gpio_get_errno();
 	}
+
+	handle->dir = dir;
 
 	return IOTBUS_ERROR_NONE;
 }
+
+/**
+ * @brief Registers signal for current process based on rising or falling edge on the gpio line
+ */
+#ifndef CONFIG_DISABLE_SIGNALS
+int iotbus_gpio_register_signal(iotbus_gpio_context_h dev, iotbus_gpio_edge_e edge)
+{
+	int ret = -1;
+	struct _iotbus_gpio_s *handle;
+	FAR struct gpio_notify_s notify;
+
+	if (!dev || !dev->handle) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
+
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+
+	switch (edge) {
+	case IOTBUS_GPIO_EDGE_NONE:
+		notify.gn_rising = false;
+		notify.gn_falling = false;
+		break;
+	case IOTBUS_GPIO_EDGE_BOTH:
+		notify.gn_rising  = true;
+		notify.gn_falling = true;
+		break;
+	case IOTBUS_GPIO_EDGE_RISING:
+		notify.gn_rising  = true;
+		notify.gn_falling = false;
+		break;
+	case IOTBUS_GPIO_EDGE_FALLING:
+		notify.gn_rising  = false;
+		notify.gn_falling = true;
+		break;
+	default:
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
+
+	notify.gn_signo = SIGUSR1;
+	ret = ioctl(handle->fd, GPIOIOC_REGISTER, (unsigned long)&notify);
+	if (ret != 0) {
+		return iotbus_gpio_get_errno();
+	}
+	return IOTBUS_ERROR_NONE;
+}
+#endif
 
 /**
  * @brief Sets the edge mode on the Gpio.
@@ -161,10 +246,14 @@ int iotbus_gpio_set_direction(iotbus_gpio_context_h dev, iotbus_gpio_direction_e
 int iotbus_gpio_set_edge_mode(iotbus_gpio_context_h dev, iotbus_gpio_edge_e edge)
 {
 	int ret = -1;
+	struct _iotbus_gpio_s *handle;
 	struct gpio_pollevents_s pollevents;
 
-	if (!dev)
+	if (!dev || !dev->handle) {
 		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
+
+	handle = (struct _iotbus_gpio_s *)dev->handle;
 
 	switch (edge) {
 	case IOTBUS_GPIO_EDGE_NONE:
@@ -187,22 +276,12 @@ int iotbus_gpio_set_edge_mode(iotbus_gpio_context_h dev, iotbus_gpio_edge_e edge
 		return IOTBUS_ERROR_INVALID_PARAMETER;
 	}
 
-	ret = ioctl(dev->fd, GPIOIOC_POLLEVENTS, (unsigned long)&pollevents);
+	ret = ioctl(handle->fd, GPIOIOC_POLLEVENTS, (unsigned long)&pollevents);
 	if (ret != 0) {
-		switch (errno) {
-		case EPERM:
-			zdbg("unsupported command \n");
-			return IOTBUS_ERROR_NOT_SUPPORTED;
-		case EINVAL:
-			zdbg("invalid parameter \n");
-			return IOTBUS_ERROR_INVALID_PARAMETER;
-		default:
-			zdbg("ioctl failed \n");
-			return IOTBUS_ERROR_UNKNOWN;
-		}
+		return iotbus_gpio_get_errno();
 	}
 
-	dev->edge = edge;
+	handle->edge = edge;
 
 	return IOTBUS_ERROR_NONE;
 }
@@ -213,40 +292,31 @@ int iotbus_gpio_set_edge_mode(iotbus_gpio_context_h dev, iotbus_gpio_edge_e edge
 int iotbus_gpio_set_drive_mode(iotbus_gpio_context_h dev, iotbus_gpio_drive_e drive)
 {
 	int ret = -1;
+	struct _iotbus_gpio_s *handle;
 
-	if (!dev)
+	if (!dev || !dev->handle) {
 		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
 
-	dev->drive = drive;
+	handle = (struct _iotbus_gpio_s *)dev->handle;
 
-	switch (dev->drive) {
-	case IOTBUS_GPIO_DRIVE_PULLUP:{
-			ret = ioctl(dev->fd, GPIOIOC_SET_DRIVE, (unsigned long)GPIO_DRIVE_PULLUP);
-			break;
-		}
-	case IOTBUS_GPIO_DRIVE_PULLDOWN:{
-			ret = ioctl(dev->fd, GPIOIOC_SET_DRIVE, (unsigned long)GPIO_DRIVE_PULLDOWN);
-			break;
-		}
-	case IOTBUS_GPIO_DRIVE_FLOAT:{
-			ret = ioctl(dev->fd, GPIOIOC_SET_DRIVE, (unsigned long)GPIO_DRIVE_FLOAT);
-			break;
-		}
+	switch (drive) {
+	case IOTBUS_GPIO_DRIVE_PULLUP:
+		ret = ioctl(handle->fd, GPIOIOC_SET_DRIVE, (unsigned long)GPIO_DRIVE_PULLUP);
+		break;
+	case IOTBUS_GPIO_DRIVE_PULLDOWN:
+		ret = ioctl(handle->fd, GPIOIOC_SET_DRIVE, (unsigned long)GPIO_DRIVE_PULLDOWN);
+		break;
+	case IOTBUS_GPIO_DRIVE_FLOAT:
+		ret = ioctl(handle->fd, GPIOIOC_SET_DRIVE, (unsigned long)GPIO_DRIVE_FLOAT);
+		break;
 	}
 
 	if (ret != 0) {
-		switch (errno) {
-		case EPERM:
-			zdbg("unsupported command \n");
-			return IOTBUS_ERROR_NOT_SUPPORTED;
-		case EINVAL:
-			zdbg("invalid parameter \n");
-			return IOTBUS_ERROR_INVALID_PARAMETER;
-		default:
-			zdbg("ioctl failed \n");
-			return IOTBUS_ERROR_UNKNOWN;
-		}
+		return iotbus_gpio_get_errno();
 	}
+
+	handle->drive = drive;
 
 	return IOTBUS_ERROR_NONE;
 }
@@ -256,19 +326,25 @@ int iotbus_gpio_set_drive_mode(iotbus_gpio_context_h dev, iotbus_gpio_drive_e dr
  */
 int iotbus_gpio_register_cb(iotbus_gpio_context_h dev, iotbus_gpio_edge_e edge, gpio_isr_cb isr_cb, void *user_data)
 {
-	int ret = iotbus_gpio_set_edge_mode(dev, edge);
-	if (ret != IOTBUS_ERROR_NONE)
-		return ret;
-	if (isr_cb == NULL || user_data == NULL)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
-
-	struct _iotbus_gpio_s *item = (struct _iotbus_gpio_s *)dev;
+	int ret = -1;
 	iotapi_elem elm;
+	struct _iotbus_gpio_s *handle;
 
-	item->ud = user_data;
-	item->isr_cb = isr_cb;
-	elm.fd = dev->fd;
-	elm.data = item;
+	if (isr_cb == NULL) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
+
+	ret = iotbus_gpio_set_edge_mode(dev, edge);
+	if (ret != IOTBUS_ERROR_NONE) {
+		return ret;
+	}
+
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+
+	handle->ud = user_data;
+	handle->isr_cb = isr_cb;
+	elm.fd = handle->fd;
+	elm.data = handle;
 	elm.func = gpio_async_handler;
 
 	iotapi_insert(&elm);
@@ -281,36 +357,135 @@ int iotbus_gpio_register_cb(iotbus_gpio_context_h dev, iotbus_gpio_edge_e edge, 
  */
 int iotbus_gpio_unregister_cb(iotbus_gpio_context_h dev)
 {
-	if (dev == NULL)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
 	iotapi_elem elm;
-	struct _iotbus_gpio_s *item = (struct _iotbus_gpio_s *)dev;
-	elm.fd = item->fd;
+	struct _iotbus_gpio_s *handle;
+
+	if (!dev || !dev->handle) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
+
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+	elm.fd = handle->fd;
 
 	iotapi_remove(&elm);
 
-	item->isr_cb = NULL;
-	item->ud = NULL;
+	handle->isr_cb = NULL;
+	handle->ud = NULL;
 
 	return IOTBUS_ERROR_NONE;
 }
+
+#ifdef CONFIG_IOTDEV
+int iotbus_gpio_set_interrupt(iotbus_gpio_context_h dev, iotbus_int_type_e int_type, iotbus_gpio_cb cb)
+{
+	int fd, ret, edge;
+	struct _iotbus_gpio_s *handle;
+	struct iotbus_int_info_s info = { 0, };
+
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+	handle->cb = cb;
+
+	info.handle = dev;
+	info.pin_type = IOTBUS_GPIO;
+	info.int_type = int_type;
+	info.pid = iotapi_get_pid();
+	
+	fd = open(IOTBUS_SIGPATH, O_NONBLOCK);
+	if (fd < 0) {
+		ret = get_errno();
+		ibdbg("Open iotsig fail[%d, %d]\n", fd, ret);
+		return IOTBUS_ERROR_DEVICE_FAIL;
+	}
+
+	if (int_type == IOTBUS_GPIO_FALLING) {
+		edge = GPIO_EDGE_FALLING;
+	} else if (int_type == IOTBUS_GPIO_RISING) {
+		edge = GPIO_EDGE_RISING;
+	} else {
+		edge = GPIO_EDGE_NONE;
+	}
+
+	ret = ioctl(fd, IOTBUS_INTR_REGISTER, (unsigned long)&info);
+	if (ret < 0) {
+		ibdbg("Fail to register %d\n", int_type);
+		close(fd);
+		return IOTBUS_ERROR_DEVICE_FAIL;
+	}
+	ret = ioctl(handle->fd, GPIOIOC_SET_INTERRUPT, edge);
+	if (ret < 0) {
+		ibdbg("Fail to set %d\n", int_type);
+		close(fd);
+		return IOTBUS_ERROR_DEVICE_FAIL;
+	}
+	
+	close(fd);
+	return IOTBUS_ERROR_NONE;
+}
+
+int iotbus_gpio_unset_interrupt(iotbus_gpio_context_h dev, iotbus_int_type_e int_type)
+{
+	int fd, ret;
+	struct _iotbus_gpio_s *handle;
+	struct iotbus_int_info_s info = { 0, };
+
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+
+	info.handle = dev;
+	info.pin_type = IOTBUS_GPIO;
+	info.int_type = int_type;
+	
+	fd = open(IOTBUS_SIGPATH, O_NONBLOCK);
+	if (fd < 0) {
+		ibdbg("Open iotsig fail[%d, %d]\n", fd, get_errno());
+		return IOTBUS_ERROR_DEVICE_FAIL;
+	}
+
+	ret = ioctl(handle->fd, GPIOIOC_SET_INTERRUPT, GPIO_EDGE_NONE);
+	if (ret < 0) {
+		ibdbg("Fail to unset intterupt\n");
+		close(fd);
+		return IOTBUS_ERROR_DEVICE_FAIL;
+	}
+	ret = ioctl(fd, IOTBUS_INTR_UNREGISTER, (unsigned long)&info);
+	if (ret < 0) {
+		ibdbg("Fail to unregister %d\n", int_type);
+		close(fd);
+		return IOTBUS_ERROR_DEVICE_FAIL;
+	}
+	
+	close(fd);
+	return IOTBUS_ERROR_NONE;
+}
+
+void *iotbus_gpio_get_callback(iotbus_gpio_context_h dev)
+{
+	return (void *)dev->handle->cb;
+}
+#endif
 
 /**
  * @brief Reads the gpio value.
  */
 int iotbus_gpio_read(iotbus_gpio_context_h dev)
 {
+	int ret = -1;
 	char buf[4];
+	struct _iotbus_gpio_s *handle;
 
-	if (!dev)
+	if (!dev || !dev->handle) {
 		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
 
-	int ret = read(dev->fd, buf, sizeof(buf));
-	if (ret < 0)
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+
+	ret = read(handle->fd, buf, sizeof(buf));
+	if (ret < 0) {
 		return IOTBUS_ERROR_UNKNOWN;
-	ret = lseek(dev->fd, 0, SEEK_SET);
-	if (ret < 0)
+	}
+	ret = lseek(handle->fd, 0, SEEK_SET);
+	if (ret < 0) {
 		return IOTBUS_ERROR_UNKNOWN;
+	}
 
 	return buf[0] == '1';
 }
@@ -322,17 +497,21 @@ int iotbus_gpio_write(iotbus_gpio_context_h dev, int value)
 {
 	int ret;
 	char buf[4];
+	struct _iotbus_gpio_s *handle;
 
-	if (!dev)
+	if (!dev || !dev->handle) {
 		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
 
-	if (value != 0 && value != 1)
+	if (value != IOTBUS_GPIO_LOW && value != IOTBUS_GPIO_HIGH) {
 		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
 
-	ret = write(dev->fd, buf, snprintf(buf, sizeof(buf), "%d", !!value));
-
-	if (ret < 0)
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+	ret = write(handle->fd, buf, snprintf(buf, sizeof(buf), "%d", !!value));
+	if (ret < 0) {
 		return IOTBUS_ERROR_UNKNOWN;
+	}
 
 	return IOTBUS_ERROR_NONE;
 }
@@ -342,10 +521,14 @@ int iotbus_gpio_write(iotbus_gpio_context_h dev, int value)
  */
 int iotbus_gpio_get_direction(iotbus_gpio_context_h dev, iotbus_gpio_direction_e * dir)
 {
-	if (!dev)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
+	struct _iotbus_gpio_s *handle;
 
-	*dir = dev->dir;
+	if (!dev || !dev->handle) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
+
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+	*dir = handle->dir;
 
 	return IOTBUS_ERROR_NONE;
 }
@@ -355,10 +538,14 @@ int iotbus_gpio_get_direction(iotbus_gpio_context_h dev, iotbus_gpio_direction_e
  */
 int iotbus_gpio_get_pin(iotbus_gpio_context_h dev)
 {
-	if (!dev)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
+	struct _iotbus_gpio_s *handle;
 
-	return dev->pin;
+	if (!dev || !dev->handle) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
+
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+	return handle->pin;
 }
 
 /**
@@ -366,10 +553,14 @@ int iotbus_gpio_get_pin(iotbus_gpio_context_h dev)
  */
 int iotbus_gpio_get_edge_mode(iotbus_gpio_context_h dev, iotbus_gpio_edge_e * edge)
 {
-	if (!dev)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
+	struct _iotbus_gpio_s *handle;
 
-	*edge = dev->edge;
+	if (!dev || !dev->handle) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
+
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+	*edge = handle->edge;
 
 	return IOTBUS_ERROR_NONE;
 }
@@ -379,10 +570,14 @@ int iotbus_gpio_get_edge_mode(iotbus_gpio_context_h dev, iotbus_gpio_edge_e * ed
  */
 int iotbus_gpio_get_drive_mode(iotbus_gpio_context_h dev, iotbus_gpio_drive_e * drive)
 {
-	if (!dev)
-		return IOTBUS_ERROR_INVALID_PARAMETER;
+	struct _iotbus_gpio_s *handle;
 
-	*drive = dev->drive;
+	if (!dev || !dev->handle) {
+		return IOTBUS_ERROR_INVALID_PARAMETER;
+	}
+
+	handle = (struct _iotbus_gpio_s *)dev->handle;
+	*drive = handle->drive;
 
 	return IOTBUS_ERROR_NONE;
 }

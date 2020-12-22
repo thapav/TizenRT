@@ -56,6 +56,7 @@
 
 #include <tinyara/config.h>
 
+#include <sys/types.h>
 #include <pthread.h>
 #include <string.h>
 #include <debug.h>
@@ -120,7 +121,7 @@ int pthread_attr_init(FAR pthread_attr_t *attr)
 {
 	int ret = OK;
 
-	sdbg("attr=0x%p\n", attr);
+	svdbg("attr=0x%p\n", attr);
 	if (!attr) {
 		ret = ENOMEM;
 	} else {
@@ -132,6 +133,6 @@ int pthread_attr_init(FAR pthread_attr_t *attr)
 		memcpy(attr, &g_default_pthread_attr, sizeof(pthread_attr_t));
 	}
 
-	sdbg("Returning %d\n", ret);
+	svdbg("Returning %d\n", ret);
 	return ret;
 }

@@ -86,11 +86,11 @@
 #include <tinyara/sched.h>
 
 #ifdef CONFIG_NET_LWIP
-#include <net/lwip/pbuf.h>
-#include <net/lwip/opt.h>
-#include <net/lwip/netif.h>
-#include <net/lwip/tcpip.h>
-#include <net/lwip/ipv4/ip.h>
+#include "lwip/pbuf.h"
+#include "lwip/opt.h"
+#include "lwip/netif.h"
+#include "lwip/tcpip.h"
+#include "lwip/ipv4/ip.h"
 #define net_driver_s netif
 #endif
 
@@ -719,8 +719,8 @@ static void enc_wrbreg(FAR struct enc_driver_s *priv, uint8_t ctrlreg, uint8_t w
 
 static int enc_waitbreg(FAR struct enc_driver_s *priv, uint8_t ctrlreg, uint8_t bits, uint8_t value)
 {
-	systime_t start = clock_systimer();
-	systime_t elapsed;
+	clock_t start = clock_systimer();
+	clock_t elapsed;
 	uint8_t rddata;
 
 	/* Loop until the exit condition is met */
@@ -1523,14 +1523,13 @@ static void enc_pktif(FAR struct enc_driver_s *priv)
 static void enc_irqworker(FAR void *arg)
 {
 	FAR struct enc_driver_s *priv = (FAR struct enc_driver_s *)arg;
-	//net_lock_t lock;
 	uint8_t eir;
 	//nlldbg("Entry\n");
 	DEBUGASSERT(priv);
 
 	/* Get exclusive access to both the network and the SPI bus. */
 
-	//lock = net_lock();
+	//net_lock();
 	enc_lock(priv);
 	//nlldbg("Lock Success\n");
 	/* Disable further interrupts by clearing the global interrupt enable bit.
@@ -1721,7 +1720,7 @@ static void enc_irqworker(FAR void *arg)
 
 	enc_unlock(priv);
 
-	//net_unlock(lock);
+	//net_unlock();
 }
 
 /****************************************************************************
@@ -1781,7 +1780,6 @@ static int enc_interrupt(int irq, FAR void *context, FAR void *arg)
 static void enc_toworker(FAR void *arg)
 {
 	FAR struct enc_driver_s *priv = (FAR struct enc_driver_s *)arg;
-	net_lock_t lock;
 	int ret;
 
 	//nlldbg("ERROR: Tx timeout\n");
@@ -1789,7 +1787,7 @@ static void enc_toworker(FAR void *arg)
 
 	/* Get exclusive access to the network */
 
-	lock = net_lock();
+	net_lock();
 
 	/* Increment statistics and dump debug info */
 
@@ -1813,7 +1811,7 @@ static void enc_toworker(FAR void *arg)
 
 	/* Release lock on the network */
 
-	net_unlock(lock);
+	net_unlock();
 }
 
 /****************************************************************************
@@ -1878,13 +1876,12 @@ static void enc_txtimeout(int argc, uint32_t arg, ...)
 static void enc_pollworker(FAR void *arg)
 {
 	FAR struct enc_driver_s *priv = (FAR struct enc_driver_s *)arg;
-	net_lock_t lock;
 
 	DEBUGASSERT(priv);
 
 	/* Get exclusive access to both the network and the SPI bus. */
 
-	lock = net_lock();
+	net_lock();
 	enc_lock(priv);
 
 	/* Verify that the hardware is ready to send another packet.  The driver
@@ -1905,7 +1902,7 @@ static void enc_pollworker(FAR void *arg)
 	/* Release lock on the SPI bus and the network */
 
 	enc_unlock(priv);
-	net_unlock(lock);
+	net_unlock();
 
 	/* Setup the watchdog poll timer again */
 
@@ -2451,6 +2448,9 @@ static int enc_reset(FAR struct enc_driver_s *priv)
 
 int enc_initialize(FAR struct spi_dev_s *spi, FAR const struct enc_lower_s *lower, unsigned int devno)
 {
+	struct ip_addr ipaddr;
+	struct ip_addr netmask;
+	struct ip_addr gw;
 	FAR struct enc_driver_s *priv;
 
 	DEBUGASSERT(devno < CONFIG_ENC28J60_NINTERFACES);
@@ -2491,7 +2491,13 @@ int enc_initialize(FAR struct spi_dev_s *spi, FAR const struct enc_lower_s *lowe
 	}
 
 	/* Register the device with the OS so that socket IOCTLs can be performed */
-	netif_register_with_initial_ip(&priv->dev, ethernetif_init);
+	ipaddr.addr = inet_addr("0.0.0.0");
+	netmask.addr = inet_addr("255.255.255.255");
+	gw.addr = inet_addr("0.0.0.0");
+
+	netif_set_default(&priv->dev);
+
+	netif_add(&priv->dev, &ipaddr, &netmask, &gw, NULL, ethernetif_init, tcpip_input);
 
 	return OK;
 }

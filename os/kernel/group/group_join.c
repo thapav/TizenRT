@@ -177,7 +177,7 @@ static inline int group_addmember(FAR struct task_group_s *group, pid_t pid)
  *
  * Assumptions:
  * - The parent task from which the group will be inherited is the task at
- *   the thead of the ready to run list.
+ *   thead of the ready to run list.
  * - Called during thread creation in a safe context.  No special precautions
  *   are required here.
  *
@@ -188,6 +188,10 @@ int group_bind(FAR struct pthread_tcb_s *tcb)
 	FAR struct tcb_s *ptcb = this_task();
 
 	DEBUGASSERT(ptcb && tcb && ptcb->group && !tcb->cmn.group);
+
+	if (!(ptcb && tcb && ptcb->group && !tcb->cmn.group)) {
+		return -EINVAL;
+	}
 
 	/* Copy the group reference from the parent to the child */
 
@@ -214,7 +218,7 @@ int group_bind(FAR struct pthread_tcb_s *tcb)
  *
  * Assumptions:
  * - The parent task from which the group will be inherited is the task at
- *   the thead of the ready to run list.
+ *   thead of the ready to run list.
  * - Called during thread creation in a safe context.  No special precautions
  *   are required here.
  *

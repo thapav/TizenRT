@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- * Copyright 2016 Samsung Electronics All Rights Reserved.
+ * Copyright 2019 Samsung Electronics All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
  *
  ****************************************************************************/
 /****************************************************************************
- * libc/net/lib_inetntop.c
+ * lib/libc/net/lib_inetntop.c
  *
  *   Copyright (C) 2012, 2015 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -63,11 +63,17 @@
 #include <tinyara/config.h>
 
 #include <sys/socket.h>
+
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 
 #include <arpa/inet.h>
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+#define MAX_OFFSET_VALUE	8
 
 /****************************************************************************
  * Private Functions
@@ -98,17 +104,17 @@
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IPv4
+#if defined(CONFIG_NET_IPv4)
 static int inet_ipv4_ntop(FAR const void *src, FAR char *dest, socklen_t size)
 {
-	FAR char *ptr;
+	FAR uint8_t *ptr;
 
 	if (size < INET_ADDRSTRLEN) {
 		return -ENOSPC;
 	}
 
-	ptr = (FAR char *)src;
-	sprintf(dest, "%d.%d.%d.%d", ptr[0], ptr[1], ptr[2], ptr[3]);
+	ptr = (FAR uint8_t *)src;
+	snprintf(dest, INET_ADDRSTRLEN, "%u.%u.%u.%u", ptr[0], ptr[1], ptr[2], ptr[3]);
 	return OK;
 }
 #endif
@@ -141,11 +147,11 @@ static int inet_ipv4_ntop(FAR const void *src, FAR char *dest, socklen_t size)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IPv6
+#if defined(CONFIG_NET_IPv6)
 static int inet_ipv6_ntop(FAR const void *src, FAR char *dest, socklen_t size)
 {
 	FAR const struct in6_addr *in6_addr;
-	uint16_t warray[8];
+	uint16_t warray[MAX_OFFSET_VALUE];
 	int offset;
 	int entry;
 	int count;
@@ -251,13 +257,13 @@ FAR const char *inet_ntop(int af, FAR const void *src, FAR char *dest, socklen_t
 	/* Do the conversion according to the IP version */
 
 	switch (af) {
-#ifdef CONFIG_NET_IPv4
+#if defined(CONFIG_NET_IPv4)
 	case AF_INET:
 		ret = inet_ipv4_ntop(src, dest, size);
 		break;
 #endif
 
-#ifdef CONFIG_NET_IPv6
+#if defined(CONFIG_NET_IPv6)
 	case AF_INET6:
 		ret = inet_ipv6_ntop(src, dest, size);
 		break;

@@ -8,7 +8,9 @@ The ARTIK 053 is a SOC for Wi-Fi™ IoT solutions. The ARTIK 053 has a Wi-Fi sub
 > [Environment Set-up](#environment-set-up)  
 > [How to program a binary](#how-to-program-a-binary)  
 > [ROMFS](#romfs)  
-> [Configuration Sets](#configuration-sets)
+> [How to use GDB](#how-to-use-gdb)  
+> [Configuration Sets](#configuration-sets)  
+> [Appendix](#appendix)
 
 ## Information
 
@@ -84,26 +86,64 @@ Aimed especially at power-sensitive devices needing Wi-Fi®, the ARTIK 053 Modul
 8MB is allocated to the SPI Flash area. 1280 KB is prepared for operation in SRAM. Here is the physical memory address, see [[here]](../artik05x/README.md#memory-map-artik05x).
 
 ## Environment Set-up
-### On Chip Debugger installation
-
-OpenOCD is used to program and debug.
-
-OpenOCD v0.10.0 is recommended and can be installed like below,
-but pre-built OpenOCD binaray on tools/openocd/linux64(or 32) can be used without installing.
-```bash
-sudo apt-get build-dep openocd
-git clone --depth 1 -b v0.10.0 https://git.code.sf.net/p/openocd/code openocd-code
-cd openocd-code
-./bootstrap
-./configure
-make
-sudo make install
-```
+This section covers board-specific environment set-up.  
+Please set TizenRT common environment, [quick start](https://github.com/Samsung/TizenRT#quick-start), first before doing below.
 
 ### Add USB device Rules
 
 This is an optional environment.  
 But as ARTIK is connected through USB, some operation like programming of binary can't be worked without this configuration.
+
+#### By dbuild.sh script
+
+The *dbuild.sh* script with the *menu* option supports the *u. USBrule* option to add it.
+
+1. Select the *d. Download* option after building TizenRT
+```sh
+======================================================
+  "Select build Option"
+======================================================
+  "1. Build with Current Configurations"
+  "2. Re-configure"
+  "3. Menuconfig"
+  "4. Build Clean"
+  "5. Build Dist-Clean"
+  "6. Build SmartFS Image"
+  "d. Download"
+  "x. Exit"
+======================================================
+d
+```
+2. Select the *u. USBrule* option
+```sh
+==================================================
+  "Select download option"
+==================================================
+  "1. ALL"
+  "2. OS"
+  "4. APPS"
+  "5. OTA"
+  "6. ROM"
+  "7. MICOM"
+  "8. WIFI"
+  "9. LOADPARAM"
+  "10. BL1"
+  "11. BL2"
+  "12. SSSFW"
+  "13. WLANFW"
+  "14. ERASE OTA"
+  "15. ERASE USERFS"
+  "16. ERASE ALL"
+  "u. USBrule"
+  "x. Exit"
+==================================================
+u
+```
+
+>**NOTE**
+>It requires root permission.
+
+#### By manually
 
 1. Make a file named 99-\<anyname\>.rules.
 2. Add below contents at above file.
@@ -113,50 +153,22 @@ SUBSYSTEMS=="usb",ATTRS{idVendor}=="0403",ATTRS{idProduct}=="6010",MODE="0666" R
 3. Place the above file in /etc/udev/rules.d folder with sudo permission.
 4. Reboot your system.
 
-
 ## How to program a binary
 
-There are two methods, using OpenOCD or script.
-
-After building Tizen RT, follow below steps at $TIZENRT_BASEDIR/os folder.
-
-TIZENRT_BASEDIR was set at [[Getting the sources]](../../../README.md#getting-the-sources) tab of Quick Start.
-
-### Using download script
+After building TizenRT, execute below command at $TIZENRT_BASEDIR/os folder.  
+See [[Getting the sources]](https://github.com/Samsung/TizenRT#getting-the-sources) for how to set *TIZENRT_BASEDIR*.
 
 ```bash
-make download ALL
+./dbuild.sh download [Programming Option]
 ```
-This makes complete set of binaries programmed.
 
-### Using OpenOCD
-
-This is used to program a partial binary.
-
-Export 'OPENOCD_SCRIPTS' to environment variable.
-
+For example, *ALL* option makes complete set of binaries programmed.
 ```bash
-export OPENOCD_SCRIPTS=$TIZENRT_BASEDIR/build/tools/openocd
+./dbuild.sh download ALL
 ```
+See programming options list which is pre-defined at [.flashSpec.xml](.flashSpec.xml).
 
-At first, programming the complete set of binaries are needed.
-
-```bash
-openocd -f artik05x.cfg -s ../build/configs/artik05x/scripts -c ' \
-    flash_write bl1    ../build/configs/artik053/bin/bl1.bin;      \
-    flash_write bl2    ../build/configs/artik053/bin/bl2.bin;      \
-    flash_write sssfw  ../build/configs/artik053/bin/sssfw.bin;    \
-    flash_write wlanfw ../build/configs/artik053/bin/wlanfw.bin;   \
-    flash_write os     ../build/output/bin/tinyara_head.bin;       \
-    exit'
-```
-
-Once the complete binaries are successfully programmed, each partition can be updated separately with new one.
-
-```bash
-openocd -f artik05x.cfg -s ../build/configs/artik05x/scripts -c ' \
-    flash_write os ../build/output/bin/tinyara_head.bin; exit'
-```
+Refer [How to program using OpenOCD](#how-to-program-using-openocd) to make user-specific programming seqeunce.
 
 ### Factory Reset
 
@@ -169,6 +181,7 @@ You can download it using OpenOCD. You compress the compiled firmware and downlo
 ```bash
 gzip -c tinyara_head.bin > factoryimage.gz
 openocd -f artik05x.cfg -s ../build/configs/artik05x/scripts -c ' \
+    flash_erase_part ota ;\
     flash_write factory    ../build/configs/artik053/bin/factoryimage.gz;      \
     exit'
 ```
@@ -193,34 +206,81 @@ U-Boot 2017
 
 ## ROMFS
 
-Before executing below board-specific steps, execute [generic steps](../../../tools/fs/README_ROMFS.md), step 1 and step 2.
+>[How to set romfs partition](https://github.com/Samsung/TizenRT/blob/master/os/board/common/README.md#how-to-set-romfs-partition)
 
-3. Modify partition configs and enable the automount config through *menuconfig*  
-    Below steps creates ROMFS partition with size 400KB at next of user partition.  
-    1. Split user partition size from (1400) to (1000, 400) in ARTIK05X_FLASH_PART_LIST
-        ```bash
-        Hardware Configuration -> Board Selection -> change values at Flash partition size list (in KBytes)
-        ```
-    2. Append "romfs" at next of *smartfs* to ARTIK05X_FLASH_PART_TYPE
-        ```bash
-        Hardware Configuration -> Board Selection -> append string at Flash partition type list
-        ```
-    3. Append "rom" at next of *user* to ARTIK05X_FLASH_PART_NAME
-        ```bash
-        Hardware Configuration -> Board Selection -> append string at FLash partition name list
-        ```
-    4. Enable the audomount config for romfs
-        ```bash
-        Hardware Configuration -> Board Selection -> Automount partitions -> Automount romfs partiton to y
-        ```
-4. Build Tizen RT and flash a binary [using download script](#using-download-script)
+## How to use GDB
+1. Run OpenOCD daemon.
+    ```bash
+    @ubuntu:~/TizenRT/os$ ../build/tools/openocd/linux64/openocd -f artik05x.cfg -s ../build/configs/artik05x/scripts/
+    Open On-Chip Debugger 0.10.0-dirty (2017-09-02-08:32)
+    Licensed under GNU GPL v2
+    For bug reports, read
+    	http://openocd.org/doc/doxygen/bugs.html
+    adapter speed: 2000 kHz
+    Info : auto-selecting first available session transport "jtag". To override use 'transport select <transport>'.
+    force hard breakpoints
+    trst_and_srst separate srst_gates_jtag trst_push_pull srst_push_pull connect_deassert_srst
+    adapter_nsrst_assert_width: 50
+    adapter_nsrst_delay: 100
+    debug_level: -1
+    ```
+2. Run GDB at another terminal.  
+    Please find ```<-- COMMAND``` at below logs.
+    ```bash
+    @ubuntu:~/TizenRT/os$ arm-none-eabi-gdb ../build/output/bin/tinyara   <-- COMMAND
+    GNU gdb (GNU Tools for ARM Embedded Processors) 7.8.0.20150604-cvs
+    Copyright (C) 2014 Free Software Foundation, Inc.
+    License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+    This is free software: you are free to change and redistribute it.
+    There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+    and "show warranty" for details.
+    This GDB was configured as "--host=i686-linux-gnu --target=arm-none-eabi".
+    Type "show configuration" for configuration details.
+    For bug reporting instructions, please see:
+    <http://www.gnu.org/software/gdb/bugs/>.
+    Find the GDB manual and other documentation resources online at:
+    <http://www.gnu.org/software/gdb/documentation/>.
+    For help, type "help".
+    Type "apropos word" to search for commands related to "word"...
+    Reading symbols from TizenRT/build/output/bin/tinyara...done.
+    (gdb) target remote:3333   <-- COMMAND
+    Remote debugging using :3333
+    0x00003834 in ?? ()
+    (gdb) monitor reset halt   <-- COMMAND
+    target halted in ARM state due to debug-request, current mode: Supervisor
+    cpsr: 0x60000153 pc: 0x040db8a8
+    D-Cache: enabled, I-Cache: enabled
+    (gdb) monitor cortex_r4 maskisr on   <-- COMMAND
+    cortex_a interrupt mask on
+    (gdb) b hello_main
+    Breakpoint 1 at 0x40d30fc: file hello_main.c, line 196.
+    (gdb) b up_assert
+    Breakpoint 2 at 0x40c9364: file armv7-r/arm_assert.c, line 945.
+    (gdb) c
+    Continuing.
+
+    Breakpoint 1, hello_main (argc=1, argv=0x202fd1c) at hello_main.c:196
+    196	{
+    (gdb) s
+    197		sleep(20);
+    (gdb) s
+    sleep (seconds=seconds@entry=20) at unistd/lib_sleep.c:155
+    155		if (seconds) {
+    (gdb) c
+    Continuing.
+
+    Breakpoint 2, up_assert (filename=filename@entry=0x40ea757 "hello_main.c", 
+      lineno=lineno@entry=198) at armv7-r/arm_assert.c:945
+    945		lldbg("Assertion failed at file:%s line: %d task: %s\n", filename, lineno, this_task()->name);
+    (gdb) 
+    ```
+```help``` will help you to find GDB commands.
+
 
 ## Configuration Sets
 
-#### [audio](audio/README.md)
-This can be used to test audio functionality.
 #### [extra](extra/README.md)
-This can be used to use full functionality of Tizen RT on ARTIK053.
+This can be used to use full functionality of TizenRT on ARTIK053.
 #### [hello](hello/README.md)
 This provides simple hello world application including kernel.
 #### [iotivity](iotivity/README.md)
@@ -230,10 +290,55 @@ This can be used to use IoT.js
 #### [kernel_sample](kernel_sample/README.md)
 This can be used to test kernel functionality.
 #### [minimal](minimal/README.md)
-This can be used to use the minimal functionality of Tizen RT on ARTIK053.
+This can be used to use the minimal functionality of TizenRT on ARTIK053.
 #### [nettest](nettest/README.md)
 This can be used to test network functionality.
 #### [st_things](st_things/README.md)
 This can be used to test Smart Things Things SDK functionality.
 #### [tc](tc/README.md)
-This can be used to test database, file system, kernel, network functionality of Tizen RT on ARTIK053.
+This can be used to test database, File System, kernel, network functionality of TizenRT on ARTIK053.
+
+## Appendix
+### On Chip Debugger installation
+
+OpenOCD is used to program and debug.
+
+OpenOCD v0.10.0 is recommended and can be installed like below,
+but **pre-built OpenOCD binaray on tools/openocd/linux64(or 32) can be used without installing**.
+```bash
+sudo apt-get build-dep openocd
+git clone --depth 1 -b v0.10.0 https://git.code.sf.net/p/openocd/code openocd-code
+cd openocd-code
+./bootstrap
+./configure
+make
+sudo make install
+```
+
+### How to program using OpenOCD
+
+This is used to program a partial binary.  
+Export 'OPENOCD_SCRIPTS' to environment variable.
+
+```bash
+export OPENOCD_SCRIPTS=$TIZENRT_BASEDIR/build/tools/openocd
+```
+
+At first, programming the complete set of binaries are needed.
+
+```bash
+openocd -f artik05x.cfg -s ../build/configs/artik05x/scripts -c ' \
+    flash_write bl1    ../build/configs/artik053/bin/bl1.bin;      \
+    flash_write bl2    ../build/configs/artik053/bin/bl2.bin;      \
+    flash_write sssfw  ../build/configs/artik053/bin/sssfw.bin;    \
+    flash_write wlanfw ../build/configs/artik053/bin/wlanfw.bin;   \
+    flash_write os     ../build/output/bin/tinyara_head.bin;       \
+    exit'
+```
+
+Once the complete binaries are successfully programmed, each partition can be updated separately with new one.
+
+```bash
+openocd -f artik05x.cfg -s ../build/configs/artik05x/scripts -c ' \
+    flash_write os ../build/output/bin/tinyara_head.bin; exit'
+```

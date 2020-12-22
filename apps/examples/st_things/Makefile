@@ -28,8 +28,18 @@ THREADEXEC = TASH_EXECMD_SYNC
 
 # SmartThings Things example
 
+ROOTDEPPATH = --dep-path .
 ASRCS =
-CSRCS = sample_light_user.c sample_light_things.c
+CSRCS =
+
+BUILDIRS   := $(dir $(wildcard */Make.defs))
+
+define Add_Application
+  include $(1)Make.defs
+endef
+
+$(foreach BDIR, $(BUILDIRS), $(eval $(call Add_Application,$(BDIR))))
+
 MAINSRC = st_things_sample_main.c
 
 AOBJS = $(ASRCS:.S=$(OBJEXT))
@@ -61,8 +71,6 @@ endif
 
 CONFIG_EXAMPLES_ST_THINGS_PROGNAME ?= st_things$(EXEEXT)
 PROGNAME = $(CONFIG_EXAMPLES_ST_THINGS_PROGNAME)
-
-ROOTDEPPATH = --dep-path . 
 
 # Common build
 

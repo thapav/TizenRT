@@ -17,6 +17,9 @@ Samsung IoT Development Kit for S5JT200 chipset.
 will be updated
 
 ## Environment Set-up
+This section covers board-specific environment set-up.  
+Please set TizenRT common environment, [quick start](https://github.com/Samsung/TizenRT#quick-start), first before doing below.
+
 ### On Chip Debugger installation
 
 on Ubuntu 13.10 ~ 14.xx version
@@ -65,7 +68,7 @@ sudo ln -s /usr/local/lib/libftdi.so.1.19.0 libftdi.so.1
 
 ### FT2232 interface driver installation
 
-Get the package, [libftd2xxx1.0.4](https://github.com/psi46/HDItest/tree/master/FTDI-1.0.4/libftd2xx1.0.4)
+Get the package, [libftd2xxx1.0.4](https://github.com/psi46/HDItest/blob/master/FTDI-1.0.4/libftd2xx1.0.4.tar.gz)
 
 Untar the downloaded package
 ```bash
@@ -102,11 +105,10 @@ SUBSYSTEMS=="usb",ATTRS{idVendor}=="0403",ATTRS{idProduct}=="6010",MODE="0666" R
 
 ## How to program a binary
 
-After buiding a Tizen RT, execute below at $TIZENRT_BASEDIR/os folder.
-
-TIZENRT_BASEDIR was set at [[Getting the sources]](../../../README.md#getting-the-sources) tab of Quick Start.
+After building a TizenRT, execute below at $TIZENRT_BASEDIR/os folder.  
+See [[Getting the sources]](https://github.com/Samsung/TizenRT#getting-the-sources) for how to set *TIZENRT_BASEDIR*.
 ```bash
-make download ALL
+./dbuild.sh download ALL
 ```
 
 ## ROMFS
@@ -130,13 +132,13 @@ Before executing below steps, execute [generic steps](../../../tools/fs/README_R
         ```
 4. Enable auto-mount config.
     ```bash
-    Hardware Configuration -> Board Selection -> Automount partitions -> Automount ROM read only partition to y
+    Hardware Configuration -> Board Selection -> Automount partitions -> [*] Automount ROM read only partition
     ```
-
-After above two steps, build Tizen RT and program a Tizen RT binary through above [method](#how-to-program-a-binary).
+5. Build TizenRT and flash a binary.  
+    Refer [How to program a binary](#how-to-program-a-binary).
 
 ## Using GDB
-1. Build Tizen RT and program a Tizen RT binary through above [method](#how-to-program-a-binary)
+1. Build TizenRT and program a TizenRT binary through above [method](#how-to-program-a-binary)
 
 2. Run GDB server by running openocd with gdb cfg
     ```bash
@@ -168,7 +170,7 @@ There are three configuration sets for sidk_s5jt200, including 'hello_with_tash'
  for running kernel functions
 
 #### tc
- for runnig unit test cases
+ for running unit test cases
 
 #### sidk_tash_aws
  for running AWS IoT SDK examples.

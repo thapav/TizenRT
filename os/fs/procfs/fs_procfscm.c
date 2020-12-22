@@ -82,7 +82,7 @@
 #include<sys/socket.h>
 
 #if defined(CONFIG_ARCH_BOARD_SIDK_S5JT200)
-#include <slsi_wifi/slsi_wifi_api.h>
+#include <tinyara/wifi/slsi/slsi_wifi_api.h>
 #endif
 
 #if !defined(CONFIG_DISABLE_MOUNTPOINT) && defined(CONFIG_FS_PROCFS)
@@ -321,11 +321,6 @@ static size_t cm_ipaddr_read(FAR struct cm_file_s *connectivityfile, FAR char *b
 	struct in_addr addr;
 	netlib_get_ipv4addr(mac, &addr);
 	inet_ntop(AF_INET, &addr, ipaddr, INET_ADDRSTRLEN);
-#endif
-#ifdef CONFIG_NET_IPv6
-	struct in6_addr addr;
-	netlib_get_ipv6addr(mac, &addr);
-	inet_ntop(AF_INET6, &addr, ipaddr, INET6_ADDRSTRLEN);
 #endif
 
 	linesize = snprintf(connectivityfile->line, CM_LINELEN, "%s", ipaddr);

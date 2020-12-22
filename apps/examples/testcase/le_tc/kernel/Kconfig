@@ -6,6 +6,7 @@
 menuconfig EXAMPLES_TESTCASE_KERNEL
 	bool "Kernel TestCase Example"
 	default y
+	select DRIVERS_KERNEL_TEST
 	---help---
 		Enable the Kernel TestCase Example
 
@@ -21,37 +22,42 @@ config TC_KN_ALL
 	select TC_KERNEL_CLOCK
 	select TC_KERNEL_ENVIRON
 	select TC_KERNEL_ERRNO
-	select TC_KERNEL_LIBC_FIXEDMATH
+	select TC_KERNEL_LIBC_FIXEDMATH if LIBM
+	select TC_KERNEL_LIBC_INTTYPES
 	select TC_KERNEL_LIBC_LIBGEN
-	select TC_KERNEL_LIBC_MATH
+	select TC_KERNEL_LIBC_MATH if LIBM
 	select TC_KERNEL_LIBC_MISC
-	select TC_KERNEL_LIBC_MQUEUE
 	select TC_KERNEL_LIBC_PTHREAD
 	select TC_KERNEL_LIBC_QUEUE
 	select TC_KERNEL_LIBC_SCHED
 	select TC_KERNEL_LIBC_SEMAPHORE
 	select TC_KERNEL_LIBC_SIGNAL
-	select TC_KERNEL_LIBC_SPAWN
 	select TC_KERNEL_LIBC_STDIO
 	select TC_KERNEL_LIBC_STDLIB
 	select TC_KERNEL_LIBC_STRING
 	select TC_KERNEL_LIBC_SYSLOG
 	select TC_KERNEL_LIBC_TIMER
 	select TC_KERNEL_LIBC_UNISTD
-	select TC_KERNEL_MQUEUE
+	select TC_KERNEL_MQUEUE if !DISABLE_MQUEUE
 	select TC_KERNEL_PTHREAD
-	select TC_KERNEL_ROUNDROBIN
 	select TC_KERNEL_SCHED
 	select TC_KERNEL_SEMAPHORE
 	select TC_KERNEL_SIGNAL
 	select TC_KERNEL_TASK
 	select TC_KERNEL_TIMER
 	select TC_KERNEL_UMM_HEAP
+	select TC_KERNEL_WORK_QUEUE if SCHED_WORKQUEUE
+	select ITC_KERNEL_ENVIRON
+	select ITC_KERNEL_LIBC_PTHREAD
+	select ITC_KERNEL_LIBC_SEMAPHORE
+	select ITC_KERNEL_SEMAPHORE
+	select ITC_KERNEL_SCHED
+	select ITC_KERNEL_TIMER
+	select ITC_KERNEL_PTHREAD
 
 config TC_KERNEL_CLOCK
 	bool "Clock"
 	default n
-	select SYSTEM_TIME64
 
 config TC_KERNEL_ENVIRON
 	bool "Environ"
@@ -60,7 +66,6 @@ config TC_KERNEL_ENVIRON
 config TC_KERNEL_ERRNO
 	bool "Errno"
 	default n
-	select LIBC_STRERROR
 
 config TC_KERNEL_GROUP
 	bool "Group"
@@ -72,6 +77,10 @@ config TC_KERNEL_LIBC_FIXEDMATH
 	bool "Libc FixedMath"
 	default n
 	depends on LIBM
+
+config TC_KERNEL_LIBC_INTTYPES
+	bool "Libc Inttypes"
+	default n
 
 config TC_KERNEL_LIBC_LIBGEN
 	bool "Libc Libgen"
@@ -85,14 +94,6 @@ config TC_KERNEL_LIBC_MATH
 config TC_KERNEL_LIBC_MISC
 	bool "Libc Misc"
 	default n
-	select DEBUG
-	select DEBUG_ERROR
-	select DEBUG_VERBOSE
-
-config TC_KERNEL_LIBC_MQUEUE
-	bool "Libc Mqueue"
-	default n
-	depends on !DISABLE_MQUEUE
 
 config TC_KERNEL_LIBC_PTHREAD
 	bool "Libc Pthread"
@@ -115,10 +116,6 @@ config TC_KERNEL_LIBC_SIGNAL
 	bool "Libc Signal"
 	default n
 
-config TC_KERNEL_LIBC_SPAWN
-	bool "Libc Spawn"
-	default n
-
 config TC_KERNEL_LIBC_STDIO
 	bool "Libc Stdio"
 	default n
@@ -130,7 +127,6 @@ config TC_KERNEL_LIBC_STDLIB
 config TC_KERNEL_LIBC_STRING
 	bool "Libc String"
 	default n
-	select LIBC_STRERROR
 
 config TC_KERNEL_LIBC_TIMER
 	bool "Libc Timer"
@@ -154,10 +150,6 @@ config TC_KERNEL_PTHREAD
 	default n
 	select MUTEX_TYPES
 
-config TC_KERNEL_ROUNDROBIN
-	bool "RoundRobin"
-	default n
-
 config TC_KERNEL_SCHED
 	bool "Sched"
 	default n
@@ -166,8 +158,6 @@ config TC_KERNEL_SCHED
 config TC_KERNEL_SEMAPHORE
 	bool "Semaphore"
 	default n
-	select DEBUG
-	select PRIORITY_INHERITANCE
 
 config TC_KERNEL_SIGNAL
 	bool "Signal"
@@ -176,8 +166,6 @@ config TC_KERNEL_SIGNAL
 config TC_KERNEL_TASK
 	bool "Task"
 	default n
-	select SCHED_ATEXIT
-	select SCHED_ONEXIT
 
 config TC_KERNEL_TERMIOS
 	bool "Termios"
@@ -198,6 +186,67 @@ config TC_KERNEL_TASH_HEAPINFO
 config TC_KERNEL_TASH_STACKMONITOR
 	bool "StackMonitor"
 	default n
+
+config TC_KERNEL_WORK_QUEUE
+	bool "wqueue"
+	default n
+	depends on SCHED_WORKQUEUE
+
+config TC_KERNEL_MEMORY_SAFETY
+	bool "Memory Safety"
+	default n
+	depends on !DISABLE_MQUEUE
+
+config ITC_KERNEL_ENVIRON
+	bool "ITC Environ"
+	default n
+
+if ITC_KERNEL_ENVIRON
+config ITC_ENV_LOOP_SIZE
+	int "Iterator Count"
+	default 100
+endif
+
+config ITC_KERNEL_LIBC_PTHREAD
+	bool "ITC libc Pthread"
+	default n
+if ITC_KERNEL_LIBC_PTHREAD
+config ITC_LIBC_PTHREAD_LOOP_SIZE
+	int "Iterator Count"
+	default 100
+endif
+
+config ITC_KERNEL_LIBC_SEMAPHORE
+	bool "ITC Libc Semaphore"
+	default n
+
+config ITC_KERNEL_SEMAPHORE
+	bool "ITC Semaphore"
+	default n
+if ITC_KERNEL_SEMAPHORE
+config ITC_KERN_SEM_LOOP_SIZE
+	int "Iterator Count"
+	default 100
+endif
+
+config ITC_KERNEL_SCHED
+	bool "ITC Sched"
+	default n
+
+config ITC_KERNEL_TIMER
+	bool "ITC Timer"
+	default n
+
+config ITC_KERNEL_PTHREAD
+	bool "ITC Pthread"
+	default n
+	select MUTEX_TYPES
+if ITC_KERNEL_PTHREAD
+config ITC_KERN_PTHREAD_LOOP_SIZE
+	int "Iterator Count"
+	default 100
+endif
+
 
 endif #EXAMPLES_TESTCASE_KERNEL
 

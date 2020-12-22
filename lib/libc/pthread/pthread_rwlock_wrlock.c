@@ -57,6 +57,7 @@
 #include <tinyara/config.h>
 
 #include <stdint.h>
+#include <sys/types.h>
 #include <pthread.h>
 #include <errno.h>
 #include <debug.h>
@@ -70,7 +71,7 @@
 #ifdef CONFIG_PTHREAD_CLEANUP
 static void wrlock_cleanup(FAR void *arg)
 {
-	FAR pthread_rwlock_t *rw_lock = (FAR pthread_rwlock_t *) arg;
+	FAR pthread_rwlock_t *rw_lock = (FAR pthread_rwlock_t *)arg;
 
 	rw_lock->num_writers--;
 	(void)pthread_mutex_unlock(&rw_lock->lock);

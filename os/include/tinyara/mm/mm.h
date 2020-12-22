@@ -61,7 +61,14 @@
 #include <sys/types.h>
 #include <stdbool.h>
 #include <semaphore.h>
+#include <debug.h>
+#include <stdint.h>
+#include <tinyara/mm/heap_regioninfo.h>
+#ifdef CONFIG_HEAPINFO_USER_GROUP
+#include <tinyara/mm/heapinfo_internal.h>
+#endif
 
+#include <tinyara/sched.h>
 /****************************************************************************
  * Pre-Processor Definitions
  ****************************************************************************/
@@ -88,12 +95,6 @@
  *   single heap access with the standard allocations (malloc/free).  This
  *   heap is referred to as the user heap.  The kernel logic must
  *   initialize this single heap at boot time.
- * - Protected build: In the protected build (CONFIG_BUILD_PROTECTED=y)
- *   where an MPU is used to protect a region of otherwise flat memory,
- *   there will be two allocators:  One that allocates protected (kernel)
- *   memory and one that allocates unprotected (user) memory.  These are
- *   referred to as the kernel and user heaps, respectively.  Both must be
- *   initialized by the kernel logic at boot time.
  * - Kernel Build: If the architecture has an MMU, then it may support the
  *   kernel build (CONFIG_BUILD_KERNEL=y).  In this configuration, there
  *   is one kernel heap but multiple user heaps:  One per task group.
@@ -101,26 +102,11 @@
  *   initializing the single kernel heap here.  User heaps will be created
  *   as tasks are created.
  *
- * These special definitions are provided:
- *
- *   MM_KERNEL_USRHEAP_INIT
- *     Special kernel interfaces to the kernel user-heap are required
- *     for heap initialization.
- *   CONFIG_MM_KERNEL_HEAP
- *     The configuration requires a kernel heap that must initialized
- *     at boot-up.
  */
-
-#undef MM_KERNEL_USRHEAP_INIT
-#if defined(CONFIG_BUILD_PROTECTED) && defined(__KERNEL__)
-#define MM_KERNEL_USRHEAP_INIT 1
-#elif !defined(CONFIG_BUILD_KERNEL)
-#define MM_KERNEL_USRHEAP_INIT 1
-#endif
 
 /* The kernel heap is never accessible from user code */
 
-#ifndef __KERNEL__
+#if defined(CONFIG_BUILD_PROTECTED) && !defined(__KERNEL__)
 #undef CONFIG_MM_KERNEL_HEAP
 #endif
 
@@ -148,6 +134,8 @@
 
 #define MM_MIN_SHIFT    4		/* 16 bytes */
 #define MM_MAX_SHIFT   15		/* 32 Kb */
+#define MM_SHIFT_FOR_NDX (MM_MIN_SHIFT + 1)
+#define MM_SHIFT_MASK    ~(1 << MM_SHIFT_FOR_NDX)
 
 #elif defined(CONFIG_HAVE_LONG_LONG)
 /* Four byte offsets; Pointers may be 4 or 8 bytes
@@ -156,8 +144,12 @@
 
 #if UINTPTR_MAX <= UINT32_MAX
 #define MM_MIN_SHIFT  4			/* 16 bytes */
+#define MM_SHIFT_FOR_NDX 5		/* MM_MIN_SHIFT + 1 */
+#define MM_SHIFT_MASK    0xffffffe0	/* ~(1 << MM_SHIFT_FOR_NDX) */
 #elif UINTPTR_MAX <= UINT64_MAX
 #define MM_MIN_SHIFT  5			/* 32 bytes */
+#define MM_SHIFT_FOR_NDX 6		/* MM_MIN_SHIFT + 1 */
+#define MM_SHIFT_MASK    0xffffffc0	/* ~(1 << MM_SHIFT_FOR_NDX) */
 #endif
 #define MM_MAX_SHIFT   22		/*  4 Mb */
 
@@ -168,6 +160,8 @@
 
 #define MM_MIN_SHIFT    4		/* 16 bytes */
 #define MM_MAX_SHIFT   22		/*  4 Mb */
+#define MM_SHIFT_FOR_NDX 5		/* MM_MIN_SHIFT + 1 */
+#define MM_SHIFT_MASK    0xffffffe0	/* ~(1 << MM_SHIFT_FOR_NDX) */
 #endif
 
 /* All other definitions derive from these two */
@@ -199,7 +193,28 @@
 #define HEAPINFO_DETAIL_ALL 2
 #define HEAPINFO_DETAIL_PID 3
 #define HEAPINFO_DETAIL_FREE 4
-#define HEAPINFO_PID_NOTNEEDED -1
+#define HEAPINFO_DETAIL_SPECIFIC_HEAP 5
+#define HEAPINFO_INIT_PEAK 6
+#define HEAPINFO_PID_ALL -1
+
+#define HEAPINFO_INIT_INFO -1
+#define HEAPINFO_ADD_INFO 1
+#define HEAPINFO_DEL_INFO 2
+
+#define HEAPINFO_INVALID_GROUPID -1
+
+#define HEAPINFO_HEAP_TYPE_KERNEL 1
+#ifdef CONFIG_APP_BINARY_SEPARATION
+#define HEAPINFO_HEAP_TYPE_BINARY    2
+#endif
+
+#define INVALID_HEAP_IDX -1
+
+#ifdef CONFIG_MM_KERNEL_HEAP
+#define KREGION_START (size_t)kregionx_start[0]
+#define KREGION_SIZE  kregionx_size[0]
+#define KREGION_END (KREGION_START + KREGION_SIZE)
+#endif
 
 /* Determines the size of the chunk size/offset type */
 
@@ -216,20 +231,25 @@ typedef size_t mmsize_t;
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
 typedef size_t mmaddress_t;		/* 32 bit address space */
 
-#if (CONFIG_ARCH_MIPS)
+#if defined(CONFIG_ARCH_MIPS)
 /* Macro gets return address of malloc API */
 #define ARCH_GET_RET_ADDRESS \
 	mmaddress_t retaddr = 0; \
 	do { \
 		asm volatile ("sw $ra, %0" : "=m" (retaddr)); \
 	} while (0);
-#elif (CONFIG_ARCH_ARM)
+#elif defined(CONFIG_ARCH_ARM)
 #define ARCH_GET_RET_ADDRESS \
 	mmaddress_t retaddr = 0; \
 	do { \
 		asm volatile ("mov %0,lr\n" : "=r" (retaddr));\
 	} while (0);
-
+#elif defined(CONFIG_ARCH_XTENSA)
+#define ARCH_GET_RET_ADDRESS \
+	mmaddress_t retaddr = 0; \
+	do { \
+		asm volatile ("mov %0,a0\n" : "=&r" (retaddr));\
+	} while (0);
 #else
 #error Unknown CONFIG_ARCH option, malloc debug feature wont work.
 #endif
@@ -301,6 +321,39 @@ struct mm_freenode_s {
 #define CHECK_FREENODE_SIZE \
 	DEBUGASSERT(sizeof(struct mm_freenode_s) == SIZEOF_MM_FREENODE)
 
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+struct heapinfo_tcb_info_s {
+	int pid;
+	int curr_alloc_size;
+	int peak_alloc_size;
+	int num_alloc_free;
+};
+typedef struct heapinfo_tcb_info_s heapinfo_tcb_info_t;
+#ifdef CONFIG_HEAPINFO_USER_GROUP
+struct heapinfo_group_info_s {
+	int pid;
+	int group;
+	int stack_size;
+};
+
+struct heapinfo_group_s {
+	int curr_size;
+	int peak_size;
+	int stack_size;
+	int heap_size;
+};
+#endif
+
+#ifdef CONFIG_HEAPINFO_USER_GROUP
+extern int heapinfo_max_group;
+extern struct heapinfo_group_s heapinfo_group[HEAPINFO_USER_GROUP_NUM];
+extern struct heapinfo_group_info_s group_info[HEAPINFO_THREAD_NUM];
+#endif
+
+#if CONFIG_KMM_NHEAPS > 1
+extern heapinfo_total_info_t total_info;
+#endif
+#endif
 /* This describes one heap (possibly with multiple regions) */
 
 struct mm_heap_s {
@@ -318,14 +371,19 @@ struct mm_heap_s {
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
 	size_t peak_alloc_size;
 	size_t total_alloc_size;
+#ifdef CONFIG_HEAPINFO_USER_GROUP
+	int max_group;
+	struct heapinfo_group_s group[HEAPINFO_USER_GROUP_NUM];
+#endif
+	/* Linked List for heap information per pid */
+	heapinfo_tcb_info_t alloc_list[CONFIG_MAX_TASKS];
 #endif
 
 	/* This is the first and last nodes of the heap */
+	FAR struct mm_allocnode_s *mm_heapstart[CONFIG_KMM_REGIONS];
+	FAR struct mm_allocnode_s *mm_heapend[CONFIG_KMM_REGIONS];
 
-	FAR struct mm_allocnode_s *mm_heapstart[CONFIG_MM_REGIONS];
-	FAR struct mm_allocnode_s *mm_heapend[CONFIG_MM_REGIONS];
-
-#if CONFIG_MM_REGIONS > 1
+#if CONFIG_KMM_REGIONS > 1
 	int mm_nregions;
 #endif
 
@@ -334,7 +392,7 @@ struct mm_heap_s {
 	 * speed searches for free nodes.
 	 */
 
-	struct mm_freenode_s mm_nodelist[MM_NNODES];
+	struct mm_freenode_s mm_nodelist[MM_NNODES + 1];
 };
 
 /****************************************************************************
@@ -349,25 +407,35 @@ extern "C" {
 #define EXTERN extern
 #endif
 
-#if !defined(CONFIG_BUILD_PROTECTED) || !defined(__KERNEL__)
-/* User heap structure:
- *
- * - Flat build:  In the FLAT build, the user heap structure is a globally
- *   accessible variable.
- * - Protected build:  The user heap structure is directly available only
- *   in user space.
- * - Kernel build: There are multiple heaps, one per process.  The heap
- *   structure is associated with the address environment and there is
- *   no global user heap structure.
+extern struct mm_heap_s g_kmmheap[CONFIG_KMM_NHEAPS];
+#if defined(CONFIG_ARCH_ADDRENV) && defined(CONFIG_BUILD_KERNEL)
+/* In the kernel build, there are multiple user heaps; one for each task
+ * group.  In this build configuration, the user heap structure lies
+ * in a reserved region at the beginning of the .bss/.data address
+ * space (CONFIG_ARCH_DATA_VBASE).  The size of that region is given by
+ * ARCH_DATA_RESERVE_SIZE
  */
+#include <tinyara/addrenv.h>
+#define BASE_HEAP (&ARCH_DATA_RESERVE->ar_usrheap)
 
-EXTERN struct mm_heap_s g_mmheap;
+#elif defined(CONFIG_BUILD_PROTECTED) && defined(__KERNEL__)
+#include <tinyara/sched.h>
+#define BASE_HEAP ((struct mm_heap_s *)((struct tcb_s*)sched_self())->uheap)
+
+#elif defined(CONFIG_BUILD_PROTECTED) && !defined(__KERNEL__)
+extern uint32_t _sdata;
+
+#ifdef CONFIG_SUPPORT_COMMON_BINARY
+extern struct mm_heap_s *g_app_heap_table[CONFIG_NUM_APPS + 1];
+extern uint32_t g_cur_app;
+#define BASE_HEAP (g_app_heap_table[g_cur_app])
+
+#else
+#define BASE_HEAP ((struct mm_heap_s *)_sdata)
 #endif
 
-#ifdef CONFIG_MM_KERNEL_HEAP
-/* This is the kernel heap */
-
-EXTERN struct mm_heap_s g_kmmheap;
+#else
+#define BASE_HEAP       g_kmmheap
 #endif
 
 /****************************************************************************
@@ -381,7 +449,6 @@ void mm_addregion(FAR struct mm_heap_s *heap, FAR void *heapstart, size_t heapsi
 
 /* Functions contained in umm_initialize.c **********************************/
 
-void umm_initialize(FAR void *heap_start, size_t heap_size);
 
 /* Functions contained in kmm_initialize.c **********************************/
 
@@ -392,6 +459,7 @@ void kmm_initialize(FAR void *heap_start, size_t heap_size);
 /* Functions contained in umm_addregion.c ***********************************/
 
 #if !defined(CONFIG_BUILD_PROTECTED) || !defined(__KERNEL__)
+void umm_initialize(FAR void *heap_start, size_t heap_size);
 void umm_addregion(FAR void *heapstart, size_t heapsize);
 #endif
 
@@ -411,15 +479,15 @@ void mm_givesemaphore(FAR struct mm_heap_s *heap);
 /* Functions contained in umm_sem.c ****************************************/
 
 #if !defined(CONFIG_BUILD_PROTECTED) || !defined(__KERNEL__)
-int umm_trysemaphore(void);
-void umm_givesemaphore(void);
+int umm_trysemaphore(void *address);
+void umm_givesemaphore(void *address);
 #endif
 
 /* Functions contained in kmm_sem.c ****************************************/
 
 #ifdef CONFIG_MM_KERNEL_HEAP
-int kmm_trysemaphore(void);
-void kmm_givesemaphore(void);
+int kmm_trysemaphore(void *address);
+void kmm_givesemaphore(void *address);
 #endif
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
 
@@ -522,7 +590,7 @@ FAR void *kmm_memalign(size_t alignment, size_t size);
 
 /* Functions contained in kmm_heapmember.c **********************************/
 
-#if defined(CONFIG_MM_KERNEL_HEAP) && defined(CONFIG_DEBUG)
+#if defined(CONFIG_MM_KERNEL_HEAP)
 bool kmm_heapmember(FAR void *mem);
 #endif
 
@@ -587,6 +655,10 @@ int kmm_mallinfo(struct mallinfo *info);
 #endif
 #endif							/* CONFIG_CAN_PASS_STRUCTS */
 
+#ifdef CONFIG_MM_KERNEL_HEAP
+struct mm_heap_s *kmm_get_heap(void);
+#endif
+
 /* Functions contained in mm_shrinkchunk.c **********************************/
 
 void mm_shrinkchunk(FAR struct mm_heap_s *heap, FAR struct mm_allocnode_s *node, size_t size);
@@ -601,24 +673,163 @@ int mm_size2ndx(size_t size);
 
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
 /* Functions contained in kmm_mallinfo.c . Used to display memory allocation details */
-void heapinfo_parse(FAR struct mm_heap_s *heap, int mode, pid_t pid);
+void heapinfo_parse_heap(FAR struct mm_heap_s *heap, int mode, pid_t pid);
 /* Funciton to add memory allocation info */
 void heapinfo_update_node(FAR struct mm_allocnode_s *node, mmaddress_t caller_retaddr);
 
-void heapinfo_add_size(pid_t pid, mmsize_t size);
-void heapinfo_subtract_size(pid_t pid, mmsize_t size);
-void heapinfo_update_total_size(struct mm_heap_s *heap, mmsize_t size);
+void heapinfo_add_size(struct mm_heap_s *heap, pid_t pid, mmsize_t size);
+void heapinfo_subtract_size(struct mm_heap_s *heap, pid_t pid, mmsize_t size);
+void heapinfo_update_total_size(struct mm_heap_s *heap, mmsize_t size, pid_t pid);
 void heapinfo_exclude_stacksize(void *stack_ptr);
+void heapinfo_peak_init(struct mm_heap_s *heap);
+void heapinfo_dealloc_tcbinfo(void *address, pid_t pid);
+#ifdef CONFIG_HEAPINFO_USER_GROUP
+void heapinfo_update_group(mmsize_t size, pid_t pid);
+void heapinfo_update_group_info(pid_t pid, int group, int type);
+void heapinfo_check_group_list(pid_t pid, char *name);
+#endif
+#endif
+void mm_is_sem_available(void *address);
+
+/* Functions to get the address of heap structure */
+struct mm_heap_s *mm_get_heap(void *address);
+struct mm_heap_s *mm_get_heap_with_index(int index);
+
+int mm_get_heapindex(void *mem);
+
+#if defined(CONFIG_APP_BINARY_SEPARATION) && defined(__KERNEL__)
+void mm_initialize_app_heap_q(void);
+void mm_add_app_heap_list(struct mm_heap_s *heap, char *app_name);
+void mm_remove_app_heap_list(struct mm_heap_s *heap);
+void mm_disable_app_heap_list(struct mm_heap_s *heap);
+struct mm_heap_s *mm_get_app_heap_with_name(char *app_name);
+char *mm_get_app_heap_name(void *address);
 #endif
 
-#ifdef CONFIG_DEBUG_MM_HEAPINFO
-/* Functions to get heap information */
-struct mm_heap_s *mm_get_heap_info(void);
+#if CONFIG_KMM_NHEAPS > 1
+struct heapinfo_total_info_s {
+	int total_heap_size;
+	int cur_free;
+	int largest_free_size;
+	int cur_dead_thread;
+	int sum_of_stacks;
+	int sum_of_heaps;
+	int cur_alloc_size;
+	int peak_alloc_size;
+};
+typedef struct heapinfo_total_info_s heapinfo_total_info_t;
+
+/**
+ * @cond
+ * @internal
+ */
+#ifdef CONFIG_MM_KERNEL_HEAP
+#if CONFIG_KMM_NHEAPS > 1
+void *kmm_malloc_at(int heap_index, size_t size);
+void *kmm_calloc_at(int heap_index, size_t n, size_t elem_size);
+void *kmm_memalign_at(int heap_index, size_t alignment, size_t size);
+void *kmm_realloc_at(int heap_index, void *oldmem, size_t size);
+void *kmm_zalloc_at(int heap_index, size_t size);
+#else
+#define kmm_malloc_at(heap_index, size)              kmm_malloc(size)
+#define kmm_calloc_at(heap_index, n, elem_size)      kmm_calloc(n, elem_size)
+#define kmm_memalign_at(heap_index, alignment, size) kmm_memalign(alignment, size)
+#define kmm_realloc_at(heap_index, oldmem, size)     kmm_realloc(oldmem, size)
+#define kmm_zalloc_at(heap_index, size)              kmm_zalloc(size)
 #endif
+#endif
+
+/**
+ * @brief Allocate memory to the specific heap.
+ * @details @b #include <tinyara/mm/mm.h>\n
+ *   malloc_at tries to allocate memory for a specific heap which passed by api argument.
+ *   If there is no enough space to allocate, it will return NULL.
+ * @param[in] heap_index Index of specific heap
+ * @param[in] size size (in bytes) of the memory region to be allocated
+ * 
+ * @return On success, the address of the allocated memory is returned. On failure, NULL is returned.
+ * @since TizenRT v2.1 PRE
+ */
+void *malloc_at(int heap_index, size_t size);
+/**
+ * @brief Calloc to the specific heap.
+ * @details @b #include <tinyara/mm/mm.h>\n
+ *   calloc_at tries to allocate memory for a specific heap which passed by api argument.
+ *   If there is no enough space to allocate, it will return NULL.
+ * @param[in] heap_index Index of specific heap
+ * @param[in] n the number of elements to be allocated
+ * @param[in] elem_size the size of elements
+ * 
+ * @return On success, the address of the allocated memory is returned. On failure, NULL is returned.
+ * @since TizenRT v2.1 PRE
+ */
+void *calloc_at(int heap_index, size_t n, size_t elem_size);
+/**
+ * @brief Memalign to the specific heap.
+ * @details @b #include <tinyara/mm/mm.h>\n
+ *   memalign_at tries to align the memory for a specific heap which passed by api argument.
+ *   If there is no enough space, it will return NULL.
+ * @param[in] heap_index Index of specific heap
+ * @param[in] alignment A power of two for alignment
+ * @param[in] size Allocated memory size
+ * 
+ * @return On success, the address of the allocated memory is returned. On failure, NULL is returned.
+ * @since TizenRT v2.1 PRE
+ */
+void *memalign_at(int heap_index, size_t alignment, size_t size);
+/**
+ * @brief Realloc to the specific heap.
+ * @details @b #include <tinyara/mm/mm.h>\n
+ *   realloc_at tries to allocate memory for a specific heap which passed by api argument.
+ *   If there is no enough space to allocate, it will return NULL.
+ * @param[in] heap_index Index of specific heap
+ * @param[in] oldmem the pointer to a memory block previously allocated
+ * @param[in] size the new size for the memory block
+ * 
+ * @return On success, the address of the allocated memory is returned. On failure, NULL is returned.
+ * @since TizenRT v2.1 PRE
+ */
+void *realloc_at(int heap_index, void *oldmem, size_t size);
+/**
+ * @brief Zalloc to the specific heap.
+ * @details @b #include <tinyara/mm/mm.h>\n
+ *   zalloc_at tries to allocate memory for a specific heap which passed by api argument.
+ *   If there is no enough space to allocate, it will return NULL.
+ * @param[in] heap_index Index of specific heap
+ * @param[in] size size (in bytes) of the memory region to be allocated
+ * 
+ * @return On success, the address of the allocated memory is returned. On failure, NULL is returned.
+ * @since TizenRT v2.1 PRE
+ */
+void *zalloc_at(int heap_index, size_t size);
+#else
+#define malloc_at(heap_index, size)              malloc(size)
+#define calloc_at(heap_index, n, elem_size)      calloc(n, elem_size)
+#define memalign_at(heap_index, alignment, size) memalign(alignment, size)
+#define realloc_at(heap_index, oldmem, size)     realloc(oldmem, size)
+#define zalloc_at(heap_index, size)              zalloc(size)
+#endif
+
+/**
+ * @endcond
+ */
+
+static inline uint32_t mm_align_up_by_size(uint32_t address, uint32_t size)
+{
+	uint32_t align_mask = size - 1;
+	return ((address + align_mask) & ~align_mask);
+}
+
+static inline uint32_t mm_align_down_by_size(uint32_t address, uint32_t size)
+{
+	uint32_t align_mask = size - 1;
+	return (address & ~align_mask);
+}
 
 #undef EXTERN
 #ifdef __cplusplus
 }
+
 #endif
 
 #endif							/* __INCLUDE_MM_MM_H */

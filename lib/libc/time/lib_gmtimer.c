@@ -72,10 +72,6 @@
 #define SEC_PER_DAY  ((time_t)24 * SEC_PER_HOUR)
 
 /****************************************************************************
- * Private Type Declarations
- ****************************************************************************/
-
-/****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
@@ -107,8 +103,7 @@ static void clock_utc2julian(time_t jdn, int *year, int *month, int *day);
  ****************************************************************************/
 
 /****************************************************************************
- * Function:  clock_calendar2utc, clock_gregorian2utc,
- *            and clock_julian2utc
+ * Function:   clock_utc2calendar, clock_utc2gregorian, and clock_utc2julian
  *
  * Description:
  *    Calendar to UTC conversion routines.  These conversions
@@ -217,7 +212,7 @@ static void clock_utc2calendar(time_t days, int *year, int *month, int *day)
 	for (;;) {
 		/* Is this year a leap year (we'll need this later too) */
 
-		leapyear = clock_isleapyear(value + 1970);
+		leapyear = clock_isleapyear(value + EPOCH_YEAR);
 
 		/* Get the number of days in the year */
 
@@ -239,7 +234,7 @@ static void clock_utc2calendar(time_t days, int *year, int *month, int *day)
 
 	/* At this point, value has the year and days has number days into this year */
 
-	*year = 1970 + value;
+	*year = EPOCH_YEAR + value;
 
 	/* Handle the month (zero based) */
 
@@ -331,7 +326,7 @@ FAR struct tm *gmtime_r(FAR const time_t *timer, FAR struct tm *result)
 	/* Get the seconds since the EPOCH */
 
 	epoch = *timer;
-	sdbg("timer=%d\n", (int)epoch);
+	svdbg("timer=%d\n", (int)epoch);
 
 	/* Convert to days, hours, minutes, and seconds since the EPOCH */
 
@@ -346,17 +341,17 @@ FAR struct tm *gmtime_r(FAR const time_t *timer, FAR struct tm *result)
 
 	sec = epoch;
 
-	sdbg("hour=%d min=%d sec=%d\n", (int)hour, (int)min, (int)sec);
+	svdbg("hour=%d min=%d sec=%d\n", (int)hour, (int)min, (int)sec);
 
 	/* Convert the days since the EPOCH to calendar day */
 
 	clock_utc2calendar(jdn, &year, &month, &day);
 
-	sdbg("jdn=%d year=%d month=%d day=%d\n", (int)jdn, (int)year, (int)month, (int)day);
+	svdbg("jdn=%d year=%d month=%d day=%d\n", (int)jdn, (int)year, (int)month, (int)day);
 
 	/* Then return the struct tm contents */
 
-	result->tm_year = (int)year - 1900;	/* Relative to 1900 */
+	result->tm_year = (int)year - TM_YEAR_BASE;	/* Relative to 1900 */
 	result->tm_mon = (int)month - 1;	/* zero-based */
 	result->tm_mday = (int)day;	/* one-based */
 	result->tm_hour = (int)hour;

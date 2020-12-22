@@ -63,7 +63,16 @@
 
 #include <tinyara/sched.h>
 #include <tinyara/ttrace.h>
+#if defined(CONFIG_APP_BINARY_SEPARATION) && defined(CONFIG_ARM_MPU)
+#include <tinyara/mpu.h>
+#endif
 
+#ifndef CONFIG_DISABLE_SIGNALS
+#ifndef CONFIG_DISABLE_PTHREAD
+#include <pthread.h>
+#endif
+#include <unistd.h>
+#endif
 #include <arch/irq.h>
 
 #include "sched/sched.h"
@@ -72,6 +81,12 @@
 #endif
 #include "task/task.h"
 
+#ifdef CONFIG_TASK_MONITOR
+#include "task_monitor/task_monitor_internal.h"
+#endif
+#ifdef CONFIG_PREFERENCE
+#include "preference/preference.h"
+#endif
 /****************************************************************************
  * Definitions
  ****************************************************************************/
@@ -170,6 +185,19 @@ int task_terminate(pid_t pid, bool nonblocking)
 		PANIC();
 	}
 
+#if defined(CONFIG_APP_BINARY_SEPARATION) && defined(CONFIG_ARM_MPU)
+	/* Disable mpu regions when the binary is unloaded if its own mpu registers are set in mpu h/w. */
+	if (IS_BINARY_MAINTASK(dtcb) && up_mpu_check_active(&dtcb->mpu_regs[0])) {
+#ifdef CONFIG_OPTIMIZE_APP_RELOAD_TIME
+		for (int i = 0; i < MPU_REG_NUMBER * MPU_NUM_REGIONS; i += MPU_REG_NUMBER) {
+			up_mpu_disable_region(&dtcb->mpu_regs[i]);
+		}
+#else
+		up_mpu_disable_region(&dtcb->mpu_regs[0]);
+#endif
+	}
+#endif
+
 	/* Perform common task termination logic (flushing streams, calling
 	 * functions registered by at_exit/on_exit, etc.).  We need to do
 	 * this as early as possible so that higher level clean-up logic
@@ -188,6 +216,13 @@ int task_terminate(pid_t pid, bool nonblocking)
 	saved_state = irqsave();
 	dq_rem((FAR dq_entry_t *)dtcb, (dq_queue_t *)g_tasklisttable[dtcb->task_state].list);
 	dtcb->task_state = TSTATE_TASK_INVALID;
+#ifdef CONFIG_TASK_MONITOR
+	/* Unregister this pid from task monitor */
+	task_monitor_unregester_list(pid);
+#endif
+#ifdef CONFIG_PREFERENCE
+	preference_clear_callbacks(pid);
+#endif
 	irqrestore(saved_state);
 
 	/* At this point, the TCB should no longer be accessible to the system */
@@ -200,3 +235,47 @@ int task_terminate(pid_t pid, bool nonblocking)
 
 	return sched_releasetcb(dtcb, dtcb->flags & TCB_FLAG_TTYPE_MASK);
 }
+
+/****************************************************************************
+ * Name: thread_termination_handler
+ *
+ * Description:
+ *   The handler called when SIGKILL is receive. Terminate the thread
+ *   that received the signal immediately.
+ *
+ * Inputs:
+ *   none
+ *
+ * Return Value:
+ *   none
+ *
+ ****************************************************************************/
+
+#ifndef CONFIG_DISABLE_SIGNALS
+void thread_termination_handler(void)
+{
+	struct tcb_s *rtcb = sched_self();
+	if (!rtcb) {
+		set_errno(ESRCH);
+		return;
+	}
+
+	switch ((rtcb->flags & TCB_FLAG_TTYPE_MASK) >> TCB_FLAG_TTYPE_SHIFT) {
+	case TCB_FLAG_TTYPE_TASK:
+	case TCB_FLAG_TTYPE_KERNEL:
+		/* tasks and kernel threads has to use this interface */
+		(void)task_delete(rtcb->pid);
+		break;
+#ifndef CONFIG_DISABLE_PTHREAD
+	case TCB_FLAG_TTYPE_PTHREAD:
+		(void)pthread_cancel(rtcb->pid);
+		(void)pthread_join(rtcb->pid, NULL);
+		break;
+#endif
+	default:
+		set_errno(EINVAL);
+		break;
+	}
+	return;
+}
+#endif

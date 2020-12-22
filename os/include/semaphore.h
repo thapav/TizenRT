@@ -73,11 +73,19 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+/* Save semaphore holder data when priority inheritance or binary manager is enabled. */
+#if defined(CONFIG_PRIORITY_INHERITANCE) || defined(CONFIG_BINARY_MANAGER)
+#define SAVE_SEM_HOLDER 1
+#endif
 
 /* Bit definitions for the struct sem_s flags field */
 
 #define PRIOINHERIT_FLAGS_DISABLE (1 << 0) /* Bit 0: Priority inheritance
 					    * is disabled for this semaphore */
+#define FLAGS_INITIALIZED         (1 << 1) /* Bit 1: This semaphore initialized */
+#ifdef SAVE_SEM_HOLDER
+#define FLAGS_SIGSEM              (1 << 2) /* Bit 2: The semaphore for signaling */
+#endif
 
 /****************************************************************************
  * Public Type Declarations
@@ -85,7 +93,7 @@
 
 /* This structure contains information about the holder of a semaphore */
 
-#ifdef CONFIG_PRIORITY_INHERITANCE
+#ifdef SAVE_SEM_HOLDER
 struct tcb_s;					/* Forward reference */
 /**
  * @ingroup SEMAPHORE_KERNEL
@@ -104,21 +112,24 @@ struct semholder_s {
 #else
 #define SEMHOLDER_INITIALIZER {NULL, 0}
 #endif
-#endif							/* CONFIG_PRIORITY_INHERITANCE */
+#endif							/* SAVE_SEM_HOLDER */
 
 /**
  * @ingroup SEMAPHORE_KERNEL
  * @brief Structure of generic semaphore
  */
 struct sem_s {
+#ifdef CONFIG_BINARY_MANAGER
+	struct sem_s *flink;		/* Support for singly linked lists. */
+#endif
 	int16_t semcount;			/* >0 -> Num counts available */
 	/* <0 -> Num tasks waiting for semaphore */
 	/* If priority inheritance is enabled, then we have to keep track of which
 	 * tasks hold references to the semaphore.
 	 */
 
-#ifdef CONFIG_PRIORITY_INHERITANCE
-	uint8_t flags;			/* See PRIOINHERIT_FLAGS_* definitions */
+	uint8_t flags;			/* See definitions for the struct sem_s flags */
+#ifdef SAVE_SEM_HOLDER
 #if CONFIG_SEM_PREALLOCHOLDERS > 0
 	FAR struct semholder_s *hhead;	/* List of holders of semaphore counts */
 #else
@@ -130,18 +141,31 @@ struct sem_s {
 typedef struct sem_s sem_t;
 
 /* Initializers */
+/* NOTE : It should NOT be used in kernel space because it doesn't call sem_init.
+ * In app separtion, all kernel semaphores are registered to a list in sem_init and recoverd when fault occurs.
+ * So they should be initialized by sem_init for recovery.
+*/
+
 /**
  * @ingroup SEMAPHORE_KERNEL
  * @brief Sem initializer
  */
-#ifdef CONFIG_PRIORITY_INHERITANCE
+#ifdef SAVE_SEM_HOLDER
+#ifdef CONFIG_BINARY_MANAGER
 #if CONFIG_SEM_PREALLOCHOLDERS > 0
-#define SEM_INITIALIZER(c) {(c), 0, NULL} /* semcount, flags, hhead */
+#define SEM_INITIALIZER(c) {NULL, (c), FLAGS_INITIALIZED, NULL} /* flink, semcount, flags, hhead */
 #else
-#define SEM_INITIALIZER(c) {(c), 0, SEMHOLDER_INITIALIZER} /* semcount, flags, holder */
+#define SEM_INITIALIZER(c) {NULL, (c), FLAGS_INITIALIZED, SEMHOLDER_INITIALIZER} /* flink, semcount, flags, holder */
+#endif
+#else // CONFIG_BINARY_MANAGER
+#if CONFIG_SEM_PREALLOCHOLDERS > 0
+#define SEM_INITIALIZER(c) {(c), FLAGS_INITIALIZED, NULL} /* semcount, flags, hhead */
+#else
+#define SEM_INITIALIZER(c) {(c), FLAGS_INITIALIZED, SEMHOLDER_INITIALIZER} /* semcount, flags, holder */
+#endif
 #endif
 #else
-#define SEM_INITIALIZER(c) {(c)}	/* semcount */
+#define SEM_INITIALIZER(c) {(c), FLAGS_INITIALIZED}	/* semcount, flags */
 #endif
 
 /****************************************************************************
@@ -169,7 +193,7 @@ struct timespec;				/* Defined in time.h */
  * @brief initialize an unnamed semaphore
  * @details @b #include <semaphore.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sem_init(FAR sem_t *sem, int pshared, unsigned int value);
 
@@ -179,7 +203,7 @@ int sem_init(FAR sem_t *sem, int pshared, unsigned int value);
  * @details @b #include <semaphore.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sem_destroy(FAR sem_t *sem);
 /**
@@ -188,7 +212,7 @@ int sem_destroy(FAR sem_t *sem);
  * @details @b #include <semaphore.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sem_wait(FAR sem_t *sem);
 /**
@@ -197,7 +221,7 @@ int sem_wait(FAR sem_t *sem);
  * @details @b #include <semaphore.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sem_timedwait(FAR sem_t *sem, FAR const struct timespec *abstime);
 /**
@@ -206,7 +230,7 @@ int sem_timedwait(FAR sem_t *sem, FAR const struct timespec *abstime);
  * @details @b #include <semaphore.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sem_trywait(FAR sem_t *sem);
 /**
@@ -215,7 +239,7 @@ int sem_trywait(FAR sem_t *sem);
  * @details @b #include <semaphore.h> \n
  * SYSTEM CALL API \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sem_post(FAR sem_t *sem);
 /**
@@ -223,7 +247,7 @@ int sem_post(FAR sem_t *sem);
  * @brief get the value of a semaphore
  * @details @b #include <semaphore.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int sem_getvalue(FAR sem_t *sem, FAR int *sval);
 

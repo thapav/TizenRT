@@ -183,7 +183,10 @@
  *   function.
  */
 
-typedef void *imaxdiv_t;		/* Dummy type since imaxdiv is not yet supported */
+typedef struct {
+	intmax_t quot;
+	intmax_t rem;
+} imaxdiv_t;
 
 /****************************************************************************
  * Public Function Prototypes
@@ -204,30 +207,39 @@ extern "C" {
  * @brief return absolute value
  * @details @b #include <inttypes.h> \n
  * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
-intmax_t imaxabs(intmax_t);
+intmax_t imaxabs(intmax_t j);
+/**
+ * @brief return quotient and remainder of an integer division
+ * @details @b #include <inttypes.h> \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v2.0
+ */
+imaxdiv_t imaxdiv(intmax_t numer, intmax_t denom);
+/**
+ * @brief convert string to integer
+ * @details @b #include <inttypes.h> \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v2.0
+ */
+intmax_t strtoimax(FAR const char *nptr, FAR char **endptr, int base);
+/**
+ * @brief convert string to unsigned integer
+ * @details @b #include <inttypes.h> \n
+ * POSIX API (refer to : http://pubs.opengroup.org/onlinepubs/9699919799/)
+ * @since TizenRT v2.0
+ */
+uintmax_t strtoumax(FAR const char *nptr, FAR char **endptr, int base);
 /**
  * @cond
  * @internal
  */
-imaxdiv_t imaxdiv(intmax_t, intmax_t);
+intmax_t wcstoimax(FAR const wchar_t *nptr, FAR wchar_t **endptr, int base);
 /**
  * @internal
  */
-intmax_t strtoimax(const char *, char **, int);
-/**
- * @internal
- */
-uintmax_t strtoumax(const char *, char **, int);
-/**
- * @internal
- */
-intmax_t wcstoimax(const wchar_t *, wchar_t **, int);
-/**
- * @internal
- */
-uintmax_t wcstoumax(const wchar_t *, wchar_t **, int);
+uintmax_t wcstoumax(FAR const wchar_t *nptr, FAR wchar_t **endptr, int base);
 
 #if defined(__WORDSIZE) && __WORDSIZE == 64
 #define __PRI64_PREFIX  "l"
@@ -237,6 +249,13 @@ uintmax_t wcstoumax(const wchar_t *, wchar_t **, int);
 #define __PRIPTR_PREFIX
 #endif
 
+# define PRIdPTR	__PRIPTR_PREFIX "d"
+# define PRIiPTR	__PRIPTR_PREFIX "i"
+# define PRIoPTR	__PRIPTR_PREFIX "o"
+# define PRIuPTR	__PRIPTR_PREFIX "u"
+# define PRIxPTR	__PRIPTR_PREFIX "x"
+# define PRIXPTR	__PRIPTR_PREFIX "X"
+
 #define PRId64   __PRI64_PREFIX "d"
 
 #define PRIu8       "u"
@@ -244,6 +263,10 @@ uintmax_t wcstoumax(const wchar_t *, wchar_t **, int);
 #define PRIu32      "u"
 #define PRIu64      __PRI64_PREFIX "u"
 
+#define PRIx8       "x"
+#define PRIx16      "x"
+#define PRIx32      "x"
+#define PRIx64      __PRI64_PREFIX "x"
 
 #define PRIi8       "i"
 #define PRIi16      "i"

@@ -26,11 +26,14 @@ STACKSIZE = 2048
 
 ASRCS =
 CSRCS = tash_command.c tash_init.c
-ifneq ($(CONFIG_DISABLE_ENVIRON),y)
+ifeq ($(CONFIG_TASH_SCRIPT),y)
 CSRCS += tash_script.c
 endif
 ifneq ($(CONFIG_DISABLE_SIGNALS),y)
 CSRCS += tash_sleep.c
+ifeq ($(CONFIG_TASH_USLEEP),y)
+CSRCS += tash_usleep.c
+endif
 endif
 
 MAINSRC = tash_main.c

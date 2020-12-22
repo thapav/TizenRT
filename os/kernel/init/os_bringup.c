@@ -69,13 +69,33 @@
 #include <tinyara/kthread.h>
 #include <tinyara/userspace.h>
 #include <tinyara/net/net.h>
+#ifdef CONFIG_SCHED_WORKQUEUE
+#include <tinyara/wqueue.h>
+#endif
 #ifdef CONFIG_LOGM
 #include <tinyara/logm.h>
 #endif
-#include "wqueue/wqueue.h"
+#ifdef CONFIG_SCHED_CPULOAD
+#include <tinyara/cpuload.h>
+#endif
+#ifdef CONFIG_ENABLE_HEAPINFO
+#include <tinyara/heapinfo_drv.h>
+#endif
+#ifdef CONFIG_TASK_MANAGER
+#include <tinyara/task_manager_drv.h>
+#endif
 #include "init/init.h"
 #ifdef CONFIG_PAGING
 #include "paging/paging.h"
+#endif
+#ifdef CONFIG_BINARY_MANAGER
+#include "binary_manager/binary_manager.h"
+#endif
+#ifdef CONFIG_TASK_MONITOR
+#include "task_monitor/task_monitor_internal.h"
+#endif
+#ifdef CONFIG_MESSAGING_IPC
+#include "messaging/message_ctrl.h"
 #endif
 
 /****************************************************************************
@@ -101,7 +121,7 @@
 #if defined(CONFIG_INIT_ENTRYPOINT)
 /* Initialize by starting a task at an entry point */
 
-#ifndef CONFIG_USER_ENTRYPOINT
+#if !defined(CONFIG_USER_ENTRYPOINT) && !defined(CONFIG_TASH)
 /* Entry point name must have been provided */
 
 #error CONFIG_USER_ENTRYPOINT must be defined
@@ -233,37 +253,75 @@ static inline void os_do_appstart(void)
 	board_initialize();
 #endif
 
+#ifdef CONFIG_SE
+	se_initialize();
+#endif
+
+#ifdef CONFIG_IOTDEV
+	iotbus_sig_register();
+#endif
+
 #ifdef CONFIG_NET
 	/* Initialize the network system & Create network task if required */
 
 	net_initialize();
 #endif
 
+#ifdef CONFIG_SCHED_CPULOAD
+	cpuload_initialize();
+#endif
+
+#ifdef CONFIG_TASK_MANAGER
+	task_manager_drv_register();
+#endif
+
+#ifdef CONFIG_MESSAGING_IPC
+	messaging_initialize();
+#endif
+
+#ifdef CONFIG_TASK_MONITOR
+	pid = kernel_thread("taskmonitor", CONFIG_TASK_MONITOR_PRIORITY, 1024, task_monitor, (FAR char *const *)NULL);
+	if (pid < 0) {
+		sdbg("Failed to start task monitor\n");
+	}
+#endif
+
+#if defined(CONFIG_SYSTEM_PREAPP_INIT) && !defined(CONFIG_APP_BINARY_SEPARATION)
+	svdbg("Starting application init task\n");
+
+	pid = task_create("appinit", SCHED_PRIORITY_DEFAULT, CONFIG_SYSTEM_PREAPP_STACKSIZE, preapp_start, (FAR char *const *)NULL);
+	if (pid < 0) {
+		svdbg("Failed to create application init thread\n");
+	}
+#endif
+
+#ifdef CONFIG_BINARY_MANAGER
+	svdbg("Starting binary manager thread\n");
+
+	pid = kernel_thread(BINARY_MANAGER_NAME, BINARY_MANAGER_PRIORITY, BINARY_MANAGER_STACKSIZE, binary_manager, NULL);
+	if (pid < 0) {
+		sdbg("Failed to start binary manager");
+	}
+#endif
+
+#ifdef CONFIG_ENABLE_HEAPINFO
+	heapinfo_drv_register();
+#endif
+
+#if !defined(CONFIG_BINARY_MANAGER)
 	/* Start the application initialization task.  In a flat build, this is
 	 * entrypoint is given by the definitions, CONFIG_USER_ENTRYPOINT.  In
 	 * the protected build, however, we must get the address of the
 	 * entrypoint from the header at the beginning of the user-space blob.
 	 */
 
-	svdbg("Starting application init thread\n");
+	svdbg("Starting application main task\n");
 
-#ifdef CONFIG_SYSTEM_PREAPP_INIT
-#ifdef CONFIG_BUILD_PROTECTED
-	DEBUGASSERT(USERSPACE->preapp_start != NULL);
-	pid = task_create("appinit", SCHED_PRIORITY_DEFAULT, CONFIG_SYSTEM_PREAPP_STACKSIZE, USERSPACE->preapp_start, (FAR char *const *)NULL);
-#else
-	pid = task_create("appinit", SCHED_PRIORITY_DEFAULT, CONFIG_SYSTEM_PREAPP_STACKSIZE, preapp_start, (FAR char *const *)NULL);
-#endif
-#endif
-
-	svdbg("Starting application main thread\n");
-
-#ifdef CONFIG_BUILD_PROTECTED
-	DEBUGASSERT(USERSPACE->us_entrypoint != NULL);
-	pid = task_create("appmain", SCHED_PRIORITY_DEFAULT, CONFIG_USERMAIN_STACKSIZE, USERSPACE->us_entrypoint, (FAR char *const *)NULL);
-#else
+#if defined(CONFIG_USER_ENTRYPOINT)
 	pid = task_create("appmain", SCHED_PRIORITY_DEFAULT, CONFIG_USERMAIN_STACKSIZE, (main_t)CONFIG_USER_ENTRYPOINT, (FAR char *const *)NULL);
 #endif
+#endif // !CONFIG_BINARY_MANAGER
+
 	ASSERT(pid > 0);
 }
 

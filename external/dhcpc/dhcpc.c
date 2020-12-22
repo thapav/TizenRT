@@ -60,7 +60,9 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 
+#include <netdb.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -115,6 +117,24 @@
 #define DHCP_OPTION_END         255
 
 #define BUFFER_SIZE             256
+#define MAX_DNS_SERVERS         2       /*max no of dns servers*/
+
+#define DHCPC_SET_IP4ADDR(intf, ip, netmask, gateway)	        \
+	do {							\
+		int res = -1;					\
+		res = netlib_set_ipv4addr(intf, &ip);		\
+		if (res == -1) {				\
+			nvdbg("[DHCPC] set ipv4 addr error\n");	\
+		}						\
+		res = netlib_set_ipv4netmask(intf, &netmask);	\
+		if (res == -1) {				\
+			nvdbg("[DHCPC] set netmask addr error\n");	\
+		}						\
+		res = netlib_set_dripv4addr(intf, &gateway);	\
+		if (res == -1) {				\
+			nvdbg("[DHCPC] set route addr error\n");	\
+		}						\
+	} while (0)
 
 /****************************************************************************
  * Private Types
@@ -140,6 +160,15 @@ struct dhcp_msg {
 	uint8_t options[312];
 };
 
+struct dhcpc_state {
+	struct in_addr serverid;
+	struct in_addr ipaddr;
+	struct in_addr netmask;
+	struct in_addr dnsaddr[MAX_DNS_SERVERS];
+	struct in_addr default_router;
+	uint32_t lease_time;		/* Lease expires in this number of seconds */
+};
+
 struct dhcpc_state_s {
 	uint8_t ds_macaddr[16];
 	char nic[10];
@@ -149,6 +178,8 @@ struct dhcpc_state_s {
 	struct in_addr serverid;
 	struct dhcp_msg packet;
 };
+
+static int g_total_dns_servers;
 
 /****************************************************************************
  * Private Data
@@ -238,15 +269,18 @@ static int dhcpc_sendmsg(struct dhcpc_state_s *pdhcpc, struct dhcpc_state *presu
 		/* Broadcast DISCOVER message to all servers */
 
 	case DHCPDISCOVER:
-
-		pdhcpc->packet.flags = HTONS(BOOTP_BROADCAST);	/*  Broadcast bit. */
+		/* we don't need the broadcast flag since we can receive unicast traffic
+		   before being fully configured! */
+		//pdhcpc->packet.flags = HTONS(BOOTP_BROADCAST);	/*  Broadcast bit. */
 		pend = dhcpc_addreqoptions(pend);
 		break;
 
 		/* Send REQUEST message to the server that sent the *first* OFFER */
 
 	case DHCPREQUEST:
-		pdhcpc->packet.flags = HTONS(BOOTP_BROADCAST);	/*  Broadcast bit. */
+		/* we don't need the broadcast flag since we can receive unicast traffic
+		   before being fully configured! */
+		//pdhcpc->packet.flags = HTONS(BOOTP_BROADCAST);	/*  Broadcast bit. */
 		memcpy(pdhcpc->packet.ciaddr, &pdhcpc->ipaddr.s_addr, 4);
 		pend = dhcpc_addserverid(&pdhcpc->serverid, pend);
 		pend = dhcpc_addreqipaddr(&pdhcpc->ipaddr, pend);
@@ -281,11 +315,13 @@ static int dhcpc_sendmsg(struct dhcpc_state_s *pdhcpc, struct dhcpc_state *presu
 /****************************************************************************
  * Name: dhcpc_parseoptions
  ****************************************************************************/
-
+uint8_t itr;
 static uint8_t dhcpc_parseoptions(struct dhcpc_state *presult, uint8_t *optptr, int len)
 {
 	uint8_t *end = optptr + len;
 	uint8_t type = 0;
+	uint8_t *start_addr;
+
 	while (optptr < end) {
 		switch (*optptr) {
 		case DHCP_OPTION_SUBNET_MASK:
@@ -302,7 +338,13 @@ static uint8_t dhcpc_parseoptions(struct dhcpc_state *presult, uint8_t *optptr, 
 		case DHCP_OPTION_DNS_SERVER:
 			/* Get the DNS server address in network order */
 
-			memcpy(&presult->dnsaddr.s_addr, optptr + 2, 4);
+			g_total_dns_servers = (*(optptr + 1)) / 4;	/* Get the total number of DNS server addresses */
+			g_total_dns_servers = (g_total_dns_servers > 2) ? 2 : g_total_dns_servers;
+			start_addr = optptr + 2;
+			for (itr = 0; itr < g_total_dns_servers; ++itr) {
+				memcpy(&presult->dnsaddr[itr].s_addr, start_addr, 4);
+				start_addr += 4;
+			}
 			break;
 
 		case DHCP_OPTION_MSG_TYPE:
@@ -341,7 +383,6 @@ static uint8_t dhcpc_parseoptions(struct dhcpc_state *presult, uint8_t *optptr, 
 /****************************************************************************
  * Name: dhcpc_parsemsg
  ****************************************************************************/
-
 static uint8_t dhcpc_parsemsg(struct dhcpc_state_s *pdhcpc, int buflen, struct dhcpc_state *presult)
 {
 	if (pdhcpc->packet.op == DHCP_REPLY && memcmp(pdhcpc->packet.xid, g_dhcpc_xid, sizeof(g_dhcpc_xid)) == 0 && memcmp(pdhcpc->packet.chaddr, pdhcpc->ds_macaddr, pdhcpc->ds_maclen) == 0) {
@@ -353,14 +394,9 @@ static uint8_t dhcpc_parsemsg(struct dhcpc_state_s *pdhcpc, int buflen, struct d
 }
 
 /****************************************************************************
- * Global Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Name: dhcpc_open
  ****************************************************************************/
-
-void *dhcpc_open(const char *intf)
+static void *dhcpc_open(const char *intf)
 {
 	struct dhcpc_state_s *pdhcpc;
 	struct sockaddr_in addr;
@@ -431,7 +467,7 @@ void *dhcpc_open(const char *intf)
 /****************************************************************************
  * Name: dhcpc_close
  ****************************************************************************/
-void dhcpc_close(void *handle)
+static void dhcpc_close(void *handle)
 {
 	struct dhcpc_state_s *pdhcpc = (struct dhcpc_state_s *)handle;
 
@@ -450,9 +486,11 @@ int g_dhcpc_state;
 /****************************************************************************
  * Name: dhcpc_request
  ****************************************************************************/
-
-int dhcpc_request(void *handle, struct dhcpc_state *presult)
+static int dhcpc_request(void *handle, struct dhcpc_state *presult)
 {
+	int sock;
+	int ioctl_ret;
+	int idx;
 	if (!handle) {
 		ndbg("ERROR : handle must not be null\n");
 		return -100;
@@ -476,7 +514,10 @@ int dhcpc_request(void *handle, struct dhcpc_state *presult)
 	oldaddr.s_addr = 0;
 
 	intf = pdhcpc->nic;
-	netlib_get_ipv4addr(intf, &oldaddr);
+	int ret = netlib_get_ipv4addr(intf, &oldaddr);
+	if (ret == -1) {
+		printf("Set IPv4 fail\n");
+	}
 
 	/* Loop until we receive the lease (or an error occurs) */
 	/* Set the IP address to INADDR_ANY. */
@@ -529,7 +570,10 @@ int dhcpc_request(void *handle, struct dhcpc_state *presult)
 			 * out of the loop.
 			 */
 
-			(void)netlib_set_ipv4addr(intf, &presult->ipaddr);
+			ret = netlib_set_ipv4addr(intf, &presult->ipaddr);
+			if (ret == -1) {
+				ndbg("Set IPv4 fail\n");
+			}
 			g_dhcpc_state = STATE_HAVE_OFFER;
 			break;
 		} else {
@@ -621,22 +665,104 @@ int dhcpc_request(void *handle, struct dhcpc_state *presult)
 		 */
 	} while (g_dhcpc_state == STATE_HAVE_OFFER);
 
-	ndbg("Got IP address %d.%d.%d.%d\n", (presult->ipaddr.s_addr) & 0xff, (presult->ipaddr.s_addr >> 8) & 0xff, (presult->ipaddr.s_addr >> 16) & 0xff, (presult->ipaddr.s_addr >> 24) & 0xff);
-	ndbg("Got netmask %d.%d.%d.%d\n", (presult->netmask.s_addr) & 0xff, (presult->netmask.s_addr >> 8) & 0xff, (presult->netmask.s_addr >> 16) & 0xff, (presult->netmask.s_addr >> 24) & 0xff);
-	ndbg("Got DNS server %d.%d.%d.%d\n", (presult->dnsaddr.s_addr) & 0xff, (presult->dnsaddr.s_addr >> 8) & 0xff, (presult->dnsaddr.s_addr >> 16) & 0xff, (presult->dnsaddr.s_addr >> 24) & 0xff);
-	ndbg("Got default router %d.%d.%d.%d\n", (presult->default_router.s_addr) & 0xff, (presult->default_router.s_addr >> 8) & 0xff, (presult->default_router.s_addr >> 16) & 0xff, (presult->default_router.s_addr >> 24) & 0xff);
+	ndbg("Got IP address %d.%d.%d.%d\n", (presult->ipaddr.s_addr) & 0xff,
+		 (presult->ipaddr.s_addr >> 8) & 0xff,
+		 (presult->ipaddr.s_addr >> 16) & 0xff,
+		 (presult->ipaddr.s_addr >> 24) & 0xff);
+
+	ndbg("Got netmask %d.%d.%d.%d\n", (presult->netmask.s_addr) & 0xff,
+		 (presult->netmask.s_addr >> 8) & 0xff,
+		 (presult->netmask.s_addr >> 16) & 0xff,
+		 (presult->netmask.s_addr >> 24) & 0xff);
+
+	for (itr = 0; itr < g_total_dns_servers; ++itr) {
+		ndbg("Got DNS server %d.%d.%d.%d\n", (presult->dnsaddr[itr].s_addr) & 0xff,
+			 (presult->dnsaddr[itr].s_addr >> 8) & 0xff,
+			 (presult->dnsaddr[itr].s_addr >> 16) & 0xff,
+			 (presult->dnsaddr[itr].s_addr >> 24) & 0xff);
+	}
+
+	ndbg("Got default router %d.%d.%d.%d\n", (presult->default_router.s_addr) & 0xff,
+		 (presult->default_router.s_addr >> 8) & 0xff,
+		 (presult->default_router.s_addr >> 16) & 0xff,
+		 (presult->default_router.s_addr >> 24) & 0xff);
 	ndbg("Lease expires in %d seconds\n", presult->lease_time);
 
-#if defined(CONFIG_NETDB_DNSCLIENT) && defined(CONFIG_NETDB_DNSSERVER_BY_DHCP)
-	struct sockaddr_in dns;
-	if (presult->dnsaddr.s_addr != 0) {
-		ndbg("Set DNS IP address via dns_add_nameserver\n");
-		dns.sin_addr.s_addr = presult->dnsaddr.s_addr;
-		dns.sin_family = AF_INET;
-		dns.sin_port  = htons(DNS_DEFAULT_PORT);
-		dns_add_nameserver((FAR struct sockaddr *)&dns, sizeof(struct sockaddr_in));
-	}
+#if defined CONFIG_NET_LWIP    // this is temporal fix. it should be modified later
+	ip_addr_t dns_addr;
+	IP_SET_TYPE_VAL(dns_addr, IPADDR_TYPE_V4);
+
+	for (idx = 0; idx < g_total_dns_servers; ++idx) {
+#ifdef CONFIG_NET_IPv6
+	dns_addr.u_addr.ip4.addr = presult->dnsaddr[idx].s_addr;
+#else
+	dns_addr.addr = presult->dnsaddr[idx].s_addr;
 #endif
+		struct req_lwip_data req;
+
+		sock = socket(AF_INET, SOCK_DGRAM, 0);
+		if (sock < 0) {
+			ndbg("dnsclient : socket() failed with errno: %d\n", errno);
+			return ERROR;
+		}
+
+		memset(&req, 0, sizeof(req));
+		req.type = DNSSETSERVER;
+		req.num_dns = idx;
+		req.dns_server = &dns_addr;
+
+		ioctl_ret = ioctl(sock, SIOCLWIP, (unsigned long)&req);
+		if (ioctl_ret == ERROR) {
+			ndbg("dnsclient : ioctl() failed with errno: %d\n", errno);
+			close(sock);
+			return ioctl_ret;
+		}
+
+		close(sock);
+	}
+#endif /*  CONFIG_NET_LWIP */
 
 	return OK;
+}
+
+/****************************************************************************
+ * Global Functions
+ ****************************************************************************/
+/****************************************************************************
+ * Name: dhcp_client_start
+ ****************************************************************************/
+int dhcp_client_start(const char *intf)
+{
+	struct dhcpc_state state;
+	int ret;
+	void *dhcp_hnd = NULL;
+	ndbg("[DHCPC] External DHCPC application started\n");
+	dhcp_hnd = dhcpc_open(intf);
+	if (dhcp_hnd) {
+		ret = dhcpc_request(dhcp_hnd, &state);
+		if (ret != OK) {
+			ndbg("[DHCPC] get IP address fail\n");
+			dhcpc_close(dhcp_hnd);
+			return -1;
+		}
+		DHCPC_SET_IP4ADDR(intf, state.ipaddr, state.netmask, state.default_router);
+		ndbg("[DHCPC] IP address : %s ----\n", inet_ntoa(state.ipaddr));
+		dhcpc_close(dhcp_hnd);
+	} else {
+		ndbg("[DHCPC] Invalid dhcp handle\n");
+		return -1;
+	}
+
+	return OK;
+}
+
+/****************************************************************************
+ * Name: dhcp_client_stop
+ ****************************************************************************/
+void dhcp_client_stop(const char *intf)
+{
+	struct in_addr in = { .s_addr = INADDR_NONE };
+	DHCPC_SET_IP4ADDR(intf, in, in, in);
+	ndbg("[DHCPC] dhcpc_stop -release IP address (app)\n");
+	return;
 }

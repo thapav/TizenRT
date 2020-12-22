@@ -1348,7 +1348,7 @@ static int get_parameters(struct iperf_test *test)
 			test->settings->bytes = j_p->valueint;
 		}
 		if ((j_p = cJSON_GetObjectItem(j, "blockcount")) != NULL) {
-			test->settings->blocks = (j_p->valueint > 0 ? j_p->valueint : 0);
+			test->settings->blocks = (j_p->valueint > 0 ? (iperf_size_t)j_p->valueint : 0);
 		}
 		if ((j_p = cJSON_GetObjectItem(j, "MSS")) != NULL) {
 			test->settings->mss = j_p->valueint;
@@ -2693,8 +2693,6 @@ struct iperf_stream *iperf_new_stream(struct iperf_test *test, int s)
 		snprintf(template, sizeof(template) / sizeof(char), "%s", buf);
 	}
 #endif
-
-	h_errno = 0;
 
 	sp = (struct iperf_stream *)malloc(sizeof(struct iperf_stream));
 	if (!sp) {

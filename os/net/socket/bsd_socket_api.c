@@ -59,7 +59,39 @@
 #ifdef CONFIG_NET
 
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <net/if.h>
+#include "lwip/netdb.h"
+#include "lwip/sockets.h"
+#ifdef CONFIG_NET_IPv4
+#include "lwip/ip4_addr.h"
+#endif
+#ifdef CONFIG_NET_IPv6
+#include "lwip/ip6_addr.h"
+#endif
+#include <tinyara/lwnl/lwnl.h>
 
+/*
+ * Private
+ */
+int _create_netlink(int type, int protocol)
+{
+	// to do message filter
+	(void)type;
+	(void)protocol;
+
+	int fd = open(LWNL_PATH, O_RDWR);
+	if (fd < 0) {
+		ndbg("open netlink dev fail\n");
+		return -1;
+	}
+	return fd;
+}
+
+/*
+ *public
+ */
 int bind(int s, const struct sockaddr *name, socklen_t namelen)
 {
 	return lwip_bind(s, name, namelen);
@@ -122,7 +154,7 @@ int listen(int s, int backlog)
 	return lwip_listen(s, backlog);
 }
 
-int recv(int s, void *mem, size_t len, int flags)
+ssize_t recv(int s, void *mem, size_t len, int flags)
 {
 	/* Treat as a cancellation point */
 	(void)enter_cancellation_point();
@@ -131,7 +163,7 @@ int recv(int s, void *mem, size_t len, int flags)
 	return result;
 }
 
-int recvfrom(int s, void *mem, size_t len, int flags, struct sockaddr *from, socklen_t *fromlen)
+ssize_t recvfrom(int s, void *mem, size_t len, int flags, struct sockaddr *from, socklen_t *fromlen)
 {
 	/* Treat as a cancellation point */
 	(void)enter_cancellation_point();
@@ -140,7 +172,7 @@ int recvfrom(int s, void *mem, size_t len, int flags, struct sockaddr *from, soc
 	return result;
 }
 
-int send(int s, const void *data, size_t size, int flags)
+ssize_t send(int s, const void *data, size_t size, int flags)
 {
 	/* Treat as a cancellation point */
 	(void)enter_cancellation_point();
@@ -149,7 +181,7 @@ int send(int s, const void *data, size_t size, int flags)
 	return result;
 }
 
-int sendto(int s, const void *data, size_t size, int flags, const struct sockaddr *to, socklen_t tolen)
+ssize_t sendto(int s, const void *data, size_t size, int flags, const struct sockaddr *to, socklen_t tolen)
 {
 	/* Treat as a cancellation point */
 	(void)enter_cancellation_point();
@@ -158,9 +190,54 @@ int sendto(int s, const void *data, size_t size, int flags, const struct sockadd
 	return result;
 }
 
+static int socket_argument_validation(int domain, int type, int protocol)
+{
+	if (domain != AF_INET && domain != AF_INET6 && domain != AF_UNSPEC) {
+		return -1;
+	}
+	switch (protocol) {
+	case IPPROTO_UDP:
+	case IPPROTO_UDPLITE:
+		if (type != SOCK_DGRAM && type != SOCK_RAW) {
+			return -1;
+		}
+		break;
+	case IPPROTO_TCP:
+		if (type != SOCK_STREAM) {
+			return -1;
+		}
+		break;
+	case IPPROTO_ICMP:
+	case IPPROTO_IGMP:
+	case IPPROTO_ICMPV6:
+		if (type != SOCK_RAW) {
+			return -1;
+		}
+		break;
+	case IPPROTO_IP:
+		if (type == SOCK_RAW) {
+			return -1;
+		}
+		break;
+	default:
+		return -1;
+		break;
+	}
+	return 0;
+}
+
 int socket(int domain, int type, int protocol)
 {
-	return lwip_socket(domain, type, protocol);
+	if (domain == AF_LWNL) {
+		int fd = _create_netlink(type, protocol);
+		return fd;
+	}
+
+	if (!socket_argument_validation(domain, type, protocol)) {
+		return lwip_socket(domain, type, protocol);
+	}
+
+	return -1;
 }
 
 #ifdef CONFIG_DISABLE_POLL
@@ -173,10 +250,5 @@ int select(int maxfdp1, fd_set *readset, fd_set *writeset, fd_set *exceptset, st
 	return result;
 }
 #endif
-
-int ioctlsocket(int s, long cmd, void *argp)
-{
-	return lwip_ioctl(s, cmd, argp);
-}
 
 #endif

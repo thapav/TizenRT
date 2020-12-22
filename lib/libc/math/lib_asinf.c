@@ -55,9 +55,15 @@
 
 float asinf(float x)
 {
-	long double y, y_sin, y_cos;
+	long double y;
+	long double y_sin;
+	long double y_cos;
 
 	y = 0;
+
+	if (isnan(x) || x < -1.0 || x > 1.0) {
+		return NAN;
+	}
 
 	while (1) {
 		y_sin = sinf(y);

@@ -17,6 +17,10 @@ config LIBDIR
 	string
 	option env="LIBDIR"
 
+config LOADABLEDIR
+	string
+	option env="LOADABLEDIR"
+
 menu "Build Setup"
 
 config EXPERIMENTAL
@@ -169,19 +173,16 @@ config BUILD_FLAT
 		the blob.  There are no special privileges, protections, or
 		restraints.
 
-config BUILD_PROTECTED
-	bool "TinyAra protected build"
-	depends on ARCH_USE_MPU
-	select LIB_SYSCALL
-	select BUILD_2PASS
+config APP_BINARY_SEPARATION
+	bool "Application binary separation build"
+	select BUILD_PROTECTED
+	select BINFMT_LOADABLE
 	---help---
-		Builds TinyAra and selected applications as two "blobs":  A protected,
-		privileged kernel blob and a separate unprivileged, user blob. This
-		require sue of the two pass build with each blob being build on each pass.
-
-		NOTE:  This build configuration requires that the platform support
-		a memory protection unit (MPU).  Support, however, may not be
-		implemented on all platforms.
+		Enables application binary separation.
+		This config is tightly coupled to CONFIG_BUILD_PROTECTED. When protected
+		build is selected, then selecting this config generates separate binary for
+		each user space application, apart from a separate kernel binary. Selecting
+		config also applies MPU based memory isolation and protection for each app.
 
 config BUILD_KERNEL
 	bool "TinyAra kernel build"
@@ -198,50 +199,73 @@ config BUILD_KERNEL
 
 endchoice # Build configuration
 
+if APP_BINARY_SEPARATION
+
+config NUM_APPS
+	int "Number of application binaries"
+	default 2
+	---help---
+		Indicates the number of user applications to be built. The available RAM might
+		constrain the max number of applications. It is the developer's responsibility
+		to make sure that the NUM_APPS lies withing the memory constraints.
+
+config APPS_RAM_REGION_SHAREABLE
+	bool "RAM region of apps shareable"
+	default n
+	---help---
+		This config indicates if the applications RAM region is to be configured as a
+		shareable region in the MPU. If the system has multiple cores which might access
+		the external applicaiton RAM region, then this config needs to be set to true.
+
+config SUPPORT_COMMON_BINARY
+	bool "Support Common Binary"
+	default n
+	depends on FS_SMARTFS
+	select LIB_HASHMAP
+	---help---
+		This config indicates whether we support common binary. The common binary will
+		contain all the common libraries which will be used by the different loadable
+		applications. The common binary will be stored in the file system.
+
+if SUPPORT_COMMON_BINARY
+
+config COMMON_BINARY_PATH
+	string "Path where common binary is stored"
+	default "/mnt/"
+	---help---
+		Path where common binary is stored.
+
+config COMMON_BINARY_NAME
+	string "Name of common binary file"
+	default "tinyara_common_binary"
+	---help---
+		Filename of the common binary file.
+
+endif # SUPPORT_COMMON_BINARY
+
+endif # APP_BINARY_SEPARATION
+
+
+config BUILD_PROTECTED
+	bool
+	depends on ARCH_USE_MPU
+	select LIB_SYSCALL
+	select BUILD_2PASS
+
 config BUILD_2PASS
-	bool "Two pass build"
+	bool
 	default n
 	depends on !BUILD_KERNEL
-	---help---
-		Enables the two pass build options.
-
-		Two-pass build options.  If the 2 pass build option is selected, then these
-		options configure the make system build a extra link object. This link object
-		is assumed to be an incremental (relative) link object, but could be a static
-		library (archive) (some modification to this Makefile would be required if
-		PASS1_TARGET generates an archive). Pass 1 1ncremental (relative) link
-		objects should be put into the processor-specific source directory (where other
-		link objects will be created).  If the pass1 object is an archive, it could
-		go anywhere.
 
 if BUILD_2PASS
 
 config PASS1_TARGET
-	string "Pass one target"
+	string
 	default "all"
-	---help---
-		The name of the first pass build target.  This
-		can be specific build target, a special build target (all, default, etc.)
-		or may just be left undefined.
 
 config PASS1_OBJECT
-	string "Pass one object"
+	string
 	default ""
-	---help---
-		May be used to include an extra, pass1 object
-		into the final link.  This would probably be the object generated
-		from the PASS1_TARGET.  It may be available at link time
-		in the arch/<architecture>/src directory.
-
-config TINYARA_USERSPACE
-	hex "Beginning of user-space blob"
-	default 0x0
-	depends on BUILD_PROTECTED
-	---help---
-		In the kernel build, the TinyAra kernel and the user-space blob are
-		built separately linked objects.  TINYARA_USERSPACE provides the
-		address where the user-space blob is loaded into memory.  TinyAra will
-		expect to find and instance of struct userspace_s at this location.
 
 endif # Build 2-pass
 endmenu # Build Setup
@@ -272,15 +296,6 @@ config RAW_BINARY
 		different loaders using the GNU objcopy program.  This option
 		should not be selected if you are not using the GNU toolchain.
 
-config SAMSUNG_NS2
-	bool "Samsung NS2 binary format"
-	select RAW_BINARY
-	default n
-	---help---
-		Create the tinyara.head.bin from the raw binary, putting
-		a checksum value into it. It is used with S5J boot loaders,
-		which check the integrity of the binary using SHA256 at boot.
-
 menuconfig UBOOT_UIMAGE
 	bool "U-Boot uImage"
 	select RAW_BINARY
@@ -306,14 +321,6 @@ config DOWNLOAD_IMAGE
 	depends on !WINDOWS_NATIVE
 	---help---
 		Create download image based on RAW binary
-
-config SMARTFS_IMAGE
-	bool "Make smartfs binary image"
-	select RAW_BINARY
-	depends on !WINDOWS_NATIVE
-	---help---
-		Generate smartfs image by using nxfuse tools
-		Note that libfuse-dev should be installed on your build system
 
 endmenu # Binary Output Formats
 
@@ -444,8 +451,20 @@ config DEBUG_OPTLEVEL
 
 endmenu # Build Setup
 
-menu "Hardware Configuration"
+menu "Chip Selection"
 source arch/Kconfig
+endmenu
+
+menu "Board Selection"
+source board/Kconfig
+endmenu
+
+menu "SE Selection"
+source se/Kconfig
+endmenu
+
+menu "Crypto Module"
+source crypto/Kconfig
 endmenu
 
 menu "Kernel Features"
@@ -465,7 +484,7 @@ source audio/Kconfig
 endmenu
 
 menu "Media Support"
-source media/Kconfig
+source "$FRAMEWORK_DIR/src/media/Kconfig"
 endmenu
 
 menu "File Systems"
@@ -476,8 +495,17 @@ menu "Database"
 source "$FRAMEWORK_DIR/src/arastorage/Kconfig"
 endmenu
 
+menu "AraUI Framework"
+source "$FRAMEWORK_DIR/src/araui/Kconfig"
+endmenu
+
 menu "Memory Management"
 source mm/Kconfig
+endmenu
+
+menu "Work Queue Support"
+	depends on !DISABLE_SIGNALS
+source wqueue/Kconfig
 endmenu
 
 menu "Power Management"
@@ -489,7 +517,7 @@ source Kconfig.debug
 endmenu
 
 menu "System Call"
-	depends on BUILD_PROTECTED
+	depends on BUILD_PROTECTED || BUILD_KERNEL
 source syscall/Kconfig
 endmenu
 
@@ -502,8 +530,20 @@ menu "External Libraries"
 source "$EXTERNALDIR/Kconfig"
 endmenu
 
+menu "Binary Loader"
+source binfmt/Kconfig
+endmenu
+
+menu "Binary Compression"
+source compression/Kconfig
+endmenu
+
 menu "Application Configuration"
 source "$APPSDIR/Kconfig"
+endmenu
+
+menu "Loadable apps Configuration"
+source "$LOADABLEDIR/Kconfig"
 endmenu
 
 menu "Runtime Environment"
@@ -514,7 +554,40 @@ menu "Device Management"
 source Kconfig.devmng
 endmenu
 
+menu "Binary manager"
+source kernel/binary_manager/Kconfig
+endmenu
+
+menu "Task Monitor"
+source kernel/task_monitor/Kconfig
+endmenu
+
+menu "Task manager"
+source "$FRAMEWORK_DIR/src/task_manager/Kconfig"
+endmenu
+
+menu "Event Loop Framework"
+source "$FRAMEWORK_DIR/src/eventloop/Kconfig"
+endmenu
+
+menu "Messaging Framework"
+source "$FRAMEWORK_DIR/src/messaging/Kconfig"
+endmenu
+
+menu "Preference Support"
+source "$FRAMEWORK_DIR/src/preference/Kconfig"
+endmenu
+
 menu "Things Management"
 source Kconfig.things
 endmenu
+
+menu "IoTBus Framework"
+source "$FRAMEWORK_DIR/src/iotbus/Kconfig"
+endmenu
+
+menu "Security Framework"
+source "$FRAMEWORK_DIR/src/security/Kconfig"
+endmenu
+
 

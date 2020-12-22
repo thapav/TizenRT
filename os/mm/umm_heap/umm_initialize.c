@@ -55,12 +55,8 @@
  ************************************************************************/
 
 #include <tinyara/config.h>
-
 #include <assert.h>
-
 #include <tinyara/mm/mm.h>
-
-#if !defined(CONFIG_BUILD_PROTECTED) || !defined(__KERNEL__)
 
 /************************************************************************
  * Pre-processor definition
@@ -73,23 +69,21 @@
 /************************************************************************
  * Public Data
  ************************************************************************/
-
-#if defined(CONFIG_ARCH_ADDRENV) && defined(CONFIG_BUILD_KERNEL)
-/* In the kernel build, there a multiple user heaps; one for each task
- * group.  In this build configuration, the user heap structure lies
- * in a reserved region at the beginning of the .bss/.data address
- * space (CONFIG_ARCH_DATA_VBASE).  The size of that region is given by
- * ARCH_DATA_RESERVE_SIZE
+#ifdef CONFIG_SUPPORT_COMMON_BINARY
+/* g_cur_app will contain the id of the currently executing application.
+ * It will be used to index into the app_heap_table to get the heap pointer
+ * for the currently executing application. This variable will be placed at
+ * the first byte of the data section. The value contained in this variable
+ * will be used only by the common binary. The cur_app will be updated by
+ * the kernel during every context switch.
  */
+uint32_t g_cur_app __attribute__((section(".curapp")));
 
-#include <tinyara/addrenv.h>
-#define USR_HEAP (&ARCH_DATA_RESERVE->ar_usrheap)
-
-#else
-/* Otherwise, the user heap data structures are in common .bss */
-
-struct mm_heap_s g_mmheap;
-#define USR_HEAP &g_mmheap
+/* The app_heap_table will contain pointers to the heap of each application.
+ * These pointers will be populated by the loader at the time of loading the
+ * application and creating its heap.
+ */
+struct mm_heap_s *g_app_heap_table[CONFIG_NUM_APPS + 1] __attribute__((section(".appheaptable")));
 #endif
 
 /************************************************************************
@@ -147,7 +141,5 @@ struct mm_heap_s g_mmheap;
 
 void umm_initialize(FAR void *heap_start, size_t heap_size)
 {
-	mm_initialize(USR_HEAP, heap_start, heap_size);
+	mm_initialize(BASE_HEAP, heap_start, heap_size);
 }
-
-#endif							/* !CONFIG_BUILD_PROTECTED || !__KERNEL__ */

@@ -16,7 +16,8 @@
  *
  ****************************************************************************/
 
-/// @file signal.c
+/// @file tc_signal.c
+
 /// @brief Test Case Example for Signal API
 
 /****************************************************************************
@@ -28,6 +29,8 @@
 #include <errno.h>
 #include <signal.h>
 #include <sys/types.h>
+#include <sys/ioctl.h>
+#include <tinyara/kernel_test_drv.h>
 #include "../../os/kernel/signal/signal.h"
 #include "tc_internal.h"
 
@@ -131,7 +134,7 @@ static void tc_signal_sigwaitinfo(void)
 
 	g_sig_pid = getpid();
 
-	task_create("sigwaitinfo", SCHED_PRIORITY_DEFAULT, 512, sigusr1_func, (char * const *)NULL);
+	task_create("sigwaitinfo", SCHED_PRIORITY_DEFAULT, 1024, sigusr1_func, (char * const *)NULL);
 
 	/* Wait for a signal */
 
@@ -161,10 +164,12 @@ static void tc_signal_sigaction(void)
 	struct sigaction st_oact;
 	FAR sigactq_t *sigact_before;
 	FAR sigactq_t *sigact_after;
+	int fd;
+	fd = tc_get_drvfd();
 
 	/* save orginal action */
-	sigact_before = sig_findaction(sched_self(), SIGINT);
-
+	sigact_before = (FAR sigactq_t *)ioctl(fd, TESTIOC_GET_SIG_FINDACTION_ADD, SIGINT);
+	TC_ASSERT_EQ("sig_findaction", sigact_before, NULL);
 	st_act.sa_handler = sigaction_handler;
 	st_act.sa_flags = 0;
 	sigemptyset(&st_act.sa_mask);
@@ -180,10 +185,29 @@ static void tc_signal_sigaction(void)
 	TC_ASSERT_EQ("sigaction", st_act.sa_handler, sigaction_handler);
 
 	/* make sure action is not changed */
-	sigact_after = sig_findaction(sched_self(), SIGINT);
+	sigact_after = (FAR sigactq_t *)ioctl(fd, TESTIOC_GET_SIG_FINDACTION_ADD, SIGINT);
+	TC_ASSERT_EQ("sig_findaction", sigact_after, NULL);
 	TC_ASSERT_EQ("sig_findaction", sigact_before, sigact_after);
 
 	TC_SUCCESS_RESULT();
+}
+
+static int kill_handler_task(int argc, char *argv[])
+{
+	/* This task will be finished because of kill signal from main task. */
+	while (1) {
+		sleep(10);
+	}
+	return 0;
+}
+
+static void *kill_handler_thread(void *param)
+{
+	/* This pthread will be finished because of kill signal from main task. */
+	while (1) {
+		sleep(10);
+	}
+	return NULL;
 }
 
 /**
@@ -200,6 +224,7 @@ static void tc_signal_kill(void)
 {
 	pid_t pid;
 	int ret_chk = ERROR;
+	struct sched_param param;
 
 	pid = getpid();
 
@@ -216,6 +241,27 @@ static void tc_signal_kill(void)
 		sleep(SEC_1);
 		TC_ASSERT_NEQ("kill", ret_chk, ERROR);
 	}
+
+	pid = task_create("tc_sigkill", 100, 1024, kill_handler_task, (char * const *)NULL);
+	TC_ASSERT_GT("task_create", pid, 0);
+
+	ret_chk = kill(pid, SIGKILL);
+	sleep(SEC_1);
+	TC_ASSERT_NEQ("kill", ret_chk, ERROR);
+
+	ret_chk = sched_getparam(pid, &param);
+	TC_ASSERT_EQ("sched_getparam", ret_chk, ERROR);
+
+	ret_chk = pthread_create(&pid, NULL, kill_handler_thread, NULL);
+	TC_ASSERT_EQ("pthread create", ret_chk, OK);
+
+	ret_chk = kill(pid, SIGKILL);
+	sleep(SEC_1);
+	TC_ASSERT_NEQ("kill", ret_chk, ERROR);
+
+	ret_chk = sched_getparam(pid, &param);
+	TC_ASSERT_EQ("sched_getparam", ret_chk, ERROR);
+
 	TC_SUCCESS_RESULT();
 }
 
@@ -263,12 +309,15 @@ static void tc_signal_nanosleep(void)
 static void tc_signal_pause(void)
 {
 	int ret_chk = ERROR;
+	int fd;
 
 	sigset_t saved;
 	sigset_t newmask;
 	struct timespec st_init_timespec;
 	struct timespec st_final_timespec;
 	clockid_t clock_id = CLOCK_REALTIME;
+
+	fd = tc_get_drvfd();
 	g_sig_pid = getpid();
 
 	sigemptyset(&newmask);
@@ -279,14 +328,13 @@ static void tc_signal_pause(void)
 	TC_ASSERT_EQ("sigprocmask", ret_chk, OK);
 
 	clock_gettime(clock_id, &st_init_timespec);
-	task_create("sigpause1", SCHED_PRIORITY_DEFAULT, 512, sigusr1_func, (char * const *)NULL);
-	task_create("sigpause2", SCHED_PRIORITY_DEFAULT, 512, sigusr2_func, (char * const *)NULL);
+	task_create("sigpause1", SCHED_PRIORITY_DEFAULT, 1024, sigusr1_func, (char * const *)NULL);
+	task_create("sigpause2", SCHED_PRIORITY_DEFAULT, 1024, sigusr2_func, (char * const *)NULL);
 
 	/* Wait for a signal */
 
-	ret_chk = pause();
-	TC_ASSERT_EQ("pause", ret_chk, ERROR);
-	TC_ASSERT_EQ("pause", get_errno(), EINTR);
+	ret_chk = ioctl(fd, TESTIOC_SIGNAL_PAUSE, 0);
+	TC_ASSERT_EQ("pause", ret_chk, OK);
 
 	clock_gettime(clock_id, &st_final_timespec);
 	if (st_final_timespec.tv_sec - st_init_timespec.tv_sec < SEC_5) {
@@ -296,7 +344,7 @@ static void tc_signal_pause(void)
 
 	/* Restore sigprocmask */
 
-	ret_chk = sigprocmask(SIG_SETMASK, &saved, NULL);
+	ret_chk = sigprocmask(SIG_SETMASK, &saved, 0);
 	TC_ASSERT_EQ("sigprocmask", ret_chk, OK);
 
 	TC_SUCCESS_RESULT();
@@ -335,8 +383,8 @@ static void tc_signal_sigsuspend(void)
 						);
 
 	clock_gettime(clock_id, &st_init_timespec);
-	task_create("sigsuspend1", SCHED_PRIORITY_DEFAULT, 512, sigusr1_func, (char * const *)NULL);
-	task_create("sigsuspend2", SCHED_PRIORITY_DEFAULT, 512, sigusr2_func, (char * const *)NULL);
+	task_create("sigsuspend1", SCHED_PRIORITY_DEFAULT, 1024, sigusr1_func, (char * const *)NULL);
+	task_create("sigsuspend2", SCHED_PRIORITY_DEFAULT, 1024, sigusr2_func, (char * const *)NULL);
 
 	/* Wait for a signal */
 
@@ -488,6 +536,7 @@ static void tc_signal_sigtimedwait(void)
 	int ret_chk;
 	struct siginfo value;
 	sigset_t sigset;
+	sigset_t oldset;
 	struct timespec st_timeout;
 	struct timespec st_init_timespec;
 	struct timespec st_final_timespec;
@@ -500,19 +549,22 @@ static void tc_signal_sigtimedwait(void)
 
 	/* Set signal set */
 
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGUSR1);
+	sigfillset(&sigset);
+	sigdelset(&sigset, SIGUSR1);
+	sigprocmask(SIG_BLOCK, &sigset, &oldset);
 
-	task_create("tc_sig_time", SCHED_PRIORITY_DEFAULT - 1, 512, sigusr1_func, (char * const *)NULL);
+	task_create("tc_sig_time", SCHED_PRIORITY_DEFAULT - 1, 1024, sigusr1_func, (char * const *)NULL);
 
 	clock_gettime(clock_id, &st_init_timespec);
 	ret_chk = sigtimedwait(&sigset, &value, &st_timeout);
-	TC_ASSERT_NEQ("sigtimedwait", ret_chk, ERROR);
+	TC_ASSERT_NEQ_CLEANUP("sigtimedwait", ret_chk, ERROR, sigprocmask(SIG_SETMASK, &oldset, NULL));
 
 	clock_gettime(clock_id, &st_final_timespec);
-	TC_ASSERT_LEQ("clock_gettime", st_final_timespec.tv_sec - st_init_timespec.tv_sec, SEC_3);
+	TC_ASSERT_LEQ_CLEANUP("clock_gettime", st_final_timespec.tv_sec - st_init_timespec.tv_sec, SEC_3, sigprocmask(SIG_SETMASK, &oldset, NULL););
 
-	TC_ASSERT_GEQ("sigtimedwait", value.si_value.sival_int, 0);
+	TC_ASSERT_GEQ_CLEANUP("sigtimedwait", value.si_value.sival_int, 0, sigprocmask(SIG_SETMASK, &oldset, NULL););
+
+	sigprocmask(SIG_SETMASK, &oldset, NULL);
 	TC_SUCCESS_RESULT();
 }
 
@@ -529,23 +581,30 @@ static void tc_signal_sighold_sigrelse(void)
 	sigset_t org_set;
 	sigset_t hold_set;
 	sigset_t relse_set;
-	struct tcb_s *cur_tcb;
 	int ret_chk;
+	int fd;
+	int pid = getpid();
 
-	cur_tcb = sched_self();
-	org_set = cur_tcb->sigprocmask;
+	fd = tc_get_drvfd();
+	ret_chk = ioctl(fd, TESTIOC_GET_TCB_SIGPROCMASK, pid);
+	TC_ASSERT_NEQ("sigprocmask", ret_chk, ERROR);
+	org_set = (sigset_t)ret_chk;
 
 	ret_chk = sighold(SIGUSR1);
 
 	TC_ASSERT_EQ("sighold", ret_chk, OK);
 
-	hold_set = cur_tcb->sigprocmask;
+	ret_chk = ioctl(fd, TESTIOC_GET_TCB_SIGPROCMASK, pid);
+	TC_ASSERT_NEQ("sigprocmask", ret_chk, ERROR);
+	hold_set = (sigset_t)ret_chk;
 	TC_ASSERT_NEQ("sighold", org_set, hold_set);
 
 	ret_chk = sigrelse(SIGUSR1);
 	TC_ASSERT_EQ("sigrelease", ret_chk, OK);
 
-	relse_set = cur_tcb->sigprocmask;
+	ret_chk = ioctl(fd, TESTIOC_GET_TCB_SIGPROCMASK, pid);
+	TC_ASSERT_NEQ("sigprocmask", ret_chk, ERROR);
+	relse_set = (sigset_t)ret_chk;
 	TC_ASSERT_NEQ("sighold", hold_set, relse_set);
 	TC_ASSERT_EQ("Sigrelease", org_set, relse_set);
 

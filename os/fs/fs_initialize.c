@@ -55,6 +55,9 @@
  ****************************************************************************/
 
 #include <tinyara/config.h>
+#include <sys/mount.h>
+#include <debug.h>
+#include <tinyara/fs/fs.h>
 
 #include "inode/inode.h"
 
@@ -82,6 +85,36 @@
  * Private Functions
  ****************************************************************************/
 
+void fs_auto_mount(void)
+{
+	struct {
+		const char *fs_type;
+		const char *fs_mountpoint;
+	} fs_automount[] = {
+#ifdef CONFIG_FS_AUTOMOUNT_PROCFS
+		{PROCFS_FSTYPE, PROCFS_MOUNT_POINT},
+#endif
+#ifdef CONFIG_FS_AUTOMOUNT_TMPFS
+		{TMPFS_FSTYPE, TMPFS_MOUNT_POINT},
+#endif
+		{NULL, NULL}
+	};
+	int mnt_idx;
+	int mnt_ret;
+
+	for (mnt_idx = 0; fs_automount[mnt_idx].fs_type; mnt_idx++) {
+		mnt_ret = mount(NULL, fs_automount[mnt_idx].fs_mountpoint,
+			fs_automount[mnt_idx].fs_type, 0L, NULL);
+		if (mnt_ret < 0) {
+			flldbg("Failed to mount %s at %s: %d\n",
+				fs_automount[mnt_idx].fs_type,
+				fs_automount[mnt_idx].fs_mountpoint, mnt_ret);
+		}
+	}
+
+	return;
+}
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -106,5 +139,12 @@ void fs_initialize(void)
 
 	aio_initialize();
 
+#endif
+
+#if !defined(CONFIG_DISABLE_PSEUDOFS_OPERATIONS) && \
+	!defined(CONFIG_DISABLE_MOUNTPOINT) && defined(CONFIG_BCH)
+	/* Initialize for unique character device used in  */
+
+	unique_chardev_initialize();
 #endif
 }

@@ -69,16 +69,23 @@
 #include <mqueue.h>
 #include <time.h>
 
+#if defined(CONFIG_ENABLE_STACKMONITOR) && defined(CONFIG_DEBUG)
+#include <tinyara/clock.h>
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+#include <tinyara/mm/mm.h>
+#endif
+#endif
+
 #include <tinyara/irq.h>
 #include <tinyara/mm/shm.h>
 #include <tinyara/fs/fs.h>
 #include <tinyara/net/net.h>
-
+#include <tinyara/mpu.h>
 #include <arch/arch.h>
+#ifdef CONFIG_ARMV8M_TRUSTZONE
+#include <tinyara/tz_context.h>
+#endif
 
-/********************************************************************************
- * Pre-processor Definitions
- ********************************************************************************/
 /* Configuration ****************************************************************/
 /* Task groups currently only supported for retention of child status */
 
@@ -124,6 +131,8 @@
 #define HAVE_TASK_GROUP   1		/* Address environment */
 #elif defined(CONFIG_MM_SHM)
 #define HAVE_TASK_GROUP   1		/* Shared memory */
+#elif defined(CONFIG_BINARY_MANAGER)
+#define HAVE_TASK_GROUP   1		/* Binary management */
 #endif
 #endif
 
@@ -178,6 +187,14 @@
 #define CHILD_FLAG_TTYPE_KERNEL  (2 << CHILD_FLAG_TTYPE_SHIFT)	/* Kernel thread */
 #define CHILD_FLAG_EXITED          (1 << 0)	/* Bit 2: The child thread has exit'ed */
 
+/* Values for flag of pthread key allocated */
+
+#define KEY_NOT_INUSE   (0)
+#define KEY_INUSE       (1)
+
+#define MAX_PID_MASK	(CONFIG_MAX_TASKS - 1)
+#define PIDHASH(pid)	((pid) & MAX_PID_MASK)
+
 /********************************************************************************
  * Public Type Definitions
  ********************************************************************************/
@@ -200,6 +217,7 @@ enum tstate_e {
 
 	TSTATE_TASK_INACTIVE,		/* BLOCKED      - Initialized but not yet activated */
 	TSTATE_WAIT_SEM,			/* BLOCKED      - Waiting for a semaphore */
+	TSTATE_WAIT_FIN,		/* BLOCKED		- Waiting to be unblocked by fin */
 #ifndef CONFIG_DISABLE_SIGNALS
 	TSTATE_WAIT_SIG,			/* BLOCKED      - Waiting for a signal */
 #endif
@@ -331,6 +349,10 @@ struct dspace_s {
 struct join_s;					/* Forward reference                        */
 /* Defined in kernel/pthread/pthread.h       */
 #endif
+
+#ifdef CONFIG_BINFMT_LOADABLE
+struct binary_s;				/* Forward reference                        */
+#endif
 /** @brief Structure for Task Group Information */
 struct task_group_s {
 #if defined(HAVE_GROUP_MEMBERS) || defined(CONFIG_ARCH_ADDRENV)
@@ -343,6 +365,10 @@ struct task_group_s {
 #if !defined(CONFIG_DISABLE_PTHREAD) && defined(CONFIG_SCHED_HAVE_PARENT)
 	pid_t tg_task;				/* The ID of the task within the group      */
 #endif
+#if defined(CONFIG_BINARY_MANAGER)
+	int tg_binidx;				/* The Index of binary in binary table      */
+#endif
+
 	uint8_t tg_flags;			/* See GROUP_FLAG_* definitions             */
 
 	/* Group membership ********************************************************** */
@@ -356,30 +382,30 @@ struct task_group_s {
 #if defined(CONFIG_SCHED_ATEXIT) && !defined(CONFIG_SCHED_ONEXIT)
 	/* atexit support *********************************************************** */
 
-#if defined(CONFIG_SCHED_ATEXIT_MAX) && CONFIG_SCHED_ATEXIT_MAX > 1
-	atexitfunc_t tg_atexitfunc[CONFIG_SCHED_ATEXIT_MAX];
-#else
-	atexitfunc_t tg_atexitfunc;	/* Called when exit is called.             */
-#endif
+	sq_queue_t tg_atexitfunc;
 #endif
 
 #ifdef CONFIG_SCHED_ONEXIT
 	/* on_exit support ********************************************************** */
-
-#if defined(CONFIG_SCHED_ONEXIT_MAX) && CONFIG_SCHED_ONEXIT_MAX > 1
-	onexitfunc_t tg_onexitfunc[CONFIG_SCHED_ONEXIT_MAX];
-	FAR void *tg_onexitarg[CONFIG_SCHED_ONEXIT_MAX];
-#else
-	onexitfunc_t tg_onexitfunc;	/* Called when exit is called.             */
-	FAR void *tg_onexitarg;		/* The argument passed to the function     */
-#endif
+	sq_queue_t tg_onexitfunc;
 #endif
 
-#if defined(CONFIG_SCHED_HAVE_PARENT) && defined(CONFIG_SCHED_CHILD_STATUS)
+#ifdef CONFIG_SCHED_HAVE_PARENT
 	/* Child exit status ********************************************************* */
 
-	FAR struct child_status_s *tg_children;	/* Head of a list of child status     */
+#ifdef CONFIG_SCHED_CHILD_STATUS
+	FAR struct child_status_s *tg_children; /* Head of a list of child status     */
 #endif
+
+#ifndef HAVE_GROUP_MEMBERS
+	/* REVISIT: What if parent thread exits?  Should use tg_pgid. */
+
+	pid_t    tg_ppid;                 /* This is the ID of the parent thread      */
+#ifndef CONFIG_SCHED_CHILD_STATUS
+	uint16_t tg_nchildren;            /* This is the number active children       */
+#endif
+#endif /* HAVE_GROUP_MEMBERS */
+#endif /* CONFIG_SCHED_HAVE_PARENT */
 
 #if defined(CONFIG_SCHED_WAITPID) && !defined(CONFIG_SCHED_HAVE_PARENT)
 	/* waitpid support *********************************************************** */
@@ -395,7 +421,10 @@ struct task_group_s {
 	sem_t tg_joinsem;			/*   Mutually exclusive access to join data */
 	FAR struct join_s *tg_joinhead;	/*   Head of a list of join data            */
 	FAR struct join_s *tg_jointail;	/*   Tail of a list of join data            */
-	uint8_t tg_nkeys;			/* Number pthread keys allocated            */
+#if CONFIG_NPTHREAD_KEYS > 0
+	uint8_t tg_key[PTHREAD_KEYS_MAX];		/* flag of pthread keys allocated */
+	pthread_destructor_t tg_destructor[PTHREAD_KEYS_MAX];	/* Address list of each destructor */
+#endif
 #endif
 
 #ifndef CONFIG_DISABLE_SIGNALS
@@ -461,7 +490,23 @@ struct task_group_s {
 
 	struct group_shm_s tg_shm;	/* Task shared memory logic                 */
 #endif
+
+#if defined(CONFIG_PREFERENCE) && CONFIG_TASK_NAME_SIZE > 0
+	/* Preference **************************************************************** */
+	/* The values of private preference are managed by task group.
+	 * Each 'value' is saved in a file named 'key' and they are located in a directory /mnt/private/<tg_name>.
+	 */
+	char tg_name[CONFIG_TASK_NAME_SIZE + 1]; /* Group name (with NULL terminator)  */
+#endif
 };
+#endif
+
+#ifdef CONFIG_BINFMT_LOADABLE
+/* This macro verifies whether the tcb is for a main task of the binary.
+ * It checks if the tcb is for a task and if it has non NULL loading data i.e. 'bininfo'
+ */
+#define IS_BINARY_MAINTASK(tcb)    (((tcb->flags & TCB_FLAG_TTYPE_MASK) == TCB_FLAG_TTYPE_TASK) \
+					&& (((struct task_tcb_s *)tcb)->bininfo != NULL))
 #endif
 
 /* struct tcb_s ******************************************************************/
@@ -477,6 +522,12 @@ struct tcb_s {
 	FAR struct tcb_s *flink;	/* Doubly linked list                  */
 	FAR struct tcb_s *blink;
 
+#ifdef CONFIG_BINARY_MANAGER
+	/* Fields used to support binary list management ***************************** */
+	FAR struct tcb_s *bin_flink;	/* Doubly linked list				   */
+	FAR struct tcb_s *bin_blink;
+#endif
+
 	/* Task Group **************************************************************** */
 
 #ifdef HAVE_TASK_GROUP
@@ -486,15 +537,6 @@ struct tcb_s {
 	/* Task Management Fields **************************************************** */
 
 	pid_t pid;					/* This is the ID of the thread        */
-
-#ifdef CONFIG_SCHED_HAVE_PARENT	/* Support parent-child relationship   */
-#ifndef HAVE_GROUP_MEMBERS		/* Don't know pids of group members    */
-	pid_t ppid;					/* This is the ID of the parent thread */
-#ifndef CONFIG_SCHED_CHILD_STATUS	/* Retain child thread status          */
-	uint16_t nchildren;			/* This is the number active children  */
-#endif
-#endif
-#endif							/* CONFIG_SCHED_HAVE_PARENT */
 
 	start_t start;				/* Thread start function               */
 	entry_t entry;				/* Entry Point into the thread         */
@@ -553,6 +595,12 @@ struct tcb_s {
 	sq_queue_t sigpendactionq;	/* List of pending signal actions      */
 	sq_queue_t sigpostedq;		/* List of posted signals              */
 	siginfo_t sigunbinfo;		/* Signal info when task unblocked     */
+#ifdef CONFIG_SIGKILL_HANDLER
+	_sa_sigaction_t sigkillusrhandler; /* User defined SIGKILL handler      */
+#endif
+#ifdef HAVE_GROUP_MEMBERS
+	sigset_t sigrecvmask;		/* Signals that are blocked by receiving signals */
+#endif
 #endif
 
 	/* POSIX Named Message Queue Fields ****************************************** */
@@ -570,15 +618,35 @@ struct tcb_s {
 
 	struct xcptcontext xcp;		/* Interrupt register save area        */
 
+	uint32_t uheap;			/* User heap object pointer */
+#ifdef CONFIG_APP_BINARY_SEPARATION
+	uint32_t uspace;		/* User space object for app binary */
+
+#ifdef CONFIG_ARM_MPU
+	uint32_t mpu_regs[MPU_REG_NUMBER * MPU_NUM_REGIONS];	/* MPU register values for loading data */
+#endif
+#endif
+
+#if defined(CONFIG_MPU_STACK_OVERFLOW_PROTECTION)
+uint32_t stack_mpu_regs[MPU_REG_NUMBER]; /* MPU register values for stack protection */
+#endif
+#ifdef CONFIG_SUPPORT_COMMON_BINARY
+	uint32_t app_id;			/* Indicates app id of the task and used to index into umm_heap_table */
+#endif
+
+#ifdef CONFIG_ARMV8M_TRUSTZONE
+	volatile TZ_ModuleId_t tz_context;
+#endif
+
 #if CONFIG_TASK_NAME_SIZE > 0
 	char name[CONFIG_TASK_NAME_SIZE + 1];	/* Task name (with NUL terminator)     */
 #endif
-
-#ifdef CONFIG_DEBUG_MM_HEAPINFO
-	int curr_alloc_size;
-	int peak_alloc_size;
-	int num_alloc_free;
+#ifdef CONFIG_TASK_MONITOR
+	bool is_active;
 #endif
+
+	int fin_data;			/* Irq notification Data to be handled */
+	int pending_fin_data;		/* Pended irq notification data */
 };
 
 /* struct task_tcb_s *************************************************************/
@@ -600,6 +668,11 @@ struct task_tcb_s {
 #ifdef CONFIG_SCHED_STARTHOOK
 	starthook_t starthook;		/* Task startup function               */
 	FAR void *starthookarg;		/* The argument passed to the function */
+#endif
+#ifdef CONFIG_BINFMT_LOADABLE
+	/* Loadable module support *************************************************** */
+
+	FAR struct binary_s *bininfo;	/* Describes resources used by program	*/
 #endif
 
 	/* Values needed to restart a task ******************************************* */
@@ -649,7 +722,7 @@ struct pthread_tcb_s {
 	/* POSIX Thread Specific Data ************************************************ */
 
 #if CONFIG_NPTHREAD_KEYS > 0
-	FAR void *pthread_data[CONFIG_NPTHREAD_KEYS];
+	void *key_data[PTHREAD_KEYS_MAX];
 #endif
 #if defined(CONFIG_BUILD_PROTECTED)
 	struct pthread_region_s *region;
@@ -663,6 +736,32 @@ typedef void (*sched_foreach_t)(FAR struct tcb_s *tcb, FAR void *arg);
 
 #endif							/* __ASSEMBLY__ */
 
+/* 
+ * @cond
+ * @internal
+ * {
+ */
+#define STKMON_MAX_LOGS (CONFIG_MAX_TASKS * 2)
+
+/* Structure for saving terminated task/pthread information with stack monitor. */
+struct stkmon_save_s {
+	clock_t timestamp;
+	pid_t chk_pid;
+	size_t chk_stksize;
+	size_t chk_peaksize;
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+	int chk_peakheap;
+#endif
+#if (CONFIG_TASK_NAME_SIZE > 0)
+	char chk_name[CONFIG_TASK_NAME_SIZE + 1];
+#endif
+};
+
+void stkmon_copy_log(struct stkmon_save_s *dest_arr);
+/* 
+ * }
+ * @endcond
+ */
 /********************************************************************************
  * Public Data
  ********************************************************************************/
@@ -691,7 +790,7 @@ extern "C" {
  *   head of the ready-to-run list and manages access to the TCB from outside
  *   of the sched/ sub-directory.
  * @return TCB structure
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 FAR struct tcb_s *sched_self(void);
 
@@ -707,7 +806,7 @@ FAR struct tcb_s *sched_self(void);
  * @param[in] handler The function to be called with the TCB of each task
  * @param[in] arg param
  * @return none
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 void sched_foreach(sched_foreach_t handler, FAR void *arg);
 
@@ -720,7 +819,7 @@ void sched_foreach(sched_foreach_t handler, FAR void *arg);
  *   is no such task ID).
  * @param[in] pid Pid for tcb
  * @return TCB structure about pid
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 FAR struct tcb_s *sched_gettcb(pid_t pid);
 
@@ -744,7 +843,7 @@ FAR struct filelist *sched_getfiles(void);
  * @brief Return a pointer to the streams list for this thread
  * @details @b #include <tinyara/sched.h>
  * @return A pointer to the errno
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 FAR struct streamlist *sched_getstreams(void);
 #endif							/* CONFIG_NFILE_STREAMS */
@@ -753,6 +852,12 @@ FAR struct streamlist *sched_getstreams(void);
 #if CONFIG_NSOCKET_DESCRIPTORS > 0
 FAR struct socketlist *sched_getsockets(void);
 #endif							/* CONFIG_NSOCKET_DESCRIPTORS */
+
+#ifdef CONFIG_SCHED_CPULOAD
+int sched_start_cpuload_snapshot(int ticks);
+void sched_clear_cpuload_snapshot(void);
+void sched_get_cpuload_snapshot(pid_t *result_addr);
+#endif
 
 /********************************************************************************
  * Name: task_starthook
@@ -820,6 +925,7 @@ pid_t task_vforkstart(FAR struct task_tcb_s *child);
  * @internal
  */
 void task_vforkabort(FAR struct task_tcb_s *child, int errcode);
+
 /**
  * @endcond
  */

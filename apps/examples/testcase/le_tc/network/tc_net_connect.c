@@ -42,9 +42,13 @@
    */
 static void tc_net_connect_fd_n(struct sockaddr_in *sa)
 {
-	inet_pton(AF_INET, "192.168.1.3", &(sa->sin_addr));
+	int ret = inet_pton(AF_INET, "192.168.1.3", &(sa->sin_addr));
+	if (ret < 0) {
+		printf("[ERR] %s\t%s:%d\n", __FUNCTION__, __FILE__, __LINE__);
+		return;
+	}
 
-	int ret = connect(0, (struct sockaddr *)sa, sizeof(struct sockaddr_in));
+	ret = connect(0, (struct sockaddr *)sa, sizeof(struct sockaddr_in));
 
 	TC_ASSERT_EQ("connect", ret, -1);
 	TC_SUCCESS_RESULT();
@@ -62,7 +66,12 @@ static void tc_net_connect_fd_n(struct sockaddr_in *sa)
 static void tc_net_connect_broadcastaddr_n(struct sockaddr_in *sa)
 {
 	int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (fd < 0) {
+		printf("socket creation error line:%d\n", __LINE__);
+		return;
+	}
 	struct in_addr ad;
+
 	ad.s_addr = INADDR_BROADCAST;
 	sa->sin_addr = ad;
 	int ret = connect(fd, (struct sockaddr *)sa, sizeof(struct sockaddr_in));
@@ -84,6 +93,11 @@ static void tc_net_connect_broadcastaddr_n(struct sockaddr_in *sa)
 static void tc_net_connect_loopbackaddr_n(struct sockaddr_in *sa)
 {
 	int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (fd < 0) {
+		printf("socket creation error line:%d\n", __LINE__);
+		return;
+	}
+
 	struct in_addr ad;
 	ad.s_addr = INADDR_LOOPBACK;
 	sa->sin_addr = ad;
@@ -106,6 +120,10 @@ static void tc_net_connect_loopbackaddr_n(struct sockaddr_in *sa)
 static void tc_net_connect_socklen_n(struct sockaddr_in *sa)
 {
 	int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (fd < 0) {
+		printf("socket creation error line:%d\n", __LINE__);
+		return;
+	}
 	struct in_addr ad;
 	ad.s_addr = INADDR_LOOPBACK;
 	sa->sin_addr = ad;

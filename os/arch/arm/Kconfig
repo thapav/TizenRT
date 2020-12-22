@@ -4,13 +4,13 @@
 #
 
 if ARCH_ARM
+
 choice
 	prompt "ARM chip selection"
 	default ARCH_CHIP_S5J
 
 config ARCH_CHIP_LM
 	bool "TI/Luminary Stellaris"
-	select ARCH_HAVE_CMNVECTOR
 	select ARCH_HAVE_MPU
 	select ARM_HAVE_MPU_UNIFIED
 	---help---
@@ -25,12 +25,66 @@ config ARCH_CHIP_S5J
 	select ARMV7R_MEMINIT
 	---help---
 		Samsung IoT SoC architectures (ARM Cortex R)
+
+config ARCH_CHIP_BCM4390X
+	bool "Cypress BCM4390X"
+	select ARCH_CORTEXR4
+	select ARCH_HAVE_MPU
+	select ARMV7M_MPU
+	select ARCH_HAVE_LOWVECTORS
+	select ARCH_LOWVECTORS
+	select ARM_UNWIND
+	---help---
+		Cypress BCM4390x SoC architectures (ARM Cortex-R)
+
+config ARCH_CHIP_STM32
+	bool "STMicro STM32"
+	select ARCH_HAVE_MPU
+	select ARCH_HAVE_I2CRESET
+	select ARCH_HAVE_HEAPCHECK if DEBUG
+	---help---
+		STMicro STM32 architectures (ARM Cortex-M3/4).
+
+config ARCH_CHIP_IMXRT
+	bool "NXP/Freescale iMX.RT"
+	select ARCH_CORTEXM7
+	select ARCH_HAVE_MPU
+	select ARCH_HAVE_RAMFUNCS
+	select ARCH_HAVE_TICKLESS
+	select ARCH_HAVE_I2CRESET
+	select ARCH_HAVE_SPI_CS_CONTROL
+	select ARM_HAVE_MPU_UNIFIED
+	select ARMV7M_HAVE_STACKCHECK
+	---help---
+		NXP i.MX RT (ARM Cortex-M7) architectures
+
+config ARCH_CHIP_STM32L4
+	bool "STMicro STM32L4"
+	select ARCH_HAVE_MPU
+	select ARCH_HAVE_I2CRESET
+	select ARCH_HAVE_HEAPCHECK if DEBUG
+	---help---
+		STMicro STM32 architectures (ARM Cortex-M3/4).
+
+config ARCH_CHIP_AMEBAD
+	bool "Realtek AMEBAD"
+	select ARCH_HAVE_MPU
+	select ARCH_HAVE_I2CRESET
+	select ARCH_HAVE_HEAPCHECK if DEBUG
+	---help---
+		Realtek AMEBAD architectures (ARM Cortex-M23/33).
+
 endchoice
 
 config ARCH_CHIP
 	string
-	default "s5j"       if ARCH_CHIP_S5J
+	default "s5j"		if ARCH_CHIP_S5J
 	default "tiva"      if ARCH_CHIP_LM
+	default "bcm4390x"	if ARCH_CHIP_BCM4390X
+	default "stm32"		if ARCH_CHIP_STM32
+	default "imxrt"		if ARCH_CHIP_IMXRT
+	default "stm32l4"	if ARCH_CHIP_STM32L4
+	default "amebad"	if ARCH_CHIP_AMEBAD
 
 comment "ARM Options"
 
@@ -38,78 +92,156 @@ config ARCH_CORTEXM3
 	bool
 	default n
 	select ARCH_HAVE_IRQPRIO
+	select ARCH_HAVE_CMNVECTOR
 	select ARCH_HAVE_RAMVECTORS
 	select ARCH_HAVE_HIPRI_INTERRUPT
+	select ARCH_ARMV7M_FAMILY
 
 config ARCH_CORTEXM4
 	bool
 	default n
 	select ARCH_HAVE_IRQPRIO
+	select ARCH_HAVE_CMNVECTOR
 	select ARCH_HAVE_RAMVECTORS
 	select ARCH_HAVE_HIPRI_INTERRUPT
+	select ARCH_ARMV7M_FAMILY
+
+config ARCH_CORTEXM7
+	bool
+	default n
+	select ARCH_HAVE_FPU
+	select ARCH_HAVE_IRQPRIO
+	select ARCH_HAVE_IRQTRIGGER
+	select ARCH_HAVE_CMNVECTOR
+	select ARCH_HAVE_RAMVECTORS
+	select ARCH_HAVE_LAZYFPU
+	select ARCH_HAVE_HIPRI_INTERRUPT
+	select ARCH_HAVE_RESET
+	select ARCH_HAVE_COHERENT_DCACHE if ELF || MODULE
+	select ARCH_HAVE_HARDFAULT_DEBUG
+	select ARCH_HAVE_MEMFAULT_DEBUG
+	select ARCH_HAVE_NESTED_INTERRUPT
+	select ARCH_ARMV7M_FAMILY
+
+config ARCH_CORTEXM33
+	bool
+	default n
+	select ARCH_HAVE_IRQPRIO
+	select ARCH_HAVE_CMNVECTOR
+	select ARCH_HAVE_RAMVECTORS
+	select ARCH_HAVE_HIPRI_INTERRUPT
+	select ARCH_ARMV8M_FAMILY
 
 config ARCH_CORTEXR4
 	bool
 	default n
 	select ARCH_HAVE_MPU
+	select ARCH_HAVE_CMNVECTOR
 	select ARCH_HAVE_COHERENT_DCACHE if ELF || MODULE
-	select ARCH_HAVE_DABORTSTACK
+	select ARCH_HAVE_DABORTSTACK if !ARCH_CHIP_BCM4390X
+	select ARCH_ARMV7R_FAMILY
+
+config ARCH_ARMV7M_FAMILY
+	bool
+	default n
+
+config ARCH_ARMV8M_FAMILY
+	bool
+	default n
+
+config ARCH_ARMV7R_FAMILY
+	bool
+	default n
 
 config ARCH_FAMILY
 	string
-	default "armv7-m"	if ARCH_CORTEXM3 || ARCH_CORTEXM4
-	default "armv7-r"	if ARCH_CORTEXR4
-
-config ARMV7M_USEBASEPRI
-	bool "Use BASEPRI Register"
-	default n
-	depends on ARCH_CORTEXM3 || ARCH_CORTEXM4
-	---help---
-		Use the BASEPRI register to enable and disable interrupts. By
-		default, the PRIMASK register is used for this purpose. This
-		usually results in hardfaults when supervisor calls are made.
-		Though, these hardfaults are properly handled by the RTOS, the
-		hardfaults can confuse some debuggers. With the BASEPRI
-		register, these hardfaults, will be avoided.
+	default "armv7-m"	if ARCH_ARMV7M_FAMILY
+	default "armv7-r"	if ARCH_ARMV7R_FAMILY
+	default "armv8-m"	if ARCH_ARMV8M_FAMILY
 
 config ARCH_HAVE_CMNVECTOR
 	bool
 
-config ARMV7M_CMNVECTOR
-	bool "Use common ARMv7-M vectors"
+config ARM_CMNVECTOR
+	bool "Use common ARM vectors"
 	default n
 	depends on ARCH_HAVE_CMNVECTOR
 	---help---
 		Some architectures use their own, built-in vector logic.  Some use only
 		the common vector logic.  Some can use either their own built-in vector
-		logic or the common vector logic.  This applies only to ARMv7-M
-		architectures.
+		logic or the common vector logic.
 
 config ARCH_HAVE_FPU
 	bool
 	default n
 
+config ARCH_HAVE_DPFPU
+	bool
+	default n
+
+config ARCH_HAVE_LAZYFPU
+	bool
+
 config ARCH_FPU
 	bool "FPU support"
-	default y
+	default n
 	depends on ARCH_HAVE_FPU
 	---help---
 		Build in support for the ARM Cortex-M4 Floating Point Unit (FPU).
 		Check your chip specifications first; not all Cortex-M4 chips support the FPU.
 
+config ARCH_DPFPU
+	bool "Double precision FPU support"
+	default y
+	depends on ARCH_FPU && ARCH_HAVE_DPFPU
+	---help---
+		Enable toolchain support for double precision (64-bit) floating
+		point if both the toolchain and the hardware support it.
+
+config ARM_HAVE_MPU_UNIFIED
+	bool
+	default n
+	---help---
+		Automatically selected to indicate that the CPU supports a
+		unified MPU for both instruction and data addresses.
+
+config ARM_MPU
+	bool
+	default n
+	select ARCH_USE_MPU
+
 config ARMV7M_MPU
 	bool "MPU support"
 	default n
 	depends on ARCH_HAVE_MPU
-	select ARCH_USE_MPU
+	depends on ARCH_ARMV7M_FAMILY || ARCH_ARMV7R_FAMILY
+	select ARM_MPU
 	---help---
 		Build in support for the ARM Cortex-M3/4 Memory Protection Unit (MPU).
 		Check your chip specifications first; not all Cortex-M3/4 chips support the MPU.
 
 config ARMV7M_MPU_NREGIONS
 	int "Number of MPU regions"
-	default 8
+	default 16 if ARCH_CORTEXM7
+	default 8 if !ARCH_CORTEXM7
 	depends on ARMV7M_MPU
+	---help---
+		This is the number of protection regions supported by the MPU.
+
+config ARMV8M_MPU
+	bool "MPU support"
+	default n
+	depends on ARCH_HAVE_MPU
+	depends on ARCH_ARMV8M_FAMILY
+	select ARM_MPU
+	---help---
+		Build in support for the ARM Cortex-M33 Memory Protection Unit (MPU).
+		Check your chip specifications first; not all Cortex-M33 chips support the MPU.
+
+config ARMV8M_MPU_NREGIONS
+	int "Number of MPU regions"
+	default 8
+	depends on ARMV8M_MPU
 	---help---
 		This is the number of protection regions supported by the MPU.
 
@@ -133,7 +265,7 @@ config ARCH_ROMPGTABLE
 config DEBUG_HARDFAULT
 	bool "Verbose Hard-Fault Debug"
 	default n
-	depends on DEBUG && (ARCH_CORTEXM3 || ARCH_CORTEXM4)
+	depends on DEBUG && (ARCH_ARMV7M_FAMILY || ARCH_ARMV8M_FAMILY)
 	---help---
 		Enables verbose debug output when a hard fault is occurs.  This verbose
 		output is sometimes helpful when debugging difficult hard fault problems,
@@ -156,10 +288,53 @@ config ARCH_DABORTSTACK
 		will be used during data abort handling. Recommended data abort stack
 		size is 1K.
 
-if ARCH_CORTEXM3 || ARCH_CORTEXM4
+
+choice
+	prompt "Stack Protection feature options"
+	default STACK_OVERFLOW_PROTECTION_DISABLE
+
+config REG_STACK_OVERFLOW_PROTECTION
+	bool "REG Stack Overflow Protection"
+	depends on ARCH_ARMV8M_FAMILY
+	---help---
+		Enables stack overflow protection with limit registers.
+		It protects each user task's stack overflow outside its max allocated stack memory.
+
+config MPU_STACK_OVERFLOW_PROTECTION
+	bool "MPU Stack Overflow Protection"
+	depends on BUILD_PROTECTED
+	depends on ARM_MPU
+	---help---
+		Enables stack overflow protection.
+		It protects each task's stack overflow outside its max allocated stack memory.
+		This is applicable to user mode tasks created in protected build.
+
+config STACK_OVERFLOW_PROTECTION_DISABLE
+	bool "Stack Overflow Protection Disable"
+	---help---
+		Disable Stack Overflow Protection.
+
+endchoice
+
+if MPU_STACK_OVERFLOW_PROTECTION
+
+config MPU_STACK_GUARD_SIZE
+	int "Stack Guard size configuration range(32-1024)"
+	default 32
+	range 32 1024
+	---help---
+		Set size for the stack guard. It must be set with 32 byte aligned values.
+		The size can be set in the range of 32 to 1024 bytes.
+		Setting large stack guard size will be a wastage of memory.
+endif
+
+if ARCH_ARMV7M_FAMILY
 source arch/arm/src/armv7-m/Kconfig
 endif
-if ARCH_CORTEXR4
+if ARCH_ARMV8M_FAMILY
+source arch/arm/src/armv8-m/Kconfig
+endif
+if ARCH_ARMV7R_FAMILY
 source arch/arm/src/armv7-r/Kconfig
 endif
 if ARCH_CHIP_LM
@@ -168,5 +343,19 @@ endif
 if ARCH_CHIP_S5J
 source arch/arm/src/s5j/Kconfig
 endif
-
+if ARCH_CHIP_BCM4390X
+source arch/arm/src/bcm4390x/Kconfig
+endif
+if ARCH_CHIP_STM32
+source arch/arm/src/stm32/Kconfig
+endif
+if ARCH_CHIP_IMXRT
+source arch/arm/src/imxrt/Kconfig
+endif
+if ARCH_CHIP_STM32L4
+source arch/arm/src/stm32l4/Kconfig
+endif
+if ARCH_CHIP_AMEBAD
+source arch/arm/src/amebad/Kconfig
+endif
 endif

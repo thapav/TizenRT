@@ -37,9 +37,11 @@
 struct _iotbus_i2c_s;
 
 /**
- * @brief Pointer definition to the internal struct _iotbus_i2c_s
+ * @brief Pointer definition to the internal struct _iotbus_i2c_wrapper_s
  */
-typedef struct _iotbus_i2c_s *iotbus_i2c_context_h;
+typedef struct _iotbus_i2c_wrapper_s *iotbus_i2c_context_h;
+
+typedef void (*iotbus_i2c_cb)(iotbus_i2c_context_h);
 
 /**
  * @brief Enumeration of I2C frequency mode
@@ -65,7 +67,7 @@ extern "C" {
  * @details @b #include <iotbus/iotbus_i2c.h>
  * @param[in] bus i2c bus number
  * @return On success, handle of i2c_context is returned. On failure, NULL is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 iotbus_i2c_context_h iotbus_i2c_init(int bus);
 
@@ -75,7 +77,7 @@ iotbus_i2c_context_h iotbus_i2c_init(int bus);
  * @details @b #include <iotbus/iotbus_i2c.h>
  * @param[in] hnd handle of i2c_context
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_i2c_stop(iotbus_i2c_context_h hnd);
 
@@ -86,7 +88,7 @@ int iotbus_i2c_stop(iotbus_i2c_context_h hnd);
  * @param[in] hnd handle of i2c_context
  * @param[in] mode i2c frequency mode
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_i2c_set_frequency(iotbus_i2c_context_h hnd, iotbus_i2c_mode_e mode);
 
@@ -97,7 +99,7 @@ int iotbus_i2c_set_frequency(iotbus_i2c_context_h hnd, iotbus_i2c_mode_e mode);
  * @param[in] hnd handle of i2c_context
  * @param[in] address i2c address
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_i2c_set_address(iotbus_i2c_context_h hnd, uint8_t address);
 
@@ -109,7 +111,7 @@ int iotbus_i2c_set_address(iotbus_i2c_context_h hnd, uint8_t address);
  * @param[in] data the pointer of data buffer
  * @param[in] length size to read
  * @return On success, 0 is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_i2c_read(iotbus_i2c_context_h hnd, uint8_t *data, size_t length);
 
@@ -121,7 +123,7 @@ int iotbus_i2c_read(iotbus_i2c_context_h hnd, uint8_t *data, size_t length);
  * @param[in] data the pointer of data buffer
  * @param[in] length size to write
  * @return On success, size is returned. On failure, a negative value is returned.
- * @since Tizen RT v1.0
+ * @since TizenRT v1.0
  */
 int iotbus_i2c_write(iotbus_i2c_context_h hnd, const uint8_t *data, size_t length);
 

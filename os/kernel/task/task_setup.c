@@ -65,6 +65,10 @@
 
 #include <tinyara/arch.h>
 #include <tinyara/ttrace.h>
+#include <tinyara/irq.h>
+#ifdef CONFIG_SCHED_CPULOAD
+#include <tinyara/clock.h>
+#endif
 
 #include "sched/sched.h"
 #include "pthread/pthread.h"
@@ -144,11 +148,18 @@ static int task_assignpid(FAR struct tcb_s *tcb)
 		next_pid = ++g_lastpid;
 
 		/* Verify that the next_pid is in the valid range */
-
+#ifdef CONFIG_DEBUG_MM_HEAPINFO
+		/* Last two values(INT16_MAX and INT16_MAX - 1) are used for heapinfo. So pid can be smaller than (INT16_MAX - 1). */
+		if (next_pid == (INT16_MAX - 1)) {
+			g_lastpid = 1;
+			next_pid = 1;
+		}
+#else
 		if (next_pid <= 0) {
 			g_lastpid = 1;
 			next_pid = 1;
 		}
+#endif
 
 		/* Get the hash_ndx associated with the next_pid */
 
@@ -162,7 +173,10 @@ static int task_assignpid(FAR struct tcb_s *tcb)
 			g_pidhash[hash_ndx].tcb = tcb;
 			g_pidhash[hash_ndx].pid = next_pid;
 #ifdef CONFIG_SCHED_CPULOAD
-			g_pidhash[hash_ndx].ticks = 0;
+			int cpuload_idx;
+			for (cpuload_idx = 0; cpuload_idx < SCHED_NCPULOAD; cpuload_idx++) {
+				g_pidhash[hash_ndx].ticks[cpuload_idx] = 0;
+			}
 #endif
 			tcb->pid = next_pid;
 
@@ -211,7 +225,7 @@ static inline void task_saveparent(FAR struct tcb_s *tcb, uint8_t ttype)
 	FAR struct tcb_s *rtcb = this_task();
 
 #if defined(HAVE_GROUP_MEMBERS) || defined(CONFIG_SCHED_CHILD_STATUS)
-	DEBUGASSERT(tcb && tcb->group && rtcb->group);
+	DEBUGASSERT(tcb != NULL && tcb->group != NULL && rtcb->group != NULL);
 #else
 #endif
 
@@ -231,15 +245,18 @@ static inline void task_saveparent(FAR struct tcb_s *tcb, uint8_t ttype)
 
 		tcb->group->tg_pgid = rtcb->group->tg_gid;
 	}
+
 #else
 	DEBUGASSERT(tcb);
 
-	/* Save the parent task's ID in the child task's TCB.  I am not sure if
-	 * this makes sense for the case of pthreads or not, but I don't think it
-	 * is harmful in any event.
-	 */
+#ifndef CONFIG_DISABLE_PTHREAD
+	if ((tcb->flags & TCB_FLAG_TTYPE_MASK) != TCB_FLAG_TTYPE_PTHREAD)
+#endif
+	{
+		/* Save the parent task's ID in the child task's group. */
 
-	tcb->ppid = rtcb->pid;
+		tcb->group->tg_ppid = rtcb->pid;
+	}
 #endif
 
 #ifndef CONFIG_DISABLE_PTHREAD
@@ -282,8 +299,8 @@ static inline void task_saveparent(FAR struct tcb_s *tcb, uint8_t ttype)
 			}
 		}
 #else
-		DEBUGASSERT(rtcb->nchildren < UINT16_MAX);
-		rtcb->nchildren++;
+		DEBUGASSERT(rtcb->group != NULL && rtcb->group->tg_nchildren < UINT16_MAX);
+		rtcb->group->tg_nchildren++;
 #endif
 	}
 }
@@ -359,6 +376,9 @@ static inline void task_dupdspace(FAR struct tcb_s *tcb)
 static int thread_schedsetup(FAR struct tcb_s *tcb, int priority, start_t start, CODE void *entry, uint8_t ttype)
 {
 	int ret;
+#ifdef CONFIG_APP_BINARY_SEPARATION
+	struct tcb_s *rtcb;
+#endif
 
 	if (priority < SCHED_PRIORITY_MIN || priority > SCHED_PRIORITY_MAX) {
 		set_errno(EINVAL);
@@ -433,6 +453,31 @@ static int thread_schedsetup(FAR struct tcb_s *tcb, int priority, start_t start,
 
 		up_initial_state(tcb);
 
+#ifdef CONFIG_APP_BINARY_SEPARATION
+		/* Copy the parent task ram details to this task */
+		rtcb = this_task();
+		tcb->uspace = rtcb->uspace;
+		tcb->uheap = rtcb->uheap;
+#ifdef CONFIG_SUPPORT_COMMON_BINARY
+		tcb->app_id = rtcb->app_id;
+#endif
+
+		/* Copy the MPU register values from parent to child task */
+#ifdef CONFIG_ARM_MPU
+		int i = 0;
+#ifdef CONFIG_OPTIMIZE_APP_RELOAD_TIME
+		for (; i < MPU_REG_NUMBER * MPU_NUM_REGIONS; i += MPU_REG_NUMBER)
+#endif
+		{
+			tcb->mpu_regs[i + MPU_REG_RNR] = rtcb->mpu_regs[i + MPU_REG_RNR];
+			tcb->mpu_regs[i + MPU_REG_RBAR] = rtcb->mpu_regs[i + MPU_REG_RBAR];
+			tcb->mpu_regs[i + MPU_REG_RASR] = rtcb->mpu_regs[i + MPU_REG_RASR];
+		}
+#endif
+
+#endif
+		tcb->fin_data = NO_FIN_DATA;
+
 		/* Add the task to the inactive task list */
 
 		sched_lock();
@@ -490,9 +535,7 @@ static void task_namesetup(FAR struct task_tcb_s *tcb, FAR const char *name)
  *
  * Input Parameters:
  *   tcb  - Address of the new task's TCB
- *   argv - A pointer to an array of input parameters.  Up to
- *          CONFIG_MAX_TASK_ARG parameters may be provided. If fewer than
- *          CONFIG_MAX_TASK_ARG parameters are passed, the list should be
+ *   argv - A pointer to an array of input parameters. The array should be
  *          terminated with a NULL argv[] value. If no parameters are
  *          required, argv may be NULL.
  *
@@ -581,7 +624,7 @@ static inline int task_stackargsetup(FAR struct task_tcb_s *tcb, FAR char *const
 
 	stackargv[0] = str;
 	nbytes = strlen(name) + 1;
-	strcpy(str, name);
+	strncpy(str, name, nbytes);
 	str += nbytes;
 
 	/* Copy each argument */
@@ -594,7 +637,7 @@ static inline int task_stackargsetup(FAR struct task_tcb_s *tcb, FAR char *const
 
 		stackargv[i + 1] = str;
 		nbytes = strlen(argv[i]) + 1;
-		strcpy(str, argv[i]);
+		strncpy(str, argv[i], nbytes);
 		str += nbytes;
 	}
 
@@ -711,10 +754,7 @@ int pthread_schedsetup(FAR struct pthread_tcb_s *tcb, int priority, start_t star
  *   tcb        - Address of the new task's TCB
  *   name       - Name of the new task (not used)
  *   argv       - A pointer to an array of input parameters.
- *                Up to CONFIG_MAX_TASK_ARG parameters may be
- *                provided. If fewer than CONFIG_MAX_TASK_ARG
- *                parameters are passed, the list should be
- *                terminated with a NULL argv[] value.
+ *                The array should be terminated with a NULL argv[] value.
  *                If no parameters are required, argv may be NULL.
  *
  * Return Value:

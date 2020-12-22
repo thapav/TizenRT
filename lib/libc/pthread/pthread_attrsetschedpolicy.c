@@ -56,6 +56,7 @@
 
 #include <tinyara/config.h>
 
+#include <sys/types.h>
 #include <pthread.h>
 #include <string.h>
 #include <sched.h>
@@ -107,7 +108,7 @@ int pthread_attr_setschedpolicy(FAR pthread_attr_t *attr, int policy)
 {
 	int ret;
 
-	sdbg("attr=0x%p policy=%d\n", attr, policy);
+	svdbg("attr=0x%p policy=%d\n", attr, policy);
 
 #if CONFIG_RR_INTERVAL > 0
 	if (!attr || (policy != SCHED_FIFO && policy != SCHED_RR))
@@ -121,6 +122,6 @@ int pthread_attr_setschedpolicy(FAR pthread_attr_t *attr, int policy)
 		ret = OK;
 	}
 
-	sdbg("Returning %d\n", ret);
+	svdbg("Returning %d\n", ret);
 	return ret;
 }

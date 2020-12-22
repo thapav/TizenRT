@@ -85,6 +85,7 @@
 #define nvdbg(...) printf(__VA_ARGS__)
 #endif							/* CONFIG_NETUTILS_DHCPD_HOST */
 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
@@ -100,11 +101,14 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <semaphore.h>
+#include <pthread.h>
+#include <netutils/netlib.h>
 
 /****************************************************************************
  * Global Data
  ****************************************************************************/
 sem_t g_dhcpd_sem;
+
 
 /****************************************************************************
  * Private Data
@@ -190,10 +194,6 @@ sem_t g_dhcpd_sem;
 
 #ifndef CONFIG_NETUTILS_DHCPD_MAXLEASETIME
 #define CONFIG_NETUTILS_DHCPD_MAXLEASETIME (60*60*24*30)	/* 30 days */
-#endif
-
-#ifndef CONFIG_NETUTILS_DHCPD_INTERFACE
-#define CONFIG_NETUTILS_DHCPD_INTERFACE "eth0"
 #endif
 
 #ifndef CONFIG_NETUTILS_DHCPD_MAXLEASES
@@ -303,7 +303,9 @@ struct dhcpd_state_s {
  ****************************************************************************/
 
 static const uint8_t g_magiccookie[4] = { 99, 130, 83, 99 };
+#ifndef CONFIG_NETUTILS_DHCPD_IGNOREBROADCAST
 static const uint8_t g_anyipaddr[4] = { 0, 0, 0, 0 };
+#endif
 
 static struct dhcpd_state_s g_state;
 
@@ -319,7 +321,8 @@ static char DHCPD_IFNAME[IFNAMSIZ] = { 0, };
 static struct timeval g_select_timeout = { 1, 0 };
 #endif
 
-static dhcp_sta_joined g_dhcp_sta_joined;
+static dhcp_sta_joined_cb g_dhcp_sta_joined = NULL;
+static pthread_mutex_t g_dhcpd_lock = PTHREAD_MUTEX_INITIALIZER; // protect a write operation in g_dhcpd_running
 
 /****************************************************************************
  * Private Functions
@@ -333,15 +336,13 @@ static dhcp_sta_joined g_dhcp_sta_joined;
 #ifndef CONFIG_NET_LWIP
 static inline void dhcpd_arpupdate(uint16_t *pipaddr, uint8_t *phwaddr)
 {
-	net_lock_t flags;
-
 	/* Disable interrupts and update the ARP table -- very non-portable hack.
 	 * REVISIT -- switch to the SIOCSARP ioctl call if/when it is implemented.
 	 */
 
-	flags = net_lock();
+	net_lock();
 	arp_update(pipaddr, phwaddr);
-	net_unlock(flags);
+	net_unlock();
 }
 #else
 #define dhcpd_arpupdate(pipaddr, phwaddr)
@@ -382,13 +383,14 @@ static inline bool dhcpd_leaseexpired(struct lease_s *lease)
 	ndbg("dhcpd_leaseexpired is called!!\n");
 
 	return false;
-
+#if 0
 	if (lease->expiry < dhcpd_time()) {
 		return false;
 	} else {
 //      memset(lease, 0, sizeof(struct lease_s));
 		return true;
 	}
+#endif
 }
 #else
 #define dhcpd_leaseexpired(lease) (false)
@@ -1093,7 +1095,12 @@ int dhcpd_sendack(in_addr_t ipaddr)
 	/* TODO: new callback way up to application to inform a new STA has called
 	 * dhcp client
 	 */
-	g_dhcp_sta_joined();
+	dhcp_node_s node;
+	memcpy(&node.ipaddr, &netaddr, 4);
+	memcpy(node.macaddr, g_state.ds_inpacket.chaddr, 6);
+	if (g_dhcp_sta_joined) {
+		g_dhcp_sta_joined(DHCP_ACK_EVT, (void *)&node);
+	}
 	return OK;
 }
 
@@ -1386,11 +1393,9 @@ static inline int dhcpd_openlistener(void)
 }
 
 /****************************************************************************
- * Private Functions
- ****************************************************************************/
-/****************************************************************************
  * Name: dhcpd_netif_init
  ****************************************************************************/
+
 static int dhcpd_netif_init(char *intf)
 {
 	struct in_addr server_ipaddr;
@@ -1404,7 +1409,7 @@ static int dhcpd_netif_init(char *intf)
 		return -1;
 	}
 
-	if (netlib_set_ipv4netmask(intf, &netmask_ipaddr.s_addr) == ERROR) {
+	if (netlib_set_ipv4netmask(intf, &netmask_ipaddr) == ERROR) {
 		ndbg("failed to set netmask\n");
 		return -1;
 	}
@@ -1427,11 +1432,9 @@ static int dhcpd_netif_init(char *intf)
 }
 
 /****************************************************************************
- * Private Functions
- ****************************************************************************/
-/****************************************************************************
  * Name: dhcpd_netif_deinit
  ****************************************************************************/
+
 static int dhcpd_netif_deinit(char *intf)
 {
 	struct in_addr server_ipaddr;
@@ -1445,7 +1448,7 @@ static int dhcpd_netif_deinit(char *intf)
 		return -1;
 	}
 
-	if (netlib_set_ipv4netmask(intf, &netmask_ipaddr.s_addr) == ERROR) {
+	if (netlib_set_ipv4netmask(intf, &netmask_ipaddr) == ERROR) {
 		ndbg("failed to set netmask\n");
 		return -1;
 	}
@@ -1459,26 +1462,24 @@ static int dhcpd_netif_deinit(char *intf)
 }
 
 /****************************************************************************
- * Public Functions
- ****************************************************************************/
-/****************************************************************************
  * Name: dhcpd_status
  ****************************************************************************/
-int dhcpd_status(void)
+
+static int dhcpd_status(void)
 {
 	return g_dhcpd_running;
 }
 
 /****************************************************************************
- * Public Functions
- ****************************************************************************/
-/****************************************************************************
  * Name: dhcpd_stop
  ****************************************************************************/
-void dhcpd_stop(void)
+
+static void dhcpd_stop(void)
 {
 	int ret = -1;
+	pthread_mutex_lock(&g_dhcpd_lock);
 	if (g_dhcpd_running == 0) {
+		pthread_mutex_unlock(&g_dhcpd_lock);
 		return;
 	}
 
@@ -1491,27 +1492,28 @@ void dhcpd_stop(void)
 				ndbg("ERR: EINTR for sem_wait in dhcpd\n");
 				continue;
 			}
+			pthread_mutex_unlock(&g_dhcpd_lock);			
 			return;
 		}
 	}
+	g_dhcpd_running = 0;
 	ret = sem_destroy(&g_dhcpd_sem);
 	if (ret != OK) {
 		ndbg("ERR: sem_destroy for dhcpd failed\n");
+		pthread_mutex_unlock(&g_dhcpd_lock);
 		return;
 	}
 #if DHCPD_SELECT
 	ndbg("WARN : dhcpd will be stopped after %d seconds\n", g_select_timeout.tv_sec);
 #endif
+	pthread_mutex_unlock(&g_dhcpd_lock);
 }
 
-/****************************************************************************
- * Public Functions
- ****************************************************************************/
 /****************************************************************************
  * Name: dhcpd_run
  ****************************************************************************/
 
-int dhcpd_run(void *arg)
+static int dhcpd_run(void *arg)
 {
 	int nbytes;
 #if DHCPD_SELECT
@@ -1534,9 +1536,7 @@ int dhcpd_run(void *arg)
 	/* Now loop indefinitely, reading packets from the DHCP server socket */
 
 	g_dhcpd_sockfd = -1;
-
 	g_dhcpd_quit = 0;
-	g_dhcpd_running = 1;
 
 	/* Create a socket to listen for requests from DHCP clients */
 	/* TODO : Need to add cancellation point */
@@ -1603,7 +1603,10 @@ int dhcpd_run(void *arg)
 		switch (g_state.ds_optmsgtype) {
 		case DHCPDISCOVER:
 			ndbg("DHCPDISCOVER\n");
-			dhcpd_discover();
+			int res = dhcpd_discover();
+			if (res == ERROR) {
+				ndbg("dhcpd discover fail\n");
+			}
 			break;
 
 		case DHCPREQUEST:
@@ -1634,8 +1637,8 @@ int dhcpd_run(void *arg)
 	sem_post(&g_dhcpd_sem);
 
 exit_with_error:
-	g_dhcpd_running = 0;
-
+	/* We don't need to de-initialize g_dhcp_sta_joined
+       because it will be initialized at dhcpd_start*/
 	/* de-initialize netif address (ip address, netmask, default gateway) */
 
 	if (dhcpd_netif_deinit(DHCPD_IFNAME) < 0) {
@@ -1646,9 +1649,6 @@ exit_with_error:
 }
 
 /****************************************************************************
- * Public Functions
- ****************************************************************************/
-/****************************************************************************
  * Name: dhcpd_start
  ****************************************************************************/
 
@@ -1656,12 +1656,21 @@ exit_with_error:
 #define DHCPD_SCHED_PRI			100
 #define DHCPD_SCHED_POLICY		SCHED_RR
 
-int dhcpd_start(char *intf, dhcp_sta_joined dhcp_join_cb)
+static int dhcpd_start(char *intf, dhcp_sta_joined_cb dhcp_join_cb)
 {
+	pthread_mutex_lock(&g_dhcpd_lock);
+	if (g_dhcpd_running == 1) {
+		pthread_mutex_unlock(&g_dhcpd_lock);
+		return -1;
+	}
+
 	pthread_attr_t attr;
 	int status;
 	int ret;
 	struct sched_param sparam;
+
+	g_dhcp_sta_joined = 0;
+
 	ret = sem_init(&g_dhcpd_sem, 0, 0);
 	if (ret != OK) {
 		ndbg("failed to initialize semaphore\n");
@@ -1671,7 +1680,8 @@ int dhcpd_start(char *intf, dhcp_sta_joined dhcp_join_cb)
 	if (intf) {
 		strncpy(DHCPD_IFNAME, intf, strlen(intf));
 	} else {
-		strncpy(DHCPD_IFNAME, CONFIG_NETUTILS_DHCPD_INTERFACE, IFNAMSIZ);
+		ndbg("failed to get interface\n");
+		goto err_exit;
 	}
 
 	status = pthread_attr_init(&attr);
@@ -1712,7 +1722,45 @@ int dhcpd_start(char *intf, dhcp_sta_joined dhcp_join_cb)
 	pthread_setname_np(g_tid, "dhcpd");
 	pthread_detach(g_tid);
 
+	g_dhcpd_running = 1;
+	pthread_mutex_unlock(&g_dhcpd_lock);
+
 	return 0;
 err_exit:
+	g_dhcpd_running = 0;
+	pthread_mutex_unlock(&g_dhcpd_lock);
+
 	return -1;
+}
+
+/****************************************************************************
+ * Name: dhcps_server_status
+ ****************************************************************************/
+int dhcp_server_status(char *intf)
+{
+	return dhcpd_status();
+}
+
+/****************************************************************************
+ * Name: dhcps_server_start
+ ****************************************************************************/
+
+int dhcp_server_start(char *intf, dhcp_sta_joined_cb dhcp_join_cb)
+{
+	if (dhcpd_start(intf, dhcp_join_cb) >= 0) {
+		ndbg("[DHCPS] started successfully (External app)\n");
+		return OK;
+	}
+	return -1;
+}
+
+/****************************************************************************
+ * Name: dhcps_server_stop
+ ****************************************************************************/
+
+int dhcp_server_stop(char *intf)
+{
+	dhcpd_stop();
+	ndbg("[DHCPS] stopped successfully (External app)\n");
+	return OK;
 }
