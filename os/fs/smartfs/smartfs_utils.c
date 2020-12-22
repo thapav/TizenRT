@@ -1098,6 +1098,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs, struct smartfs_entry_s *d
 		direntry->name = (char *)kmm_zalloc(fs->fs_llformat.namesize + 1);
 		if (direntry->name == NULL) {
 			ret = -ENOMEM;
+			fdbg("Point 1\n");
 			goto errout;
 		}
 	}
@@ -1115,6 +1116,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs, struct smartfs_entry_s *d
 		/* Perform a check to avoid bufer overflow */
 		if (seglen >= SMARTFS_MAX_WORKBUFFER_LEN) {
 			ret = -ENAMETOOLONG;
+			fdbg("Point 2\n");
 			goto errout;
 		}
 		strncpy(fs->fs_workbuffer, segment, seglen);
@@ -1137,6 +1139,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs, struct smartfs_entry_s *d
 			if (depth == 0) {
 				/* We went up one level past our mount point! */
 				ret = -EINVAL;
+				fdbg("Point 3\n");
 				goto errout;
 			}
 
@@ -1202,7 +1205,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs, struct smartfs_entry_s *d
 						 * entry, then validate it is a directory entry and
 						 * open it and continue searching.
 						 */
-
+						fdbg("Found entry : %s\n", entry->name);
 						if (*ptr == '\0') {
 							/* We are at the last segment.  Report the entry */
 
@@ -1272,6 +1275,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs, struct smartfs_entry_s *d
 							}
 
 							direntry->prev_parent = dirstack[depth];
+							fdbg("Point found\n");
 							ret = OK;
 							goto errout;
 						} else {
@@ -1286,6 +1290,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs, struct smartfs_entry_s *d
 								/* Not a directory!  Report the error */
 
 								ret = -ENOTDIR;
+								fdbg("Point 4\n");
 								goto errout;
 							}
 
@@ -1295,6 +1300,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs, struct smartfs_entry_s *d
 								/* Directory depth too big */
 
 								ret = -ENAMETOOLONG;
+								fdbg("Point 5\n");
 								goto errout;
 							}
 #ifdef CONFIG_SMARTFS_ALIGNED_ACCESS
@@ -1348,6 +1354,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs, struct smartfs_entry_s *d
 			}
 
 			ret = -ENOENT;
+			fdbg("Point 6\n");
 			goto errout;
 		}
 	}
@@ -1357,6 +1364,7 @@ errout:
 		fdbg("File name too long\n");
 		return -ENAMETOOLONG;
 	}
+	fdbg("returning %d\n", ret);
 	return ret;
 }
 

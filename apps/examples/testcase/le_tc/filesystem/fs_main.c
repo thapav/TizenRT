@@ -2833,19 +2833,25 @@ static void tc_fs_vfs_rename_exist_path_n(void)
 	int ret;
 	char *exist_file = VFS_FILE_PATH;
 	char old_file[12];
-
+	printf("The doomed TC starts\n");
+	sleep(3);
 	/* Init */
 	vfs_mount();
 
 	fd = open(VFS_FILE_PATH, O_RDWR | O_CREAT | O_TRUNC);
 	TC_ASSERT_GEQ_CLEANUP("open", fd, 0, vfs_unmount());
 	close(fd);
+	printf("VFS FILE opened and closed = %s, error = %d\n", VFS_FILE_PATH, errno);
+	sleep(2);
 
 	snprintf(old_file, 12, "%s_re", exist_file);
 	unlink(old_file);
+	printf("Old file = %s, unlinked, error = %d\n", old_file, errno);
+	sleep(2);
 
 	/* Testcase */
 	ret = rename(exist_file, old_file);
+	printf("Rename returns with ret = %d, error = %d\n", ret, errno);
 
 	TC_ASSERT_EQ_CLEANUP("rename", ret, OK, vfs_unmount());
 
@@ -2854,23 +2860,29 @@ static void tc_fs_vfs_rename_exist_path_n(void)
 	TC_ASSERT_GEQ_CLEANUP("open", fd, 0, vfs_unmount());
 	close(fd);
 	ret = rename(old_file, exist_file);
+	printf("Rename returns with ret = %d, error = %d\n", ret, errno);
 	TC_ASSERT_EQ_CLEANUP("rename", ret, ERROR, vfs_unmount());
 
 	/* Nagative case with invalid argument, NULL filepath. It will return ERROR */
 	ret = rename(old_file, NULL);
+	printf("Rename returns with ret = %d, error = %d\n", ret, errno);
 	TC_ASSERT_EQ_CLEANUP("rename", ret, ERROR, vfs_unmount());
 
 	/*Condition where rename is not possible*/
 	ret = rename(DEV_NULL_PATH, DEV_NEW_NULL_PATH);
+	printf("Rename returns with ret = %d, error = %d\n", ret, errno);
 	TC_ASSERT_NEQ_CLEANUP("rename", ret, ERROR, vfs_unmount());
 
 	ret = rename(DEV_NEW_NULL_PATH, DEV_NULL_PATH);
+	printf("Rename returns with ret = %d, error = %d\n", ret, errno);
 	TC_ASSERT_NEQ_CLEANUP("rename", ret, ERROR, vfs_unmount());
 
 	/* Deinit */
 	vfs_unmount();
 
 	TC_SUCCESS_RESULT();
+
+	sleep(10);
 }
 
 /**

@@ -1590,10 +1590,13 @@ int smartfs_rename(struct inode *mountpt, const char *oldrelpath, const char *ne
 
 	/* Search for old entry to validate it exists */
 
+	fdbg("Old relative path for rename = %s\n", oldrelpath);
+	fdbg("New relative path for rename = %s\n", newrelpath);
 	oldentry.name = NULL;
 	newentry.name = NULL;
 	ret = smartfs_finddirentry(fs, &oldentry, oldrelpath);
 	if (ret != OK) {
+		fdbg("Find direntry returns %d\n", ret);
 		fdbg("Old entry doesn't exist\n");
 		goto errout_with_semaphore;
 	}
