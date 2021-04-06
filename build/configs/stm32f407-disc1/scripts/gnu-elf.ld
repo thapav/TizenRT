@@ -54,6 +54,7 @@ SECTIONS
   .text 0x00000000 :
     {
       _stext = . ;
+      _ram_kernel_text_start = ABSOLUTE(.);
       *(.text)
       *(.text.*)
       *(.gnu.warning)
@@ -69,6 +70,7 @@ SECTIONS
       *(.gnu.linkonce.t.*)
       *(.init)             /* Old ABI */
       *(.fini)             /* Old ABI */
+      _ram_kernel_text_end = ABSOLUTE(.);
       _etext = . ;
     }
 

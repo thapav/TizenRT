@@ -92,6 +92,7 @@ SECTIONS
 	.text :
 	{
 		_stext = ABSOLUTE(.);
+		_ram_kernel_text_start = ABSOLUTE(.);
 		*(.vectors)
 		*(EXCLUDE_FILE(*imxrt_flexspi.o *imxrt_hyperflash.o) .text*)
 		*(.fixup)
@@ -103,6 +104,7 @@ SECTIONS
 		*(.got)
 		*(.gcc_except_table)
 		*(.gnu.linkonce.r.*)
+		_ram_kernel_text_end = ABSOLUTE(.);
 		_etext = ABSOLUTE(.);
 	} > flash
 

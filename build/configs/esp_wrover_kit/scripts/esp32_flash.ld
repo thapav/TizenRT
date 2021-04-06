@@ -189,6 +189,7 @@ SECTIONS
   .flash.text :
   {
     _stext = .;
+    _ram_kernel_text_start = ABSOLUTE(.);
     _text_start = ABSOLUTE(.);
     *(.literal .text .literal.* .text.* .stub .gnu.warning .gnu.linkonce.literal.* .gnu.linkonce.t.*.literal .gnu.linkonce.t.*)
     *(.irom0.text) /* catch stray ICACHE_RODATA_ATTR */
@@ -196,6 +197,7 @@ SECTIONS
     *(.fini)
     *(.gnu.version)
     _text_end = ABSOLUTE(.);
+    _ram_kernel_text_end = ABSOLUTE(.);
     _etext = .;
   } >iram0_2_seg
 

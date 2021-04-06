@@ -46,6 +46,7 @@ SECTIONS
 
     .text : {
         _stext = ABSOLUTE(.);
+        _ram_kernel_text_start = ABSOLUTE(.);
         *(.text .text.*)
         *(.fixup)
         *(.gnu.warning)
@@ -56,6 +57,7 @@ SECTIONS
         *(.got)
         *(.gcc_except_table)
         *(.gnu.linkonce.r.*)
+        _ram_kernel_text_end = ABSOLUTE(.);
         _etext = ABSOLUTE(.);
     } > uflash
 

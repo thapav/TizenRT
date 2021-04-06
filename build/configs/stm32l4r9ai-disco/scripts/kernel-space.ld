@@ -43,6 +43,7 @@ SECTIONS
 {
     .text : {
         _stext = ABSOLUTE(.);
+        _ram_kernel_text_start = ABSOLUTE(.);
         *(.vectors)
         *(.text .text.*)
         *(.fixup)
@@ -54,6 +55,7 @@ SECTIONS
         *(.got)
         *(.gcc_except_table)
         *(.gnu.linkonce.r.*)
+        _ram_kernel_text_end = ABSOLUTE(.);
         _etext = ABSOLUTE(.);
     } > kflash
 
